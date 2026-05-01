@@ -30,24 +30,28 @@ async function callLLM(texto: string): Promise<Array<{ termo: string; quantidade
     const data = await res.json();
     rawContent = data.choices?.[0]?.message?.content ?? "[]";
   } else if (geminiKey) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ parts: [{ text: texto }] }],
-        generationConfig: { temperature: 0.1, responseMimeType: "application/json" },
+        contents: [
+          { role: "user", parts: [{ text: SYSTEM_PROMPT + "\n\nMensagem do cliente:\n" + texto }] },
+        ],
+        generationConfig: { temperature: 0.1 },
       }),
     });
     const data = await res.json();
+    console.log("Gemini full API response:", JSON.stringify(data).substring(0, 500));
     rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
+    console.log("Gemini extracted text:", rawContent);
   } else {
     throw new Error("Nenhuma API key configurada (OPENAI_API_KEY ou GEMINI_API_KEY)");
   }
 
   // Clean markdown fences if present
   const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  console.log("Cleaned for parse:", cleaned);
   return JSON.parse(cleaned);
 }
 
@@ -124,10 +128,21 @@ Deno.serve(async (req) => {
     }
 
     // 1. Extract from LLM
-    const itensIA = await callLLM(texto);
+    let itensIA: Array<{ termo: string; quantidade: number }> = [];
+    let debugLLM = "";
+    try {
+      const result = await callLLM(texto);
+      itensIA = result;
+      debugLLM = JSON.stringify(result);
+    } catch (parseErr) {
+      debugLLM = (parseErr as Error).message;
+      return new Response(JSON.stringify({ produtos: [], debug: debugLLM, msg: "Erro ao interpretar resposta da IA" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!Array.isArray(itensIA) || itensIA.length === 0) {
-      return new Response(JSON.stringify({ produtos: [], msg: "Nenhum equipamento identificado" }), {
+      return new Response(JSON.stringify({ produtos: [], debug: debugLLM, msg: "Nenhum equipamento identificado" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
