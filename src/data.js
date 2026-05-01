@@ -47,7 +47,8 @@ export async function fetchRegraFrete(estado, zona) {
 // ─── Calcular frete com dados do Supabase ───
 export function calcularFreteComRegra(pesoTotal, regra) {
   if (!regra) return 0;
-  const fretePorPeso = pesoTotal * (regra.multiplicador || 0);
+  const pesoArredondado = Math.floor(pesoTotal);
+  const fretePorPeso = pesoArredondado * (regra.multiplicador || 0);
   return Math.max(fretePorPeso, regra.valor_minimo || 0);
 }
 
