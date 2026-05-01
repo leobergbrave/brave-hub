@@ -21,7 +21,7 @@ const EditableCell = ({ value, onSave, type = "text", className = "", options = 
         onChange={e => { setVal(e.target.value); onSave(e.target.value); }} 
         className={`bg-dark-800 rounded px-2 py-1 text-xs border border-transparent hover:border-dark-600 focus:border-neon focus:outline-none cursor-pointer ${className}`}
       >
-        <option value="">Geral</option>
+        <option value="">Sem linha</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     );
@@ -42,7 +42,7 @@ export default function ProdutosTab() {
   const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: 'Geral' });
+  const [form, setForm] = useState({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: '' });
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -81,7 +81,7 @@ export default function ProdutosTab() {
     } else {
       await supabase.from('produtos').insert(payload);
     }
-    setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: 'Geral' });
+    setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: '' });
     setEditId(null);
     setSaving(false);
     load();
@@ -129,7 +129,7 @@ export default function ProdutosTab() {
 
   const handleEdit = (p) => {
     setEditId(p.id);
-    setForm({ codigo_sku: p.codigo_sku || '', nome: p.nome, preco: p.preco, peso_kg: p.peso_kg || '', url_imagem: p.url_imagem || '', linha: p.linha || 'Geral' });
+    setForm({ codigo_sku: p.codigo_sku || '', nome: p.nome, preco: p.preco, peso_kg: p.peso_kg || '', url_imagem: p.url_imagem || '', linha: p.linha || '' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -162,7 +162,7 @@ export default function ProdutosTab() {
         nome: (cols[1] || '').replace(/^"|"$/g, ''),
         preco: Number(precoStr.replace(',', '.')) || 0,
         peso_kg: pesoStr && pesoStr !== '0' ? Number(pesoStr.replace(',', '.')) : null,
-        linha: cols[4] || 'Geral',
+        linha: cols[4] || '',
       });
     }
     if (rows.length > 0) {
@@ -208,7 +208,8 @@ export default function ProdutosTab() {
           <input placeholder="Preço" type="number" value={form.preco} onChange={e => setForm({...form, preco: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
           <input placeholder="Peso (kg)" type="number" value={form.peso_kg} onChange={e => setForm({...form, peso_kg: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
           <select value={form.linha} onChange={e => setForm({...form, linha: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none cursor-pointer">
-            {['Geral','Cardio','Rigs','Pisos','Acessórios','Barras','Anilhas','Kettlebells','Boxes'].map(l => <option key={l}>{l}</option>)}
+            <option value="">Selecione...</option>
+            {['GYM','CROSS'].map(l => <option key={l}>{l}</option>)}
           </select>
         </div>
         <div className="flex gap-2 mt-3 items-center">
@@ -224,7 +225,7 @@ export default function ProdutosTab() {
           <button onClick={handleSave} disabled={saving || !form.nome} className="flex items-center gap-2 bg-neon text-dark-950 text-sm font-bold px-5 py-2.5 rounded-xl hover:shadow-lg hover:shadow-neon/25 transition-all cursor-pointer disabled:opacity-30">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editId ? 'Atualizar' : 'Salvar'}
           </button>
-          {editId && <button onClick={() => { setEditId(null); setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: 'Geral' }); }} className="text-sm text-zinc-400 px-4 py-2.5 rounded-xl hover:bg-dark-700 cursor-pointer">Cancelar</button>}
+          {editId && <button onClick={() => { setEditId(null); setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: '' }); }} className="text-sm text-zinc-400 px-4 py-2.5 rounded-xl hover:bg-dark-700 cursor-pointer">Cancelar</button>}
         </div>
       </div>
 
@@ -252,8 +253,8 @@ export default function ProdutosTab() {
                   </td>
                   <td className="px-4 py-3">
                     <EditableCell 
-                      value={p.linha || 'Geral'} 
-                      options={['Geral','Cardio','Rigs','Pisos','Acessórios','Barras','Anilhas','Kettlebells','Boxes']}
+                      value={p.linha || ''} 
+                      options={['GYM','CROSS']}
                       onSave={val => handleInlineUpdate(p.id, 'linha', val)} 
                     />
                   </td>
