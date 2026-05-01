@@ -1,17 +1,45 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send } from 'lucide-react';
 
 export default function MarketingTab() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
+  const [pendingDisparos, setPendingDisparos] = useState([]);
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('marketing_templates').select('*').order('dias_delay', { ascending: true });
-    if (!error && data) {
-      setTemplates(data);
+    const { data: tData, error } = await supabase.from('marketing_templates').select('*').order('dias_delay', { ascending: true });
+    
+    if (!error && tData) {
+      setTemplates(tData);
+      
+      // Calculate Disparos
+      const { data: orcs } = await supabase.from('orcamentos_salvos').select('*');
+      const activeTemplates = tData.filter(t => t.ativo).sort((a, b) => b.dias_delay - a.dias_delay);
+      const now = new Date();
+      const disparos = [];
+
+      for (const o of (orcs || [])) {
+        if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
+        if (!o.payload?.telefoneCliente) continue;
+
+        const dateCreated = new Date(o.criado_em);
+        const diffTime = Math.abs(now - dateCreated);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        const marketingSent = o.payload?.marketing_sent || [];
+        
+        for (const t of activeTemplates) {
+          if (diffDays >= t.dias_delay && !marketingSent.includes(t.id)) {
+            disparos.push({ orcamento: o, template: t });
+            break;
+          }
+        }
+      }
+      setPendingDisparos(disparos);
     }
     setLoading(false);
   }, []);
@@ -36,6 +64,49 @@ export default function MarketingTab() {
     setTimeout(() => setSaving(null), 1000);
   };
 
+  const handleDisparar = async () => {
+    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+    if (!webhookUrl) {
+      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada no Netlify!");
+      return;
+    }
+
+    setSending(true);
+    let successCount = 0;
+
+    for (const d of pendingDisparos) {
+      try {
+        const mensagemFormatada = d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente);
+        
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cliente: d.orcamento.cliente,
+            telefone: d.orcamento.payload.telefoneCliente,
+            consultor: d.orcamento.consultor,
+            campanha: d.template.nome,
+            mensagem_formatada: mensagemFormatada,
+            media_url: d.template.media_url || ''
+          })
+        });
+
+        // Save progress to avoid sending again tomorrow
+        const sent = d.orcamento.payload.marketing_sent || [];
+        const newPayload = { ...d.orcamento.payload, marketing_sent: [...sent, d.template.id] };
+        await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', d.orcamento.id);
+        
+        successCount++;
+      } catch (err) {
+        console.error("Erro disparando:", err);
+      }
+    }
+
+    setSending(false);
+    alert(`Mágica feita! ${successCount} campanhas disparadas com sucesso!`);
+    load(); // Refresh lists
+  };
+
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
@@ -55,6 +126,26 @@ export default function MarketingTab() {
         </div>
       ) : (
         <div className="space-y-6">
+          
+          {/* Painel de Disparos do Dia */}
+          <div className="bg-gradient-to-r from-blue-900/40 to-purple-900/40 border border-blue-500/30 rounded-2xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-white mb-1">Disparos de Hoje</h2>
+              <p className="text-sm text-blue-200/70">
+                {pendingDisparos.length === 0 
+                  ? "Todos os follow-ups estão em dia. Nenhuma mensagem pendente hoje." 
+                  : `Temos ${pendingDisparos.length} cliente${pendingDisparos.length > 1 ? 's' : ''} aguardando follow-up neste momento.`}
+              </p>
+            </div>
+            
+            <button
+              onClick={handleDisparar}
+              disabled={pendingDisparos.length === 0 || sending}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 shadow-lg shadow-blue-500/20"
+            >
+              {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : <><Send className="w-4 h-4" /> Enviar Campanhas de Hoje</>}
+            </button>
+          </div>
           {templates.map(t => (
             <div key={t.id} className={`bg-dark-800/60 border ${t.ativo ? 'border-dark-700/50' : 'border-dark-700/20 opacity-60'} rounded-2xl p-6 transition-all`}>
               <div className="flex items-start justify-between mb-4">
