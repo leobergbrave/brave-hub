@@ -59,6 +59,10 @@ export default function App() {
   const [iaProcessando, setIaProcessando] = useState(false);
   const [iaPendentes, setIaPendentes] = useState([]); // Array of items needing user choice
 
+  // ── History State ──
+  const [historico, setHistorico] = useState([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(true);
+
   // ── Fetch products on mount ──
   useEffect(() => {
     setLoadingProdutos(true);
@@ -83,6 +87,23 @@ export default function App() {
       .catch((err) => console.error('Erro ao buscar frete:', err))
       .finally(() => setLoadingFrete(false));
   }, []);
+
+  // ── Fetch history on mount ──
+  const fetchHistorico = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false }).limit(20);
+      if (error) throw error;
+      setHistorico(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar histórico:', err);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHistorico();
+  }, [fetchHistorico]);
 
   // ── Derived calculations ──
   const pesoTotal = useMemo(
@@ -280,6 +301,9 @@ export default function App() {
       setLinkGerado(link);
       navigator.clipboard.writeText(link).catch(() => {});
       showToastMessage('Link gerado e copiado para a área de transferência!');
+      
+      // Atualiza o histórico
+      fetchHistorico();
     } catch (err) {
       console.error(err);
       showToastMessage('Erro ao gerar link.', true);
@@ -892,6 +916,79 @@ export default function App() {
             </section>
           </div>
         </div>
+
+        {/* ═══ HISTÓRICO DE ORÇAMENTOS ═══ */}
+        <section className="mt-8 bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <FolderOpen className="w-4 h-4 text-blue-400" />
+              </div>
+              <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Histórico de Orçamentos</h2>
+            </div>
+            <button onClick={fetchHistorico} className="text-xs text-dark-500 hover:text-white transition-colors cursor-pointer flex items-center gap-1">
+              Atualizar
+            </button>
+          </div>
+
+          {loadingHistorico ? (
+            <div className="space-y-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : historico.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-zinc-500 text-sm">Nenhum orçamento salvo ainda.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead>
+                  <tr className="border-b border-dark-700/50 text-dark-500 uppercase tracking-widest text-[10px]">
+                    <th className="pb-3 px-4 font-semibold">Cliente</th>
+                    <th className="pb-3 px-4 font-semibold">Consultor</th>
+                    <th className="pb-3 px-4 font-semibold">Valor Total</th>
+                    <th className="pb-3 px-4 font-semibold">Data</th>
+                    <th className="pb-3 px-4 font-semibold text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-700/30">
+                  {historico.map((orc) => (
+                    <tr key={orc.id} className="hover:bg-dark-700/20 transition-colors">
+                      <td className="py-4 px-4 font-medium text-zinc-300">{orc.cliente}</td>
+                      <td className="py-4 px-4 text-zinc-500">{orc.consultor}</td>
+                      <td className="py-4 px-4 font-bold text-neon">{formatCurrency(orc.payload?.itens?.reduce((acc, i) => acc + (i.preco * i.quantidade), 0) + (orc.payload?.frete || 0) || 0)}</td>
+                      <td className="py-4 px-4 text-zinc-500">{new Date(orc.criado_em).toLocaleDateString('pt-BR')}</td>
+                      <td className="py-4 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              const link = `${window.location.origin}/orcamento/${orc.slug}`;
+                              navigator.clipboard.writeText(link);
+                              showToastMessage('Link copiado!');
+                            }}
+                            className="p-2 text-dark-500 hover:text-white bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-lg transition-all cursor-pointer"
+                            title="Copiar Link"
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                          <a
+                            href={`/orcamento/${orc.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 text-xs font-semibold text-neon hover:text-dark-950 bg-neon/10 hover:bg-neon rounded-lg transition-all"
+                          >
+                            Abrir
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </main>
 
       {/* Footer */}
