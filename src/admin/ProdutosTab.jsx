@@ -110,8 +110,8 @@ export default function ProdutosTab() {
       const pesoStr = cols[3] || '';
       
       rows.push({
-        codigo_sku: cols[0] || null,
-        nome: cols[1],
+        codigo_sku: (cols[0] || '').replace(/^"|"$/g, '') || null,
+        nome: (cols[1] || '').replace(/^"|"$/g, ''),
         preco: Number(precoStr.replace(',', '.')) || 0,
         peso_kg: pesoStr && pesoStr !== '0' ? Number(pesoStr.replace(',', '.')) : null,
         linha: cols[4] || 'Geral',
