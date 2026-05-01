@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Dumbbell, Package, Truck, Tag, Receipt, BarChart3 } from 'lucide-react';
+import { Dumbbell, Package, Truck, Tag, Receipt, BarChart3, Megaphone } from 'lucide-react';
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
 import DescontosTab from '../admin/DescontosTab';
 import OrcamentosTab from '../admin/OrcamentosTab';
 import DashboardTab from '../admin/DashboardTab';
+import MarketingTab from '../admin/MarketingTab';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -12,6 +13,7 @@ const TABS = [
   { id: 'descontos', label: 'Descontos', icon: Tag },
   { id: 'frete', label: 'Frete', icon: Truck },
   { id: 'orcamentos', label: 'Orçamentos', icon: Receipt },
+  { id: 'marketing', label: 'Funil & Automação', icon: Megaphone },
 ];
 
 export default function AdminPage() {
@@ -24,6 +26,7 @@ export default function AdminPage() {
       case 'descontos': return <DescontosTab />;
       case 'frete': return <FreteTab />;
       case 'orcamentos': return <OrcamentosTab />;
+      case 'marketing': return <MarketingTab />;
       default: return null;
     }
   };
