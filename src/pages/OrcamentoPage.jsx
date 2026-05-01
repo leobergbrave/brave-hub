@@ -23,6 +23,9 @@ export default function OrcamentoPage() {
   const [showToast, setShowToast] = useState(false);
   const [pulseBtn, setPulseBtn] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
+  
+  const [showModalNegociacao, setShowModalNegociacao] = useState(false);
+  const [motivoNegociacao, setMotivoNegociacao] = useState(null);
 
   const [produtosDb, setProdutosDb] = useState([]);
   const [regrasFreteDb, setRegrasFreteDb] = useState([]);
@@ -136,6 +139,25 @@ export default function OrcamentoPage() {
       setTimeout(() => setShowToast(false), 5000);
     }, 600);
   }, [aprovado]);
+
+  const handleEnviarNegociacao = () => {
+    if (!motivoNegociacao || !orcamento) return;
+    
+    let texto = `Olá ${orcamento.consultor}! Analisei o projeto do meu box no valor de ${fmt(orcamento.total)}.\n\n`;
+    
+    if (motivoNegociacao === 'concorrente') {
+      texto += `Gostei muito, mas tenho uma proposta menor de outra marca. Conseguimos revisar as condições para fecharmos com a Brave?`;
+    } else if (motivoNegociacao === 'pagamento') {
+      texto += `O investimento ficou um pouco acima do esperado no momento. Podemos ver algumas opções flexíveis de pagamento ou parcelamento?`;
+    } else if (motivoNegociacao === 'escopo') {
+      texto += `Para viabilizarmos agora, pensei em ajustarmos alguns equipamentos e reduzir um pouco o escopo. Podemos reavaliar?`;
+    }
+
+    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+    setShowModalNegociacao(false);
+    setMotivoNegociacao(null);
+  };
 
   if (loading) {
     return (
@@ -412,13 +434,18 @@ export default function OrcamentoPage() {
           )}
         </button>
 
-        {/* Link consultor */}
-        <div className="text-center mt-4">
-          <button className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-4 decoration-dark-500 hover:decoration-zinc-400 cursor-pointer inline-flex items-center gap-1.5">
-            <MessageCircle className="w-3.5 h-3.5" />
-            Quero alterar itens com meu consultor
-          </button>
-        </div>
+        {/* Botão Personalizar Condições */}
+        {!aprovado && (
+          <div className="text-center mt-5">
+            <button 
+              onClick={() => setShowModalNegociacao(true)}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-dark-600 bg-dark-800 text-sm font-semibold text-zinc-300 hover:text-white hover:border-dark-500 hover:bg-dark-700 transition-all duration-300 cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4 text-zinc-400" />
+              Personalizar Condições
+            </button>
+          </div>
+        )}
       </section>
 
       {/* ── Selo de confiança ── */}
@@ -457,6 +484,49 @@ export default function OrcamentoPage() {
           </div>
         );
       })()}
+
+      {/* Modal de Negociação */}
+      {showModalNegociacao && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-dark-950/80 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowModalNegociacao(false)}>
+          <div className="w-full max-w-lg bg-dark-800 border border-dark-600 rounded-3xl p-6 sm:p-8 shadow-2xl cursor-default" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white mb-1">Como podemos viabilizar?</h3>
+                <p className="text-sm text-zinc-400">A Brave tem o compromisso de entregar o melhor Custo x Performance do mercado. Nos conte qual o próximo passo:</p>
+              </div>
+              <button onClick={() => setShowModalNegociacao(false)} className="p-2 bg-dark-700 hover:bg-dark-600 rounded-full text-zinc-400 transition-colors cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-8">
+              <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${motivoNegociacao === 'concorrente' ? 'border-neon bg-neon/10' : 'border-dark-600 bg-dark-900/50 hover:border-dark-500'}`}>
+                <input type="radio" name="motivo" value="concorrente" checked={motivoNegociacao === 'concorrente'} onChange={(e) => setMotivoNegociacao(e.target.value)} className="w-4 h-4 text-neon focus:ring-neon bg-dark-700 border-dark-500" />
+                <span className="text-sm font-medium text-white">Tenho um orçamento de <span className="text-neon">outra marca</span> e quero saber se a Brave cobre.</span>
+              </label>
+
+              <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${motivoNegociacao === 'pagamento' ? 'border-neon bg-neon/10' : 'border-dark-600 bg-dark-900/50 hover:border-dark-500'}`}>
+                <input type="radio" name="motivo" value="pagamento" checked={motivoNegociacao === 'pagamento'} onChange={(e) => setMotivoNegociacao(e.target.value)} className="w-4 h-4 text-neon focus:ring-neon bg-dark-700 border-dark-500" />
+                <span className="text-sm font-medium text-white">O valor está um pouco acima. Quero ver <span className="text-neon">condições de pagamento</span>.</span>
+              </label>
+
+              <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${motivoNegociacao === 'escopo' ? 'border-neon bg-neon/10' : 'border-dark-600 bg-dark-900/50 hover:border-dark-500'}`}>
+                <input type="radio" name="motivo" value="escopo" checked={motivoNegociacao === 'escopo'} onChange={(e) => setMotivoNegociacao(e.target.value)} className="w-4 h-4 text-neon focus:ring-neon bg-dark-700 border-dark-500" />
+                <span className="text-sm font-medium text-white">Quero <span className="text-neon">reavaliar alguns equipamentos</span> para diminuir o valor total.</span>
+              </label>
+            </div>
+
+            <button
+              onClick={handleEnviarNegociacao}
+              disabled={!motivoNegociacao}
+              className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold bg-dark-700 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-dark-600 transition-colors"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Avisar Consultor no WhatsApp
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
