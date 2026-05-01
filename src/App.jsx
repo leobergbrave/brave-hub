@@ -60,7 +60,7 @@ export default function App() {
 
   // ── Payment Conditions State ──
   const [descontoAvista, setDescontoAvista] = useState(0);
-  const [acrescimoCartao, setAcrescimoCartao] = useState(0);
+  const [descontoCartao, setDescontoCartao] = useState(0);
   const [parcelasCartao, setParcelasCartao] = useState(12);
   const [personalizarPorProduto, setPersonalizarPorProduto] = useState(false);
 
@@ -365,13 +365,13 @@ export default function App() {
       const slug = `${slugBase}-${slugId}`;
 
       const payload = {
-        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, acrescimoCartaoItem: i.acrescimoCartaoItem })),
+        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, descontoCartaoItem: i.descontoCartaoItem })),
         estado,
         zona,
         telefoneCliente,
         condicoes: {
           descontoAvista,
-          acrescimoCartao,
+          descontoCartao,
           parcelas: parcelasCartao,
           personalizarPorProduto
         }
@@ -1128,10 +1128,10 @@ export default function App() {
                     </div>
                   </label>
                   <label className="block">
-                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Acréscimo Cartão (%)</span>
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Desconto Cartão (%)</span>
                     <div className="relative">
-                      <input type="number" min={0} max={100} step={1} value={acrescimoCartao}
-                        onChange={(e) => setAcrescimoCartao(Math.max(0, Math.min(100, Number(e.target.value))))}
+                      <input type="number" min={0} max={100} step={1} value={descontoCartao}
+                        onChange={(e) => setDescontoCartao(Math.max(0, Math.min(100, Number(e.target.value))))}
                         className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all" />
                       <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
                     </div>
@@ -1163,15 +1163,15 @@ export default function App() {
                 </div>
 
                 {/* Preview */}
-                {(descontoAvista > 0 || acrescimoCartao > 0) && itens.length > 0 && (
+                {(descontoAvista > 0 || descontoCartao > 0) && itens.length > 0 && (
                   <div className="bg-dark-900/60 border border-emerald-500/20 rounded-xl px-4 py-3 space-y-1.5 mt-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-zinc-500">💵 Valor à Vista</span>
-                      <span className="text-sm font-bold text-emerald-400">{formatCurrency(totalProjeto * (1 - descontoAvista / 100))}</span>
+                      <span className="text-[11px] text-zinc-500">💵 À Vista{descontoAvista > 0 ? ` (-${descontoAvista}%)` : ''}</span>
+                      <span className="text-sm font-bold text-emerald-400">{formatCurrency(descontoAvista > 0 ? totalProjeto * (1 - descontoAvista / 100) : totalProjeto)}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-zinc-500">💳 Valor no Cartão ({parcelasCartao}x)</span>
-                      <span className="text-sm font-bold text-white">{formatCurrency(totalProjeto * (1 + acrescimoCartao / 100))}</span>
+                      <span className="text-[11px] text-zinc-500">💳 Cartão {parcelasCartao}x{descontoCartao > 0 ? ` (-${descontoCartao}%)` : ''}</span>
+                      <span className="text-sm font-bold text-white">{formatCurrency(descontoCartao > 0 ? totalProjeto * (1 - descontoCartao / 100) : totalProjeto)}</span>
                     </div>
                   </div>
                 )}

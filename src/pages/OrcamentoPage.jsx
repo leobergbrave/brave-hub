@@ -114,11 +114,11 @@ export default function OrcamentoPage() {
       // Payment conditions
       const condicoes = orcamentoSalvo?.payload?.condicoes || {};
       const descAvista = condicoes.descontoAvista || 0;
-      const acrescCartao = condicoes.acrescimoCartao || 0;
+      const descCartao = condicoes.descontoCartao || 0;
       const parcelas = condicoes.parcelas || 12;
 
-      const totalAvista = total * (1 - descAvista / 100);
-      const totalCartao = total * (1 + acrescCartao / 100);
+      const totalAvista = descAvista > 0 ? total * (1 - descAvista / 100) : total;
+      const totalCartao = descCartao > 0 ? total * (1 - descCartao / 100) : total;
       const parcelaValor = totalCartao / parcelas;
 
       return {
@@ -133,7 +133,7 @@ export default function OrcamentoPage() {
         frete,
         total,
         descAvista,
-        acrescCartao,
+        descCartao,
         parcelas,
         totalAvista,
         totalCartao,
@@ -429,64 +429,46 @@ export default function OrcamentoPage() {
           <div className="my-6 h-px bg-gradient-to-r from-transparent via-dark-500/50 to-transparent" />
 
           {/* Payment Options */}
-          {(orcamento.descAvista > 0 || orcamento.acrescCartao > 0) ? (
+          {(orcamento.descAvista > 0 || orcamento.descCartao > 0) ? (
             <div className="space-y-4">
               {/* À Vista */}
-              {orcamento.descAvista > 0 && (
-                <div className="relative bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30 rounded-2xl p-5 overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-[40px] pointer-events-none" />
-                  <div className="relative flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-                        <Banknote className="w-5 h-5 text-emerald-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider">À Vista (PIX / Boleto)</p>
-                        <p className="text-[10px] text-emerald-400/60 mt-0.5">Desconto de {orcamento.descAvista}%</p>
-                      </div>
+              <div className={`relative ${orcamento.descAvista > 0 ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30' : 'bg-dark-900/40 border border-dark-600'} rounded-2xl p-5 overflow-hidden`}>
+                {orcamento.descAvista > 0 && <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-[40px] pointer-events-none" />}
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl ${orcamento.descAvista > 0 ? 'bg-emerald-500/15' : 'bg-dark-700'} flex items-center justify-center`}>
+                      <Banknote className={`w-5 h-5 ${orcamento.descAvista > 0 ? 'text-emerald-400' : 'text-zinc-400'}`} />
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl sm:text-3xl font-black text-emerald-400">{fmt(orcamento.totalAvista)}</p>
-                      <p className="text-[10px] text-emerald-400/50 mt-0.5">economize {fmt(orcamento.total - orcamento.totalAvista)}</p>
+                    <div>
+                      <p className={`text-xs font-bold uppercase tracking-wider ${orcamento.descAvista > 0 ? 'text-emerald-400' : 'text-zinc-300'}`}>À Vista (PIX / Boleto)</p>
+                      {orcamento.descAvista > 0 && <p className="text-[10px] text-emerald-400/60 mt-0.5">Desconto de {orcamento.descAvista}%</p>}
                     </div>
                   </div>
+                  <div className="text-right">
+                    <p className={`text-2xl sm:text-3xl font-black ${orcamento.descAvista > 0 ? 'text-emerald-400' : 'text-neon'}`}>{fmt(orcamento.totalAvista)}</p>
+                    {orcamento.descAvista > 0 && <p className="text-[10px] text-emerald-400/50 mt-0.5">economize {fmt(orcamento.total - orcamento.totalAvista)}</p>}
+                  </div>
                 </div>
-              )}
+              </div>
 
               {/* Cartão */}
-              {orcamento.acrescCartao > 0 && (
-                <div className="relative bg-dark-900/40 border border-dark-600 rounded-2xl p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-dark-700 flex items-center justify-center">
-                        <CreditCard className="w-5 h-5 text-zinc-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-zinc-300 font-bold uppercase tracking-wider">No Cartão</p>
-                        <p className="text-[10px] text-dark-500 mt-0.5">{orcamento.parcelas}x sem juros</p>
-                      </div>
+              <div className={`relative ${orcamento.descCartao > 0 ? 'bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30' : 'bg-dark-900/40 border border-dark-600'} rounded-2xl p-5`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl ${orcamento.descCartao > 0 ? 'bg-blue-500/15' : 'bg-dark-700'} flex items-center justify-center`}>
+                      <CreditCard className={`w-5 h-5 ${orcamento.descCartao > 0 ? 'text-blue-400' : 'text-zinc-400'}`} />
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl sm:text-3xl font-black text-white">{fmt(orcamento.totalCartao)}</p>
-                      <p className="text-[10px] text-dark-500 mt-0.5">{orcamento.parcelas}x de {fmt(orcamento.parcelaValor)}</p>
+                    <div>
+                      <p className={`text-xs font-bold uppercase tracking-wider ${orcamento.descCartao > 0 ? 'text-blue-300' : 'text-zinc-300'}`}>No Cartão</p>
+                      <p className="text-[10px] text-dark-500 mt-0.5">{orcamento.parcelas}x sem juros{orcamento.descCartao > 0 ? ` • -${orcamento.descCartao}%` : ''}</p>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <p className={`text-2xl sm:text-3xl font-black ${orcamento.descCartao > 0 ? 'text-blue-300' : 'text-white'}`}>{fmt(orcamento.totalCartao)}</p>
+                    <p className="text-[10px] text-dark-500 mt-0.5">{orcamento.parcelas}x de {fmt(orcamento.parcelaValor)}</p>
+                  </div>
                 </div>
-              )}
-
-              {/* Fallback: show total if only one condition */}
-              {orcamento.descAvista === 0 && orcamento.acrescCartao > 0 && (
-                <div className="flex items-end justify-between pt-2">
-                  <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold">Valor à Vista</span>
-                  <p className="text-2xl font-black text-neon">{fmt(orcamento.total)}</p>
-                </div>
-              )}
-              {orcamento.acrescCartao === 0 && orcamento.descAvista > 0 && (
-                <div className="flex items-end justify-between pt-2">
-                  <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold">Valor no Cartão</span>
-                  <p className="text-2xl font-black text-white">{fmt(orcamento.total)}</p>
-                </div>
-              )}
+              </div>
             </div>
           ) : (
             <div className="flex items-end justify-between">
