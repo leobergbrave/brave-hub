@@ -8,6 +8,7 @@ import {
   fetchProdutos, fetchRegrasFrete, extrairEstadosEZonas,
   calcularFreteComRegra, formatCurrency, formatWeight
 } from './data';
+import { supabase } from './lib/supabase';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — Gerador de Orçamentos
@@ -38,6 +39,7 @@ export default function App() {
   const [linkGerado, setLinkGerado] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [toastError, setToastError] = useState(false);
 
   // ── IA State ──
   const [iaTexto, setIaTexto] = useState('');
@@ -92,10 +94,11 @@ export default function App() {
   );
 
   // ── Handlers ──
-  const showToastMessage = useCallback((msg) => {
+  const showToastMessage = useCallback((msg, isError = false) => {
     setToastMsg(msg);
+    setToastError(isError);
     setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
+    setTimeout(() => setShowToast(false), 4000);
   }, []);
 
   const adicionarProduto = useCallback((produto, qtd) => {
@@ -135,19 +138,30 @@ export default function App() {
     showToastMessage('Link copiado para a área de transferência!');
   }, [itens, estado, zona, showToastMessage]);
 
-  // ── IA Mock Handler (uses real product data now) ──
-  const handleProcessarIA = useCallback(() => {
-    if (iaProcessando || produtos.length === 0) return;
+  // ── IA Handler (Edge Function) ──
+  const handleProcessarIA = useCallback(async () => {
+    if (iaProcessando || !iaTexto.trim()) return;
     setIaProcessando(true);
-    setTimeout(() => {
-      // Simulate: pick first 2 products from DB
-      const mockPicks = produtos.slice(0, Math.min(2, produtos.length));
-      mockPicks.forEach((p, i) => adicionarProduto(p, i === 0 ? 2 : 5));
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-equipment-list', {
+        body: { texto: iaTexto.trim() },
+      });
+      if (error) throw error;
+      const produtosIA = data?.produtos;
+      if (!produtosIA || produtosIA.length === 0) {
+        showToastMessage('Não foi possível extrair produtos desse texto. Tente novamente.', true);
+        return;
+      }
+      produtosIA.forEach((p) => adicionarProduto(p, p.quantidade || 1));
       setIaTexto('');
+      showToastMessage('Inteligência Artificial finalizou a extração!');
+    } catch (err) {
+      console.error('Erro IA:', err);
+      showToastMessage('Não foi possível extrair produtos desse texto. Tente novamente.', true);
+    } finally {
       setIaProcessando(false);
-      showToastMessage('Produtos extraídos e adicionados com sucesso!');
-    }, 1500);
-  }, [iaProcessando, produtos, adicionarProduto, showToastMessage]);
+    }
+  }, [iaProcessando, iaTexto, adicionarProduto, showToastMessage]);
 
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
@@ -161,8 +175,8 @@ export default function App() {
       {/* Toast */}
       {showToast && (
         <div className="fixed top-6 right-6 z-50 animate-slide-in-right">
-          <div className="flex items-center gap-3 bg-dark-700 border border-neon/30 px-5 py-3 rounded-xl shadow-lg shadow-neon/10">
-            <PackageCheck className="w-5 h-5 text-neon" />
+          <div className={`flex items-center gap-3 bg-dark-700 px-5 py-3 rounded-xl shadow-lg ${toastError ? 'border border-red-500/40 shadow-red-500/10' : 'border border-neon/30 shadow-neon/10'}`}>
+            {toastError ? <AlertTriangle className="w-5 h-5 text-red-400" /> : <PackageCheck className="w-5 h-5 text-neon" />}
             <span className="text-sm font-medium text-white">{toastMsg}</span>
           </div>
         </div>
