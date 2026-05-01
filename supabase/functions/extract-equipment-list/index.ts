@@ -55,6 +55,20 @@ async function callLLM(texto: string): Promise<Array<{ termo: string; quantidade
   return JSON.parse(cleaned);
 }
 
+// ── Levenshtein Distance ──
+function levenshtein(a: string, b: string): number {
+  const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+    }
+  }
+  return matrix[a.length][b.length];
+}
+
 // ── Fuzzy match against produtos table ──
 async function matchProdutos(
   supabase: ReturnType<typeof createClient>,
@@ -62,47 +76,59 @@ async function matchProdutos(
 ) {
   const resolucoes: Array<{ termo_original: string; quantidade: number; opcoes: Array<Record<string, unknown>> }> = [];
 
+  // Fetch all products once for in-memory fuzzy matching (fast for < 1000 items)
+  const { data: allProducts } = await supabase.from("produtos").select("id, nome, preco, peso_kg, url_imagem");
+  if (!allProducts) return resolucoes;
+
   for (const item of itensIA) {
-    // Build search words for ilike
-    const words = item.termo
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((w) => w.length > 2);
+    const termRaw = item.termo.toLowerCase().trim();
+    const termNoSpace = termRaw.replace(/[^a-z0-9]/g, '');
+    const termWords = termRaw.split(/\s+/).filter(w => w.length > 2);
 
-    let matches: any[] = [];
+    const scored = allProducts.map(p => {
+      const nomeRaw = p.nome.toLowerCase();
+      const nomeNoSpace = nomeRaw.replace(/[^a-z0-9]/g, '');
+      const nomeWords = nomeRaw.split(/\s+/).filter(w => w.length > 2);
+      
+      let score = 0;
+      
+      // 1. Exact inclusion
+      if (nomeRaw.includes(termRaw) || termRaw.includes(nomeRaw)) score += 100;
+      
+      // 2. No-space inclusion (catches BIKERG vs BIKE ERG)
+      if (nomeNoSpace.includes(termNoSpace) || termNoSpace.includes(nomeNoSpace)) score += 50;
 
-    // Strategy 1: Try full ilike
-    const { data: fullMatch } = await supabase
-      .from("produtos")
-      .select("id, nome, preco, peso_kg, url_imagem")
-      .ilike("nome", `%${item.termo}%`)
-      .limit(5);
-
-    if (fullMatch && fullMatch.length > 0) {
-      matches = fullMatch;
-    }
-
-    // Strategy 2: Try each significant word
-    if (matches.length === 0 && words.length > 0) {
-      for (const word of words) {
-        const { data: partialMatch } = await supabase
-          .from("produtos")
-          .select("id, nome, preco, peso_kg, url_imagem")
-          .ilike("nome", `%${word}%`)
-          .limit(5);
-
-        if (partialMatch && partialMatch.length > 0) {
-          matches = partialMatch;
-          break;
+      // 3. Word overlap (with slight typo tolerance)
+      let overlap = 0;
+      for (const tw of termWords) {
+        if (nomeWords.some(nw => nw.includes(tw) || tw.includes(nw) || levenshtein(tw, nw) <= 1)) {
+          overlap++;
         }
       }
-    }
+      score += (overlap * 20);
 
-    if (matches.length > 0) {
+      // 4. Distance of the no-space versions (for misspellings)
+      const dist = levenshtein(termNoSpace, nomeNoSpace);
+      if (dist <= 2) score += 30;
+      else if (dist <= 4) score += 10;
+
+      return { ...p, score };
+    });
+
+    // Filter by threshold and sort by highest score
+    const matches = scored
+      .filter(p => p.score >= 20)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    // Remove score from final payload
+    const finalMatches = matches.map(({ score, ...rest }) => rest);
+
+    if (finalMatches.length > 0) {
       resolucoes.push({
         termo_original: item.termo,
         quantidade: item.quantidade,
-        opcoes: matches
+        opcoes: finalMatches
       });
     }
   }

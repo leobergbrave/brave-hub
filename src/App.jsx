@@ -248,18 +248,43 @@ export default function App() {
     }
   };
 
-  const handleGerarLink = useCallback(() => {
+  const handleGerarLink = useCallback(async () => {
     if (itens.length === 0) return;
-    const params = new URLSearchParams();
-    if (nomeCliente.trim()) params.set('c', nomeCliente.trim());
-    if (nomeConsultor.trim()) params.set('v', nomeConsultor.trim());
-    params.set('itens', JSON.stringify(itens.map((i) => ({ id: i.id, q: i.quantidade, p: i.preco }))));
-    params.set('uf', estado);
-    params.set('zona', zona);
-    const link = `${window.location.origin}/orcamento?${params.toString()}`;
-    setLinkGerado(link);
-    navigator.clipboard.writeText(link).catch(() => {});
-    showToastMessage('Link copiado para a área de transferência!');
+    try {
+      showToastMessage('Gerando link...', false);
+      const btnGerarLink = document.getElementById('btn-gerar-link');
+      if (btnGerarLink) btnGerarLink.disabled = true;
+
+      const slugBase = (nomeCliente || 'orcamento').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const slugId = Math.random().toString(36).substring(2, 8);
+      const slug = `${slugBase}-${slugId}`;
+
+      const payload = {
+        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku })),
+        estado,
+        zona
+      };
+
+      const { error } = await supabase.from('orcamentos_salvos').insert({
+        slug,
+        cliente: nomeCliente || 'Cliente Brave',
+        consultor: nomeConsultor || 'Consultor Oficial',
+        payload
+      });
+
+      if (error) throw error;
+
+      const link = `${window.location.origin}/orcamento/${slug}`;
+      setLinkGerado(link);
+      navigator.clipboard.writeText(link).catch(() => {});
+      showToastMessage('Link gerado e copiado para a área de transferência!');
+    } catch (err) {
+      console.error(err);
+      showToastMessage('Erro ao gerar link.', true);
+    } finally {
+      const btnGerarLink = document.getElementById('btn-gerar-link');
+      if (btnGerarLink) btnGerarLink.disabled = false;
+    }
   }, [itens, estado, zona, nomeCliente, nomeConsultor, showToastMessage]);
 
   // ── IA Handler (Edge Function) ──

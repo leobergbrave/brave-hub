@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Shield, CalendarDays, Clock, UserRound, Package, Weight,
   Truck, CheckCircle2, MessageCircle, Sparkles, ChevronRight,
   Star, Award, BadgeCheck, Loader2, X, FolderOpen
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
+import { supabase } from '../lib/supabase';
 
 /* ═══════════════════════════════════════════════
    VITRINE DO CLIENTE — Orçamento Final
@@ -16,6 +17,7 @@ function fmt(v) {
 }
 
 export default function OrcamentoPage() {
+  const { slug } = useParams();
   const [searchParams] = useSearchParams();
   const [aprovado, setAprovado] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -24,35 +26,65 @@ export default function OrcamentoPage() {
 
   const [produtosDb, setProdutosDb] = useState([]);
   const [regrasFreteDb, setRegrasFreteDb] = useState([]);
+  const [orcamentoSalvo, setOrcamentoSalvo] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchProdutos(), fetchRegrasFrete()])
-      .then(([prods, regras]) => {
+    async function loadData() {
+      try {
+        const [prods, regras] = await Promise.all([fetchProdutos(), fetchRegrasFrete()]);
         setProdutosDb(prods);
         setRegrasFreteDb(regras);
-      })
-      .catch(err => console.error('Erro ao carregar dados:', err))
-      .finally(() => setLoading(false));
-  }, []);
+
+        if (slug) {
+          const { data } = await supabase.from('orcamentos_salvos').select('*').eq('slug', slug).single();
+          if (data) setOrcamentoSalvo(data);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [slug]);
 
   const orcamento = useMemo(() => {
     try {
-      const itensParam = searchParams.get('itens');
-      const ufParam = searchParams.get('uf');
-      const zonaParam = searchParams.get('zona');
-      const clienteParam = searchParams.get('c') || 'Cliente Brave';
-      const consultorParam = searchParams.get('v') || 'Consultor Oficial';
+      if (!produtosDb.length) return null;
 
-      if (!itensParam || produtosDb.length === 0) return null;
+      let itensRaw = [];
+      let ufParam = '';
+      let zonaParam = '';
+      let clienteParam = 'Cliente Brave';
+      let consultorParam = 'Consultor Oficial';
+      let dataCriacao = new Date().toLocaleDateString('pt-BR');
 
-      const parsedItens = JSON.parse(itensParam);
-      
-      const itensCompletos = parsedItens.map(itemUrl => {
-        const prod = produtosDb.find(p => p.id === itemUrl.id);
+      if (orcamentoSalvo) {
+        itensRaw = orcamentoSalvo.payload.itens;
+        ufParam = orcamentoSalvo.payload.estado;
+        zonaParam = orcamentoSalvo.payload.zona;
+        clienteParam = orcamentoSalvo.cliente;
+        consultorParam = orcamentoSalvo.consultor;
+        dataCriacao = new Date(orcamentoSalvo.criado_em).toLocaleDateString('pt-BR');
+      } else {
+        const itensParam = searchParams.get('itens');
+        if (!itensParam) return null;
+        itensRaw = JSON.parse(itensParam);
+        ufParam = searchParams.get('uf');
+        zonaParam = searchParams.get('zona');
+        clienteParam = searchParams.get('c') || 'Cliente Brave';
+        consultorParam = searchParams.get('v') || 'Consultor Oficial';
+      }
+
+      if (!itensRaw || !itensRaw.length) return null;
+
+      const itensCompletos = itensRaw.map(itemRaw => {
+        const prod = produtosDb.find(p => p.id === itemRaw.id);
         if (!prod) return null;
         
-        const precoVenda = itemUrl.p !== undefined ? itemUrl.p : prod.preco;
+        const precoVenda = itemRaw.p !== undefined ? itemRaw.p : (itemRaw.preco !== undefined ? itemRaw.preco : prod.preco);
+        const quantidade = itemRaw.q !== undefined ? itemRaw.q : itemRaw.quantidade;
         const precoOriginal = prod.preco;
         const descontoUnitario = precoOriginal > precoVenda ? precoOriginal - precoVenda : 0;
         
@@ -60,7 +92,7 @@ export default function OrcamentoPage() {
           id: prod.id,
           nome: prod.nome,
           url_imagem: prod.url_imagem,
-          quantidade: itemUrl.q,
+          quantidade: quantidade,
           precoOriginal: precoOriginal,
           preco: precoVenda,
           descontoUnitario: descontoUnitario,
@@ -79,7 +111,7 @@ export default function OrcamentoPage() {
       return {
         cliente: clienteParam,
         consultor: consultorParam,
-        data: new Date().toLocaleDateString('pt-BR'),
+        data: dataCriacao,
         validade: '7 dias',
         itens: itensCompletos,
         pesoTotal,
@@ -92,7 +124,7 @@ export default function OrcamentoPage() {
       console.error('Erro ao processar orçamento:', e);
       return null;
     }
-  }, [searchParams, produtosDb, regrasFreteDb]);
+  }, [searchParams, produtosDb, regrasFreteDb, orcamentoSalvo]);
 
   const handleAprovar = useCallback(() => {
     if (aprovado) return;
@@ -197,48 +229,56 @@ export default function OrcamentoPage() {
           {orcamento.itens.map((item, idx) => (
             <div
               key={item.id}
-              className="group bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-5 flex items-center gap-5 hover:border-dark-600 transition-all animate-fade-in-up"
+              className="group bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:gap-5 sm:items-center hover:border-dark-600 transition-all animate-fade-in-up"
               style={{ animationDelay: `${idx * 0.1}s` }}
             >
-              {/* Image / Placeholder */}
-              <div 
-                className={`shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`}
-                onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
-              >
-                {(() => {
-                  if (!item.url_imagem) {
-                    return (
-                      <div className="text-center">
-                        <Package className="w-6 h-6 text-dark-500 mx-auto" />
-                        <p className="text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
-                      </div>
-                    );
-                  }
-                  const media = parseMediaUrl(item.url_imagem);
-                  if (media.type === 'image') {
-                    return <img src={media.url} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />;
-                  } else if (media.type === 'folder') {
-                    return <FolderOpen className="w-8 h-8 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
-                  }
-                })()}
+              <div className="flex items-center gap-4">
+                {/* Image / Placeholder */}
+                <div 
+                  className={`shrink-0 w-16 h-16 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`}
+                  onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
+                >
+                  {(() => {
+                    if (!item.url_imagem) {
+                      return (
+                        <div className="text-center">
+                          <Package className="w-5 h-5 sm:w-6 sm:h-6 text-dark-500 mx-auto" />
+                          <p className="text-[7px] sm:text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
+                        </div>
+                      );
+                    }
+                    const media = parseMediaUrl(item.url_imagem);
+                    if (media.type === 'image') {
+                      return <img src={media.url} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />;
+                    } else if (media.type === 'folder') {
+                      return <FolderOpen className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
+                    }
+                  })()}
+                </div>
+                
+                {/* Mobile Title & Total */}
+                <div className="flex-1 sm:hidden">
+                  <p className="text-sm font-bold text-white leading-tight mb-1 line-clamp-2">{item.nome}</p>
+                  <p className="text-lg font-black text-neon">{fmt(item.preco * item.quantidade)}</p>
+                </div>
               </div>
 
-              {/* Info */}
+              {/* Info Desktop + Meta Mobile */}
               <div className="flex-1 min-w-0">
-                <p className="text-base sm:text-lg font-bold text-white truncate">
+                <p className="hidden sm:block text-base sm:text-lg font-bold text-white truncate mb-1.5">
                   {item.nome}
                 </p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
-                  <span className="text-xs text-zinc-500">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-dark-900/40 sm:bg-transparent p-2.5 sm:p-0 rounded-lg border border-dark-700/30 sm:border-0">
+                  <span className="text-[11px] sm:text-xs text-zinc-500">
                     Qtd: <span className="text-zinc-300 font-semibold">{item.quantidade}</span>
                   </span>
-                  <span className="text-xs text-zinc-500 flex items-center gap-1 flex-wrap">
+                  <span className="text-[11px] sm:text-xs text-zinc-500 flex items-center gap-1 flex-wrap">
                     Unit: 
                     {item.descontoUnitario > 0 ? (
                       <>
-                        <span className="text-zinc-500 line-through text-[10px] ml-0.5">{fmt(item.precoOriginal)}</span>
+                        <span className="text-zinc-500 line-through text-[9px] sm:text-[10px] ml-0.5">{fmt(item.precoOriginal)}</span>
                         <span className="text-neon font-bold ml-1">{fmt(item.preco)}</span>
-                        <span className="bg-neon/10 text-neon border border-neon/20 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ml-1.5">
+                        <span className="bg-neon/10 text-neon border border-neon/20 text-[9px] px-1 py-0.5 rounded uppercase font-bold tracking-wider ml-1">
                           -{Math.round((item.descontoUnitario / item.precoOriginal) * 100)}%
                         </span>
                       </>
@@ -246,14 +286,14 @@ export default function OrcamentoPage() {
                       <span className="text-zinc-300 font-semibold">{fmt(item.preco)}</span>
                     )}
                   </span>
-                  <span className="text-xs text-zinc-500">
+                  <span className="text-[11px] sm:text-xs text-zinc-500">
                     Peso: <span className="text-zinc-300 font-semibold">{item.peso * item.quantidade} kg</span>
                   </span>
                 </div>
               </div>
 
-              {/* Subtotal */}
-              <div className="text-right shrink-0">
+              {/* Subtotal Desktop */}
+              <div className="hidden sm:block text-right shrink-0">
                 <p className="text-[10px] text-zinc-500 uppercase font-semibold tracking-wider mb-0.5">
                   Subtotal
                 </p>
