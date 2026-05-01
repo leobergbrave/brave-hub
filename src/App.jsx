@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
-  Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload
+  Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import {
   fetchProdutos, fetchRegrasFrete, extrairEstadosEZonas,
-  calcularFreteComRegra, formatCurrency, formatWeight
+  calcularFreteComRegra, formatCurrency, formatWeight, parseMediaUrl
 } from './data';
 import { supabase } from './lib/supabase';
 
@@ -370,13 +370,23 @@ export default function App() {
                         className="w-full text-left flex items-center justify-between p-3 rounded-lg bg-dark-800 border border-dark-600 hover:border-neon/50 hover:bg-neon/5 transition-all group"
                       >
                         <div className="flex items-center gap-3">
-                          {opcao.url_imagem ? (
-                            <img src={opcao.url_imagem} className="w-8 h-8 rounded object-cover" />
-                          ) : (
-                            <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
-                              <Dumbbell className="w-4 h-4 text-dark-500" />
-                            </div>
-                          )}
+                          {(() => {
+                            if (!opcao.url_imagem) {
+                              return (
+                                <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
+                                  <Dumbbell className="w-4 h-4 text-dark-500" />
+                                </div>
+                              );
+                            }
+                            const media = parseMediaUrl(opcao.url_imagem);
+                            if (media.type === 'image') return <img src={media.url} className="w-8 h-8 rounded object-cover" />;
+                            if (media.type === 'folder') return <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center"><FolderOpen className="w-4 h-4 text-blue-400" /></div>;
+                            return (
+                              <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
+                                <Dumbbell className="w-4 h-4 text-dark-500" />
+                              </div>
+                            );
+                          })()}
                           <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">{opcao.nome}</span>
                         </div>
                         <span className="text-sm font-medium text-neon">{formatCurrency(opcao.preco)}</span>
@@ -678,13 +688,31 @@ export default function App() {
                             </div>
                           ) : (
                             <div className="shrink-0 relative group/img cursor-pointer" onClick={() => { setEditingImageId(item.id); setEditImageUrl(item.url_imagem || ''); }} title="Alterar Foto">
-                              {item.url_imagem ? (
-                                <img src={item.url_imagem} alt={item.nome} className="w-12 h-12 rounded-lg object-cover border border-dark-700/50 group-hover/img:opacity-40 transition-opacity" />
-                              ) : (
-                                <div className={`w-12 h-12 rounded-lg border border-dashed border-dark-600 flex flex-col items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40`}>
-                                  <ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon transition-colors" />
-                                </div>
-                              )}
+                              {(() => {
+                                if (!item.url_imagem) {
+                                  return (
+                                    <div className={`w-12 h-12 rounded-lg border border-dashed border-dark-600 flex flex-col items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40`}>
+                                      <ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon transition-colors" />
+                                    </div>
+                                  );
+                                }
+                                const media = parseMediaUrl(item.url_imagem);
+                                if (media.type === 'image') {
+                                  return <img src={media.url} alt={item.nome} className="w-12 h-12 rounded-lg object-cover border border-dark-700/50 group-hover/img:opacity-40 transition-opacity" />;
+                                } else if (media.type === 'folder') {
+                                  return (
+                                    <div className="w-12 h-12 rounded-lg border border-dark-600 bg-dark-800 flex items-center justify-center group-hover/img:opacity-40 transition-opacity" title="Pasta do Google Drive">
+                                      <FolderOpen className="w-5 h-5 text-blue-400" />
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className={`w-12 h-12 rounded-lg border border-dashed border-dark-600 flex flex-col items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40`}>
+                                      <ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon transition-colors" />
+                                    </div>
+                                  );
+                                }
+                              })()}
                               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none">
                                 <Edit2 className="w-4 h-4 text-white drop-shadow-md" />
                               </div>

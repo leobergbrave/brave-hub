@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Shield, CalendarDays, Clock, UserRound, Package, Weight,
   Truck, CheckCircle2, MessageCircle, Sparkles, ChevronRight,
-  Star, Award, BadgeCheck, Loader2, X
+  Star, Award, BadgeCheck, Loader2, X, FolderOpen
 } from 'lucide-react';
-import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra } from '../data';
+import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
 
 /* ═══════════════════════════════════════════════
    VITRINE DO CLIENTE — Orçamento Final
@@ -205,14 +205,22 @@ export default function OrcamentoPage() {
                 className={`shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`}
                 onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
               >
-                {item.url_imagem ? (
-                  <img src={item.url_imagem} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
-                ) : (
-                  <div className="text-center">
-                    <Package className="w-6 h-6 text-dark-500 mx-auto" />
-                    <p className="text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
-                  </div>
-                )}
+                {(() => {
+                  if (!item.url_imagem) {
+                    return (
+                      <div className="text-center">
+                        <Package className="w-6 h-6 text-dark-500 mx-auto" />
+                        <p className="text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
+                      </div>
+                    );
+                  }
+                  const media = parseMediaUrl(item.url_imagem);
+                  if (media.type === 'image') {
+                    return <img src={media.url} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />;
+                  } else if (media.type === 'folder') {
+                    return <FolderOpen className="w-8 h-8 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
+                  }
+                })()}
               </div>
 
               {/* Info */}
@@ -388,14 +396,23 @@ export default function OrcamentoPage() {
       </footer>
 
       {/* Lightbox / Modal de Imagem Expandida */}
-      {expandedImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-dark-950/90 backdrop-blur-sm p-4 animate-fade-in cursor-zoom-out" onClick={() => setExpandedImage(null)}>
-          <button onClick={() => setExpandedImage(null)} className="absolute top-6 right-6 w-10 h-10 bg-dark-800 text-white rounded-full flex items-center justify-center hover:bg-neon hover:text-dark-950 transition-colors cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
-          <img src={expandedImage} alt="Imagem ampliada" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl shadow-neon/10 cursor-default" onClick={(e) => e.stopPropagation()} />
-        </div>
-      )}
+      {expandedImage && (() => {
+        const media = parseMediaUrl(expandedImage);
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-dark-950/90 backdrop-blur-sm p-4 animate-fade-in cursor-zoom-out" onClick={() => setExpandedImage(null)}>
+            <button onClick={() => setExpandedImage(null)} className="absolute top-6 right-6 w-10 h-10 bg-dark-800 text-white rounded-full flex items-center justify-center hover:bg-neon hover:text-dark-950 transition-colors cursor-pointer z-50">
+              <X className="w-5 h-5" />
+            </button>
+            {media.type === 'folder' ? (
+              <div className="w-full max-w-5xl h-[80vh] bg-white rounded-xl overflow-hidden cursor-default" onClick={(e) => e.stopPropagation()}>
+                <iframe src={media.url} className="w-full h-full border-0" title="Pasta do Google Drive" />
+              </div>
+            ) : (
+              <img src={media.url} alt="Imagem ampliada" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl shadow-neon/10 cursor-default" onClick={(e) => e.stopPropagation()} />
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

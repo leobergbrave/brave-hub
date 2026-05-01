@@ -64,3 +64,28 @@ export function extrairEstadosEZonas(regras) {
     zonas: [...zonasSet].sort(),
   };
 }
+
+// ─── Tratamento de URLs do Google Drive ───
+export function parseMediaUrl(url) {
+  if (!url) return { type: 'none', url: '' };
+  
+  // Google Drive folder
+  const folderMatch = url.match(/drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) {
+    return { type: 'folder', url: `https://drive.google.com/embeddedfolderview?id=${folderMatch[1]}#grid` };
+  }
+
+  // Google Drive single file (view or open?id=)
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch) {
+    return { type: 'image', url: `https://drive.google.com/uc?export=view&id=${fileMatch[1]}` };
+  }
+  
+  const idMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+  if (idMatch) {
+    return { type: 'image', url: `https://drive.google.com/uc?export=view&id=${idMatch[1]}` };
+  }
+
+  // Fallback to direct image
+  return { type: 'image', url };
+}
