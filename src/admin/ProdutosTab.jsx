@@ -40,11 +40,16 @@ export default function ProdutosTab() {
   const handleEdit = (p) => {
     setEditId(p.id);
     setForm({ codigo_sku: p.codigo_sku || '', nome: p.nome, preco: p.preco, peso_kg: p.peso_kg || '', url_imagem: p.url_imagem || '', linha: p.linha || 'Geral' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Excluir este produto?')) return;
-    await supabase.from('produtos').delete().eq('id', id);
+    if (!window.confirm('Excluir este produto?')) return;
+    const { error } = await supabase.from('produtos').delete().eq('id', id);
+    if (error) {
+      console.error(error);
+      alert('Erro ao excluir: ' + error.message);
+    }
     load();
   };
 
