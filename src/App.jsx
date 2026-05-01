@@ -1228,159 +1228,98 @@ export default function App() {
                       const semPeso = !item.peso_kg;
                       return (
                         <li key={item.id}
-                          className={`group bg-dark-900/50 border rounded-xl p-4 flex items-center gap-4 transition-all animate-slide-in-right ${semPeso ? 'border-amber-500/30' : 'border-dark-700/40 hover:border-dark-600'}`}
+                          className={`group bg-dark-900/50 border rounded-xl p-3 sm:p-4 transition-all animate-slide-in-right ${semPeso ? 'border-amber-500/30' : 'border-dark-700/40 hover:border-dark-600'}`}
                           style={{ animationDelay: `${idx * 0.05}s` }}>
                           
-                          {/* Image Upload / Preview */}
-                          {editingImageId === item.id ? (
-                            <div className="shrink-0 w-full sm:w-56 bg-dark-800 rounded-xl p-3 border border-dark-600 shadow-xl shadow-dark-950/50 z-10">
-                              <p className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider">Alterar Foto</p>
-                              <div className="flex flex-col gap-2">
-                                <label className={`flex items-center justify-center gap-2 bg-dark-700 hover:bg-dark-600 text-xs font-semibold text-white py-2 rounded-lg cursor-pointer transition-colors ${uploadingImageId === item.id ? 'opacity-50 pointer-events-none' : ''}`}>
-                                  {uploadingImageId === item.id ? <Loader2 className="w-4 h-4 animate-spin text-neon" /> : <Upload className="w-4 h-4 text-zinc-400" />}
-                                  {uploadingImageId === item.id ? 'Enviando...' : 'Upload do Computador'}
-                                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, item.id)} disabled={uploadingImageId === item.id} />
-                                </label>
-                                <div className="flex items-center gap-1 mt-1">
-                                  <input type="text" placeholder="Ou cole a URL..." value={editImageUrl} onChange={e => setEditImageUrl(e.target.value)} className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:border-neon/50" />
-                                  <button onClick={() => handleSaveImageUrl(item.id)} className="bg-neon/10 text-neon p-1.5 rounded-lg hover:bg-neon/20 transition-colors" title="Salvar URL">
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                  <button onClick={() => setEditingImageId(null)} className="bg-dark-700 text-zinc-400 p-1.5 rounded-lg hover:bg-dark-600 hover:text-white transition-colors" title="Cancelar">
-                                    <X className="w-3 h-3" />
-                                  </button>
+                          {/* Top row: Image + Name + Subtotal + Remove */}
+                          <div className="flex items-center gap-3">
+                            {/* Image */}
+                            {editingImageId === item.id ? (
+                              <div className="w-full bg-dark-800 rounded-xl p-3 border border-dark-600">
+                                <p className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider">Alterar Foto</p>
+                                <div className="flex flex-col gap-2">
+                                  <label className={`flex items-center justify-center gap-2 bg-dark-700 hover:bg-dark-600 text-xs font-semibold text-white py-2 rounded-lg cursor-pointer transition-colors ${uploadingImageId === item.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    {uploadingImageId === item.id ? <Loader2 className="w-4 h-4 animate-spin text-neon" /> : <Upload className="w-4 h-4 text-zinc-400" />}
+                                    {uploadingImageId === item.id ? 'Enviando...' : 'Upload'}
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, item.id)} disabled={uploadingImageId === item.id} />
+                                  </label>
+                                  <div className="flex items-center gap-1">
+                                    <input type="text" placeholder="Ou cole a URL..." value={editImageUrl} onChange={e => setEditImageUrl(e.target.value)} className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:border-neon/50" />
+                                    <button onClick={() => handleSaveImageUrl(item.id)} className="bg-neon/10 text-neon p-1.5 rounded-lg hover:bg-neon/20"><Check className="w-3 h-3" /></button>
+                                    <button onClick={() => setEditingImageId(null)} className="bg-dark-700 text-zinc-400 p-1.5 rounded-lg hover:bg-dark-600"><X className="w-3 h-3" /></button>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="shrink-0 relative group/img cursor-pointer" onClick={() => { setEditingImageId(item.id); setEditImageUrl(item.url_imagem || ''); }} title="Alterar Foto">
-                              {(() => {
-                                if (!item.url_imagem) {
-                                  return (
-                                    <div className={`w-12 h-12 rounded-lg border border-dashed border-dark-600 flex flex-col items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40`}>
-                                      <ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon transition-colors" />
-                                    </div>
-                                  );
-                                }
-                                const media = parseMediaUrl(item.url_imagem);
-                                if (media.type === 'image') {
-                                  return <img src={media.url} alt={item.nome} className="w-12 h-12 rounded-lg object-cover border border-dark-700/50 group-hover/img:opacity-40 transition-opacity" />;
-                                } else if (media.type === 'folder') {
-                                  return (
-                                    <div className="w-12 h-12 rounded-lg border border-dark-600 bg-dark-800 flex items-center justify-center group-hover/img:opacity-40 transition-opacity" title="Pasta do Google Drive">
-                                      <FolderOpen className="w-5 h-5 text-blue-400" />
-                                    </div>
-                                  );
-                                } else {
-                                  return (
-                                    <div className={`w-12 h-12 rounded-lg border border-dashed border-dark-600 flex flex-col items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40`}>
-                                      <ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon transition-colors" />
-                                    </div>
-                                  );
-                                }
-                              })()}
-                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none">
-                                <Edit2 className="w-4 h-4 text-white drop-shadow-md" />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Warning icon */}
-                          {semPeso && (
-                            <div className="shrink-0 w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center" title="Peso não cadastrado — frete impreciso">
-                              <AlertTriangle className="w-4 h-4 text-amber-400" />
-                            </div>
-                          )}
-                          
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-white truncate">{item.nome}</p>
-                            
-                            {editingItemId === item.id ? (
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="text-xs text-zinc-500">{item.quantidade}x</span>
-                                <div className="flex items-center bg-dark-800 border border-dark-600 rounded-lg overflow-hidden h-7">
-                                  <span className="px-2 text-xs text-zinc-500 bg-dark-900 h-full flex items-center border-r border-dark-600">R$</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={editItemPrice}
-                                    onChange={(e) => setEditItemPrice(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSalvarPreco(item.id);
-                                      if (e.key === 'Escape') handleCancelarEdicao();
-                                    }}
-                                    className="w-20 bg-transparent text-white text-xs px-2 focus:outline-none h-full"
-                                    autoFocus
-                                  />
-                                </div>
-                                <button onClick={() => handleSalvarPreco(item.id)} className="w-7 h-7 flex items-center justify-center bg-neon/10 text-neon rounded-lg hover:bg-neon/20 transition-colors">
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={handleCancelarEdicao} className="w-7 h-7 flex items-center justify-center bg-dark-700 text-zinc-400 rounded-lg hover:bg-dark-600 hover:text-white transition-colors">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs text-zinc-500">{item.quantidade}x {formatCurrency(item.preco)}</span>
-                                  <button onClick={() => handleIniciarEdicao(item)} className="text-dark-500 hover:text-neon transition-colors" title="Editar valor unitário">
-                                    <Edit2 className="w-3 h-3" />
-                                  </button>
+                              <div className="shrink-0 relative group/img cursor-pointer" onClick={() => { setEditingImageId(item.id); setEditImageUrl(item.url_imagem || ''); }}>
+                                {(() => {
+                                  if (!item.url_imagem) return (<div className="w-10 h-10 rounded-lg border border-dashed border-dark-600 flex items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40"><ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon" /></div>);
+                                  const media = parseMediaUrl(item.url_imagem);
+                                  if (media.type === 'image') return <img src={media.url} alt={item.nome} className="w-10 h-10 rounded-lg object-cover border border-dark-700/50 group-hover/img:opacity-40 transition-opacity" />;
+                                  if (media.type === 'folder') return (<div className="w-10 h-10 rounded-lg border border-dark-600 bg-dark-800 flex items-center justify-center group-hover/img:opacity-40"><FolderOpen className="w-5 h-5 text-blue-400" /></div>);
+                                  return (<div className="w-10 h-10 rounded-lg border border-dashed border-dark-600 flex items-center justify-center hover:bg-dark-800 group-hover/img:opacity-40"><ImagePlus className="w-4 h-4 text-dark-500" /></div>);
+                                })()}
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none"><Edit2 className="w-3 h-3 text-white drop-shadow-md" /></div>
+                              </div>
+                            )}
+
+                            {/* Name */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs sm:text-sm font-semibold text-white truncate">{item.nome}</p>
+                            </div>
+
+                            {/* Subtotal */}
+                            <p className="text-xs sm:text-sm font-bold text-neon shrink-0">{formatCurrency(item.preco * item.quantidade)}</p>
+
+                            {/* Remove */}
+                            <button onClick={() => handleRemover(item.id)} className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-dark-500 hover:bg-red-500/10 hover:text-red-400 transition-all cursor-pointer">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Bottom row: Qty × Price • Weight */}
+                          <div className="flex items-center gap-2 mt-1.5 pl-[52px] flex-wrap text-[11px]">
+                            {editingItemId === item.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-zinc-500">{item.quantidade}x</span>
+                                <div className="flex items-center bg-dark-800 border border-dark-600 rounded-lg overflow-hidden h-6">
+                                  <span className="px-1.5 text-[10px] text-zinc-500 bg-dark-900 h-full flex items-center border-r border-dark-600">R$</span>
+                                  <input type="number" min="0" step="0.01" value={editItemPrice} onChange={(e) => setEditItemPrice(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSalvarPreco(item.id); if (e.key === 'Escape') handleCancelarEdicao(); }}
+                                    className="w-20 bg-transparent text-white text-xs px-2 focus:outline-none h-full" autoFocus />
                                 </div>
-                                <span className="text-[10px] text-dark-500">•</span>
-                                {editingWeightId === item.id ? (
-                                  <div className="flex items-center gap-1.5 h-6">
-                                    <div className="flex items-center bg-dark-800 border border-dark-600 rounded-md overflow-hidden h-full">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={editItemWeight}
-                                        onChange={(e) => setEditItemWeight(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleSalvarPeso(item.id);
-                                          if (e.key === 'Escape') handleCancelarEdicaoPeso();
-                                        }}
-                                        className="w-14 bg-transparent text-white text-[10px] px-2 focus:outline-none h-full"
-                                        placeholder="kg"
-                                        autoFocus
-                                      />
-                                      <span className="px-1.5 text-[10px] text-zinc-500 bg-dark-900 h-full flex items-center border-l border-dark-600">kg</span>
-                                    </div>
-                                    <button onClick={() => handleSalvarPeso(item.id)} className="w-6 h-6 flex items-center justify-center bg-neon/10 text-neon rounded-md hover:bg-neon/20 transition-colors">
-                                      <Check className="w-3 h-3" />
-                                    </button>
-                                    <button onClick={handleCancelarEdicaoPeso} className="w-6 h-6 flex items-center justify-center bg-dark-700 text-zinc-400 rounded-md hover:bg-dark-600 hover:text-white transition-colors">
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
+                                <button onClick={() => handleSalvarPreco(item.id)} className="w-6 h-6 flex items-center justify-center bg-neon/10 text-neon rounded-lg"><Check className="w-3 h-3" /></button>
+                                <button onClick={handleCancelarEdicao} className="w-6 h-6 flex items-center justify-center bg-dark-700 text-zinc-400 rounded-lg"><X className="w-3 h-3" /></button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <span className="text-zinc-500">{item.quantidade}x {formatCurrency(item.preco)}</span>
+                                <button onClick={() => handleIniciarEdicao(item)} className="text-dark-500 hover:text-neon transition-colors"><Edit2 className="w-2.5 h-2.5" /></button>
+                              </div>
+                            )}
+                            <span className="text-dark-600">•</span>
+                            {editingWeightId === item.id ? (
+                              <div className="flex items-center gap-1 h-5">
+                                <div className="flex items-center bg-dark-800 border border-dark-600 rounded-md overflow-hidden h-full">
+                                  <input type="number" min="0" step="0.01" value={editItemWeight} onChange={(e) => setEditItemWeight(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSalvarPeso(item.id); if (e.key === 'Escape') handleCancelarEdicaoPeso(); }}
+                                    className="w-12 bg-transparent text-white text-[10px] px-1 focus:outline-none h-full" placeholder="kg" autoFocus />
+                                  <span className="px-1 text-[10px] text-zinc-500 bg-dark-900 h-full flex items-center border-l border-dark-600">kg</span>
+                                </div>
+                                <button onClick={() => handleSalvarPeso(item.id)} className="w-5 h-5 flex items-center justify-center bg-neon/10 text-neon rounded-md"><Check className="w-2.5 h-2.5" /></button>
+                                <button onClick={handleCancelarEdicaoPeso} className="w-5 h-5 flex items-center justify-center bg-dark-700 text-zinc-400 rounded-md"><X className="w-2.5 h-2.5" /></button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                {semPeso ? (
+                                  <span className="text-amber-400">Sem peso</span>
                                 ) : (
-                                  <div className="flex items-center gap-1.5">
-                                    {semPeso ? (
-                                      <span className="text-xs text-amber-400 font-medium">Peso não informado</span>
-                                    ) : (
-                                      <span className="text-xs text-zinc-500">{formatWeight(item.peso_kg * item.quantidade)}</span>
-                                    )}
-                                    <button onClick={() => handleIniciarEdicaoPeso(item)} className="text-dark-500 hover:text-neon transition-colors" title="Cadastrar peso do produto">
-                                      <Edit2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
+                                  <span className="text-zinc-500">{formatWeight(item.peso_kg * item.quantidade)}</span>
                                 )}
+                                <button onClick={() => handleIniciarEdicaoPeso(item)} className="text-dark-500 hover:text-neon transition-colors"><Edit2 className="w-2.5 h-2.5" /></button>
                               </div>
                             )}
                           </div>
-                          {/* Subtotal */}
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-bold text-neon">{formatCurrency(item.preco * item.quantidade)}</p>
-                          </div>
-                          {/* Remove */}
-                          <button onClick={() => handleRemover(item.id)}
-                            className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-dark-500 hover:bg-red-500/10 hover:text-red-400 transition-all cursor-pointer" title="Remover item">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </li>
                       );
                     })}
