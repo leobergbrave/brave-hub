@@ -444,6 +444,36 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+
+                  <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 pt-4 border-t border-dark-700/50">
+                    <select 
+                      className="flex-1 w-full bg-dark-900 border border-dark-600 rounded-lg text-sm p-2.5 text-zinc-300 focus:outline-none focus:border-neon/50"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const prod = produtos.find(p => p.id === e.target.value);
+                          if (prod) handleResolucaoEscolha(index, prod);
+                        }
+                      }}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Ou busque manualmente no catálogo...</option>
+                      {produtos.map(p => (
+                        <option key={p.id} value={p.id}>{p.nome} - {formatCurrency(p.preco)}</option>
+                      ))}
+                    </select>
+
+                    <button 
+                      onClick={() => {
+                        const novosPendentes = [...iaPendentes];
+                        novosPendentes.splice(index, 1);
+                        setIaPendentes(novosPendentes);
+                        if (novosPendentes.length === 0) showToastMessage('Todas as opções foram resolvidas!');
+                      }}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg text-sm font-bold border border-red-500/20 transition-colors whitespace-nowrap"
+                    >
+                      Ignorar Item
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

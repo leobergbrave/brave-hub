@@ -42,6 +42,10 @@ async function callLLM(texto: string): Promise<Array<{ termo: string; quantidade
       }),
     });
     const data = await res.json();
+    if (data.error) {
+      console.error("Gemini API Error:", data.error);
+      throw new Error("Erro na API do Gemini: " + data.error.message);
+    }
     console.log("Gemini full API response:", JSON.stringify(data).substring(0, 500));
     rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
     console.log("Gemini extracted text:", rawContent);
