@@ -4,6 +4,40 @@ import { formatCurrency } from '../data';
 import { Plus, Trash2, Save, Upload, Loader2, AlertTriangle, Search, ImagePlus } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 
+const EditableCell = ({ value, onSave, type = "text", className = "", options = null }) => {
+  const [val, setVal] = useState(value ?? '');
+  useEffect(() => { setVal(value ?? ''); }, [value]);
+
+  const handleBlur = () => {
+    if (val != (value ?? '')) {
+      onSave(val);
+    }
+  };
+
+  if (options) {
+    return (
+      <select 
+        value={val} 
+        onChange={e => { setVal(e.target.value); onSave(e.target.value); }} 
+        className={`bg-dark-800 rounded px-2 py-1 text-xs border border-transparent hover:border-dark-600 focus:border-neon focus:outline-none cursor-pointer ${className}`}
+      >
+        <option value="">Geral</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+
+  return (
+    <input 
+      type={type}
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={handleBlur}
+      className={`bg-transparent px-1 border-b border-transparent hover:border-dark-600 focus:border-neon focus:outline-none w-full ${className}`}
+    />
+  );
+};
+
 export default function ProdutosTab() {
   const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +57,20 @@ export default function ProdutosTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleInlineUpdate = async (id, field, value) => {
+    let finalValue = value;
+    if (field === 'preco' || field === 'peso_kg') {
+      finalValue = Number(value.toString().replace(',', '.'));
+      if (isNaN(finalValue)) finalValue = null;
+    }
+    const { error } = await supabase.from('produtos').update({ [field]: finalValue }).eq('id', id);
+    if (!error) {
+      setProdutos(prev => prev.map(p => p.id === id ? { ...p, [field]: finalValue } : p));
+    } else {
+      alert('Erro ao salvar: ' + error.message);
+    }
+  };
 
   const handleSave = async () => {
     if (!form.nome) return;
@@ -199,12 +247,29 @@ export default function ProdutosTab() {
               {filtered.map(p => (
                 <tr key={p.id} className="border-b border-dark-700/30 hover:bg-dark-800/80 transition-colors">
                   <td className="px-4 py-3 text-zinc-400 font-mono text-xs">{p.codigo_sku || '—'}</td>
-                  <td className="px-4 py-3 text-white font-medium">{p.nome}</td>
-                  <td className="px-4 py-3"><span className="text-xs bg-dark-700 text-zinc-300 px-2 py-0.5 rounded-full">{p.linha || 'Geral'}</span></td>
-                  <td className="px-4 py-3 text-right text-neon font-semibold">{formatCurrency(Number(p.preco))}</td>
-                  <td className="px-4 py-3 text-right">{p.peso_kg ? <span className="text-zinc-300">{p.peso_kg} kg</span> : <AlertTriangle className="w-4 h-4 text-amber-400 inline" />}</td>
+                  <td className="px-4 py-3 text-white font-medium">
+                    <EditableCell value={p.nome} onSave={val => handleInlineUpdate(p.id, 'nome', val)} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <EditableCell 
+                      value={p.linha || 'Geral'} 
+                      options={['Geral','Cardio','Rigs','Pisos','Acessórios','Barras','Anilhas','Kettlebells','Boxes']}
+                      onSave={val => handleInlineUpdate(p.id, 'linha', val)} 
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-neon/50 text-xs">R$</span>
+                      <EditableCell value={p.preco} onSave={val => handleInlineUpdate(p.id, 'preco', val)} className="text-right text-neon font-semibold w-20" />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <EditableCell value={p.peso_kg || ''} onSave={val => handleInlineUpdate(p.id, 'peso_kg', val)} className="text-right text-zinc-300 w-16" />
+                      <span className="text-zinc-500 text-xs">kg</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => handleEdit(p)} className="text-zinc-500 hover:text-neon mr-2 cursor-pointer text-xs">Editar</button>
                     <button onClick={() => handleDelete(p.id)} className="text-zinc-500 hover:text-red-400 cursor-pointer text-xs">Excluir</button>
                   </td>
                 </tr>
