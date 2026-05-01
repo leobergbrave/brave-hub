@@ -52,6 +52,29 @@ export default function OrcamentoPage() {
     loadData();
   }, [slug]);
 
+  // Dynamic title & OG meta for WhatsApp preview
+  useEffect(() => {
+    if (orcamentoSalvo) {
+      const clientName = orcamentoSalvo.cliente || 'Cliente';
+      document.title = `BRAVE - ${clientName.toUpperCase()}`;
+      
+      // Update or create OG meta tags
+      const setMeta = (property, content) => {
+        let tag = document.querySelector(`meta[property="${property}"]`);
+        if (!tag) {
+          tag = document.createElement('meta');
+          tag.setAttribute('property', property);
+          document.head.appendChild(tag);
+        }
+        tag.setAttribute('content', content);
+      };
+      setMeta('og:title', `BRAVE - ${clientName.toUpperCase()}`);
+      setMeta('og:description', `Orçamento exclusivo de equipamentos de alta performance`);
+      setMeta('og:type', 'website');
+    }
+    return () => { document.title = 'Brave Hub — Gerador de Orçamentos'; };
+  }, [orcamentoSalvo]);
+
   const orcamento = useMemo(() => {
     try {
       if (!produtosDb.length) return null;
