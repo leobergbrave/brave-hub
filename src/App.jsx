@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
-  Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen
+  Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen,
+  Mic, Square, FileText, MapPinned
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import {
@@ -40,6 +41,9 @@ export default function App() {
   const [zona, setZona] = useState('');
   const [nomeCliente, setNomeCliente] = useState('');
   const [telefoneCliente, setTelefoneCliente] = useState('');
+  const [cep, setCep] = useState('');
+  const [cepInfo, setCepInfo] = useState(null); // { localidade, uf, logradouro, bairro }
+  const [buscandoCep, setBuscandoCep] = useState(false);
   const [nomeConsultor, setNomeConsultor] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
@@ -58,6 +62,18 @@ export default function App() {
   const [iaTexto, setIaTexto] = useState('');
   const [iaProcessando, setIaProcessando] = useState(false);
   const [iaPendentes, setIaPendentes] = useState([]); // Array of items needing user choice
+
+  // ── PDF / Audio State ──
+  const [iaTab, setIaTab] = useState('texto');
+  const [pdfFile, setPdfFile] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [iaExtraindo, setIaExtraindo] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const recordingTimerRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   // ── History State ──
   const [historico, setHistorico] = useState([]);
@@ -147,6 +163,67 @@ export default function App() {
       return [...prev, { ...produto, quantidade: qtd }];
     });
   }, []);
+
+  // ── Mapa de capitais estaduais (para detectar zona CAPITAL) ──
+  const CAPITAIS = {
+    AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
+    BA: 'Salvador', CE: 'Fortaleza', ES: 'Vitória', GO: 'Goiânia',
+    MA: 'São Luís', MT: 'Cuiabá', MS: 'Campo Grande', MG: 'Belo Horizonte',
+    PA: 'Belém', PB: 'João Pessoa', PR: 'Curitiba', PE: 'Recife',
+    PI: 'Teresina', RJ: 'Rio de Janeiro', RN: 'Natal', RS: 'Porto Alegre',
+    RO: 'Porto Velho', RR: 'Boa Vista', SC: 'Florianópolis', SP: 'São Paulo',
+    SE: 'Aracaju', TO: 'Palmas', DF: 'Brasília',
+  };
+
+  // ── CEP Lookup Handler ──
+  const handleBuscarCep = useCallback(async (cepValue) => {
+    const cepLimpo = cepValue.replace(/\D/g, '');
+    if (cepLimpo.length !== 8) return;
+
+    setBuscandoCep(true);
+    setCepInfo(null);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        showToastMessage('CEP não encontrado. Verifique o número.', true);
+        return;
+      }
+
+      setCepInfo({ localidade: data.localidade, uf: data.uf, bairro: data.bairro, logradouro: data.logradouro });
+
+      // Mapear UF do ViaCEP para o estado nas regras de frete
+      let ufMapeada = data.uf;
+      if (data.uf === 'DF' || data.uf === 'GO') ufMapeada = 'GO/DF';
+      if (data.uf === 'PB') {
+        ufMapeada = data.localidade === 'João Pessoa' ? 'PB (João Pessoa)' : 'PB (Restante do Estado)';
+      }
+
+      const estadoEncontrado = estados.find(e => e === ufMapeada);
+      if (estadoEncontrado) {
+        setEstado(estadoEncontrado);
+      } else {
+        const match = estados.find(e => e.includes(data.uf));
+        if (match) setEstado(match);
+      }
+
+      // Detectar zona: CAPITAL vs INTERIOR
+      const cidadeCapital = CAPITAIS[data.uf];
+      const ehCapital = cidadeCapital && data.localidade.toLowerCase().includes(cidadeCapital.toLowerCase());
+      if (ehCapital && zonas.includes('CAPITAL')) {
+        setZona('CAPITAL');
+      } else if (zonas.includes('INTERIOR 1')) {
+        setZona('INTERIOR 1');
+      }
+
+      showToastMessage(`CEP: ${data.localidade} - ${data.uf} (${ehCapital ? 'Capital' : 'Interior'})`);
+    } catch (err) {
+      console.error('Erro ao buscar CEP:', err);
+      showToastMessage('Erro ao consultar CEP. Tente novamente.', true);
+    } finally {
+      setBuscandoCep(false);
+    }
+  }, [estados, zonas, showToastMessage]);
 
   const handleAdicionar = useCallback(() => {
     if (!produtoId) return;
@@ -377,6 +454,142 @@ export default function App() {
     }
   };
 
+  // ── Helper: File/Blob to Base64 ──
+  const fileToBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+  });
+
+  // ── PDF Extraction Handler ──
+  const handleExtrairPDF = useCallback(async () => {
+    if (!pdfFile || iaExtraindo) return;
+    setIaExtraindo(true);
+    try {
+      showToastMessage('Extraindo texto do PDF...');
+      const base64 = await fileToBase64(pdfFile);
+      const { data, error } = await supabase.functions.invoke('extract-pdf-text', {
+        body: { fileBase64: base64, mimeType: pdfFile.type || 'application/pdf' },
+      });
+      if (error) throw error;
+      if (!data?.texto?.trim()) {
+        showToastMessage('Não foi possível extrair texto do PDF.', true);
+        return;
+      }
+      setIaTexto(data.texto);
+      setPdfFile(null);
+      setIaTab('texto');
+      showToastMessage('Texto extraído! Revise e clique em "Processar Lista com IA".');
+    } catch (err) {
+      console.error('Erro PDF:', err);
+      showToastMessage('Erro ao extrair texto do PDF.', true);
+    } finally {
+      setIaExtraindo(false);
+    }
+  }, [pdfFile, iaExtraindo, showToastMessage]);
+
+  // ── Audio Recording Handlers ──
+  const handleStartRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus' : 'audio/mp4';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+      };
+
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingTime(0);
+      setAudioBlob(null);
+      setAudioUrl('');
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= 299) {
+            recorder.stop();
+            setIsRecording(false);
+            clearInterval(recordingTimerRef.current);
+            return 300;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error('Erro microfone:', err);
+      showToastMessage('Não foi possível acessar o microfone. Verifique as permissões.', true);
+    }
+  }, [showToastMessage]);
+
+  const handleStopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+  }, []);
+
+  const handleDescartarAudio = useCallback(() => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioBlob(null);
+    setAudioUrl('');
+    setRecordingTime(0);
+  }, [audioUrl]);
+
+  const handleAudioFileUpload = useCallback((event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      showToastMessage('Arquivo muito grande. Limite: 25 MB.', true);
+      return;
+    }
+    setAudioBlob(file);
+    setAudioUrl(URL.createObjectURL(file));
+    setRecordingTime(0);
+    event.target.value = null;
+  }, [showToastMessage]);
+
+  // ── Audio Transcription Handler ──
+  const handleTranscreverAudio = useCallback(async () => {
+    if (!audioBlob || iaExtraindo) return;
+    setIaExtraindo(true);
+    try {
+      showToastMessage('Transcrevendo áudio...');
+      const base64 = await fileToBase64(audioBlob);
+      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+        body: { fileBase64: base64, mimeType: audioBlob.type || 'audio/webm' },
+      });
+      if (error) throw error;
+      if (!data?.texto?.trim()) {
+        showToastMessage('Não foi possível transcrever o áudio.', true);
+        return;
+      }
+      setIaTexto(data.texto);
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      setAudioBlob(null);
+      setAudioUrl('');
+      setRecordingTime(0);
+      setIaTab('texto');
+      showToastMessage('Áudio transcrito! Revise e clique em "Processar Lista com IA".');
+    } catch (err) {
+      console.error('Erro áudio:', err);
+      showToastMessage('Erro ao transcrever áudio.', true);
+    } finally {
+      setIaExtraindo(false);
+    }
+  }, [audioBlob, audioUrl, iaExtraindo, showToastMessage]);
+
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
       {/* Ambient */}
@@ -521,19 +734,166 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Leitura Inteligente</h2>
-                  <p className="text-[10px] text-purple-400/70 font-medium tracking-wide">WhatsApp / Áudio</p>
+                  <p className="text-[10px] text-purple-400/70 font-medium tracking-wide">WhatsApp / PDF / Áudio</p>
                 </div>
               </div>
-              <div className="relative">
-                <textarea id="textarea-ia" value={iaTexto} onChange={(e) => setIaTexto(e.target.value)} rows={4}
-                  placeholder="Cole aqui a mensagem do cliente. Ex: Fala irmão, me vê duas bikes da concept e 5 med balls de 9kg..."
-                  className="w-full bg-dark-900/80 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all placeholder:text-dark-500 placeholder:text-xs leading-relaxed" />
-                <MessageSquareText className="absolute right-3 top-3 w-4 h-4 text-dark-500/50" />
+
+              {/* Tabs */}
+              <div className="relative flex bg-dark-900/80 rounded-xl p-1 mb-4 gap-1">
+                {[
+                  { id: 'texto', label: 'Texto', Icon: MessageSquareText },
+                  { id: 'pdf', label: 'PDF', Icon: FileText },
+                  { id: 'audio', label: 'Áudio', Icon: Mic },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setIaTab(tab.id)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                      iaTab === tab.id
+                        ? 'bg-purple-500/20 text-purple-300 shadow-sm'
+                        : 'text-dark-500 hover:text-zinc-400'
+                    }`}
+                  >
+                    <tab.Icon className="w-3.5 h-3.5" />
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-              <button id="btn-processar-ia" onClick={handleProcessarIA} disabled={iaProcessando || loadingProdutos}
-                className="relative w-full mt-4 flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white font-bold text-sm py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer overflow-hidden disabled:opacity-50">
-                {iaProcessando ? (<><Loader2 className="w-4 h-4 animate-spin" />Processando...</>) : (<><Sparkles className="w-4 h-4" />Processar Lista com IA</>)}
-              </button>
+
+              {/* Tab: Texto */}
+              {iaTab === 'texto' && (
+                <div className="relative">
+                  <textarea id="textarea-ia" value={iaTexto} onChange={(e) => setIaTexto(e.target.value)} rows={4}
+                    placeholder="Cole aqui a mensagem do cliente. Ex: Fala irmão, me vê duas bikes da concept e 5 med balls de 9kg..."
+                    className="w-full bg-dark-900/80 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all placeholder:text-dark-500 placeholder:text-xs leading-relaxed" />
+                  <MessageSquareText className="absolute right-3 top-3 w-4 h-4 text-dark-500/50" />
+                </div>
+              )}
+
+              {/* Tab: PDF */}
+              {iaTab === 'pdf' && (
+                <div>
+                  {!pdfFile ? (
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-dark-600 rounded-xl cursor-pointer hover:border-purple-500/50 hover:bg-purple-500/5 transition-all group"
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-purple-500/50', 'bg-purple-500/5'); }}
+                      onDragLeave={(e) => { e.currentTarget.classList.remove('border-purple-500/50', 'bg-purple-500/5'); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove('border-purple-500/50', 'bg-purple-500/5');
+                        const f = e.dataTransfer.files?.[0];
+                        if (f && (f.type === 'application/pdf' || f.name.endsWith('.pdf'))) {
+                          if (f.size > 10 * 1024 * 1024) { showToastMessage('PDF muito grande. Limite: 10 MB.', true); return; }
+                          setPdfFile(f);
+                        } else {
+                          showToastMessage('Apenas arquivos PDF são aceitos.', true);
+                        }
+                      }}
+                    >
+                      <FileText className="w-8 h-8 text-dark-500 group-hover:text-purple-400 transition-colors mb-2" />
+                      <span className="text-xs text-dark-500 group-hover:text-zinc-400 transition-colors">Arraste um PDF aqui ou clique para selecionar</span>
+                      <span className="text-[10px] text-dark-600 mt-1">Limite: 10 MB</span>
+                      <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          if (f.size > 10 * 1024 * 1024) { showToastMessage('PDF muito grande. Limite: 10 MB.', true); return; }
+                          setPdfFile(f);
+                        }
+                      }} />
+                    </label>
+                  ) : (
+                    <div className="flex items-center gap-3 bg-dark-900/80 border border-purple-500/30 rounded-xl px-4 py-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium truncate">{pdfFile.name}</p>
+                        <p className="text-[10px] text-dark-500">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                      <button onClick={() => setPdfFile(null)} className="p-1.5 hover:bg-dark-700 rounded-lg text-dark-500 hover:text-red-400 transition-colors cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab: Áudio */}
+              {iaTab === 'audio' && (
+                <div>
+                  {!isRecording && !audioBlob && (
+                    <div className="space-y-3">
+                      <button onClick={handleStartRecording}
+                        className="w-full flex flex-col items-center justify-center h-32 border-2 border-dashed border-dark-600 rounded-xl hover:border-red-500/50 hover:bg-red-500/5 transition-all group cursor-pointer">
+                        <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mb-2 group-hover:bg-red-500/20 transition-colors">
+                          <Mic className="w-7 h-7 text-red-400" />
+                        </div>
+                        <span className="text-xs text-dark-500 group-hover:text-zinc-400 transition-colors">Toque para gravar</span>
+                        <span className="text-[10px] text-dark-600 mt-1">Máximo: 5 minutos</span>
+                      </button>
+                      <label className="flex items-center justify-center gap-2 w-full py-2.5 border border-dark-600 rounded-xl cursor-pointer hover:border-purple-500/30 hover:bg-dark-900/50 transition-all text-dark-500 hover:text-zinc-400 text-xs">
+                        <Upload className="w-3.5 h-3.5" />
+                        Ou envie um arquivo de áudio
+                        <input type="file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.webm" className="hidden" onChange={handleAudioFileUpload} />
+                      </label>
+                    </div>
+                  )}
+
+                  {isRecording && (
+                    <div className="flex flex-col items-center justify-center h-32 bg-dark-900/80 border border-red-500/30 rounded-xl animate-pulse-slow">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-lg font-mono text-red-400 font-bold tracking-wider">
+                          {String(Math.floor(recordingTime / 60)).padStart(2, '0')}:{String(recordingTime % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <button onClick={handleStopRecording}
+                        className="flex items-center gap-2 bg-red-500/20 text-red-400 px-5 py-2.5 rounded-xl hover:bg-red-500/30 transition-colors font-bold text-sm border border-red-500/30 cursor-pointer">
+                        <Square className="w-4 h-4 fill-current" />
+                        Parar
+                      </button>
+                    </div>
+                  )}
+
+                  {!isRecording && audioBlob && (
+                    <div className="bg-dark-900/80 border border-purple-500/30 rounded-xl p-4 space-y-3">
+                      <audio src={audioUrl} controls className="w-full h-10" style={{ colorScheme: 'dark' }} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-dark-500 flex-1">
+                          {audioBlob.size > 1024 * 1024
+                            ? `${(audioBlob.size / 1024 / 1024).toFixed(1)} MB`
+                            : `${(audioBlob.size / 1024).toFixed(0)} KB`}
+                          {recordingTime > 0 && ` • ${String(Math.floor(recordingTime / 60)).padStart(2, '0')}:${String(recordingTime % 60).padStart(2, '0')}`}
+                        </span>
+                        <button onClick={handleDescartarAudio}
+                          className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 hover:bg-red-500/10 rounded-lg cursor-pointer">
+                          <Trash2 className="w-3 h-3" />
+                          Descartar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {iaTab === 'texto' && (
+                <button id="btn-processar-ia" onClick={handleProcessarIA} disabled={iaProcessando || loadingProdutos || !iaTexto.trim()}
+                  className="relative w-full mt-4 flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white font-bold text-sm py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer overflow-hidden disabled:opacity-50">
+                  {iaProcessando ? (<><Loader2 className="w-4 h-4 animate-spin" />Processando...</>) : (<><Sparkles className="w-4 h-4" />Processar Lista com IA</>)}
+                </button>
+              )}
+              {iaTab === 'pdf' && pdfFile && (
+                <button onClick={handleExtrairPDF} disabled={iaExtraindo}
+                  className="relative w-full mt-4 flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white font-bold text-sm py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer overflow-hidden disabled:opacity-50">
+                  {iaExtraindo ? (<><Loader2 className="w-4 h-4 animate-spin" />Extraindo texto...</>) : (<><FileText className="w-4 h-4" />Extrair Texto do PDF</>)}
+                </button>
+              )}
+              {iaTab === 'audio' && audioBlob && !isRecording && (
+                <button onClick={handleTranscreverAudio} disabled={iaExtraindo}
+                  className="relative w-full mt-4 flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white font-bold text-sm py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer overflow-hidden disabled:opacity-50">
+                  {iaExtraindo ? (<><Loader2 className="w-4 h-4 animate-spin" />Transcrevendo...</>) : (<><Mic className="w-4 h-4" />Transcrever Áudio</>)}
+                </button>
+              )}
             </section>
 
             {/* Card: Adicionar Produto */}
@@ -668,6 +1028,42 @@ export default function App() {
                 </div>
                 <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Destino da Entrega</h2>
               </div>
+
+              {/* CEP Input */}
+              <label className="block mb-4">
+                <span className="text-xs font-medium text-zinc-400 mb-1.5 block">CEP do Cliente</span>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={cep}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      const formatted = v.length > 5 ? `${v.slice(0, 5)}-${v.slice(5)}` : v;
+                      setCep(formatted);
+                      if (v.length === 8) handleBuscarCep(v);
+                    }}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all placeholder:text-dark-500 font-mono"
+                  />
+                  {buscandoCep ? (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-accent animate-spin" />
+                  ) : (
+                    <MapPinned className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                  )}
+                </div>
+              </label>
+
+              {/* CEP Result */}
+              {cepInfo && (
+                <div className="mb-4 bg-dark-900/60 border border-orange-accent/20 rounded-xl px-4 py-2.5 animate-fade-in-up">
+                  <p className="text-xs text-white font-medium">{cepInfo.localidade} — {cepInfo.uf}</p>
+                  {cepInfo.logradouro && (
+                    <p className="text-[10px] text-dark-500 mt-0.5 truncate">{cepInfo.logradouro}{cepInfo.bairro ? `, ${cepInfo.bairro}` : ''}</p>
+                  )}
+                </div>
+              )}
+
               {loadingFrete ? (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-4"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
