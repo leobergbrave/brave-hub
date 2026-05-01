@@ -56,6 +56,7 @@ export default function App() {
   // ── IA State ──
   const [iaTexto, setIaTexto] = useState('');
   const [iaProcessando, setIaProcessando] = useState(false);
+  const [iaPendentes, setIaPendentes] = useState([]); // Array of items needing user choice
 
   // ── Fetch products on mount ──
   useEffect(() => {
@@ -270,14 +271,38 @@ export default function App() {
         body: { texto: iaTexto.trim() },
       });
       if (error) throw error;
-      const produtosIA = data?.produtos;
-      if (!produtosIA || produtosIA.length === 0) {
+      
+      const resolucoes = data?.resolucoes;
+      if (!resolucoes || resolucoes.length === 0) {
         showToastMessage('Não foi possível extrair produtos desse texto. Tente novamente.', true);
         return;
       }
-      produtosIA.forEach((p) => adicionarProduto(p, p.quantidade || 1));
+      
+      const pendentes = [];
+      let adicionados = 0;
+
+      resolucoes.forEach((res) => {
+        if (res.opcoes && res.opcoes.length === 1) {
+          // Apenas uma opção, adiciona direto
+          adicionarProduto(res.opcoes[0], res.quantidade || 1);
+          adicionados++;
+        } else if (res.opcoes && res.opcoes.length > 1) {
+          // Mais de uma opção, manda pra resolução
+          pendentes.push(res);
+        }
+      });
+
       setIaTexto('');
-      showToastMessage('Inteligência Artificial finalizou a extração!');
+      
+      if (pendentes.length > 0) {
+        setIaPendentes(pendentes);
+        if (adicionados > 0) {
+          showToastMessage(`${adicionados} produto(s) adicionado(s). Alguns itens precisam da sua confirmação!`);
+        }
+      } else {
+        showToastMessage('Inteligência Artificial finalizou a extração!');
+      }
+
     } catch (err) {
       console.error('Erro IA:', err);
       showToastMessage('Não foi possível extrair produtos desse texto. Tente novamente.', true);
@@ -285,6 +310,21 @@ export default function App() {
       setIaProcessando(false);
     }
   }, [iaProcessando, iaTexto, adicionarProduto, showToastMessage]);
+
+  // Handle Resolution Choice
+  const handleResolucaoEscolha = (indexPendente, opcaoEscolhida) => {
+    const pendente = iaPendentes[indexPendente];
+    adicionarProduto(opcaoEscolhida, pendente.quantidade || 1);
+    
+    // Remove from pendentes
+    const novosPendentes = [...iaPendentes];
+    novosPendentes.splice(indexPendente, 1);
+    setIaPendentes(novosPendentes);
+
+    if (novosPendentes.length === 0) {
+      showToastMessage('Todas as opções foram resolvidas e adicionadas!');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
@@ -294,6 +334,61 @@ export default function App() {
         <div className="absolute bottom-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full bg-orange-accent/[0.04] blur-[140px]" />
         <div className="absolute top-[30%] left-[40%] w-[400px] h-[400px] rounded-full bg-purple-500/[0.03] blur-[100px]" />
       </div>
+
+      {/* Modal de Resolução de IA */}
+      {iaPendentes.length > 0 && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-dark-950/80 backdrop-blur-sm" onClick={() => setIaPendentes([])} />
+          <div className="relative bg-dark-800 border border-purple-500/30 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-fade-in-up max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
+                  <BrainCircuit className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-lg">Opções Encontradas</h3>
+                  <p className="text-dark-500 text-xs">Qual variação você deseja adicionar?</p>
+                </div>
+              </div>
+              <button onClick={() => setIaPendentes([])} className="p-2 hover:bg-dark-700 rounded-lg text-dark-500 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto pr-2 space-y-6">
+              {iaPendentes.map((pendente, index) => (
+                <div key={index} className="bg-dark-900/50 rounded-xl p-4 border border-dark-700/50">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-semibold text-white">Item: <span className="text-purple-400">{pendente.termo_original}</span></h4>
+                    <span className="text-xs bg-dark-700 px-2 py-1 rounded text-dark-400 font-mono">Qtd: {pendente.quantidade}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {pendente.opcoes.map((opcao) => (
+                      <button
+                        key={opcao.id}
+                        onClick={() => handleResolucaoEscolha(index, opcao)}
+                        className="w-full text-left flex items-center justify-between p-3 rounded-lg bg-dark-800 border border-dark-600 hover:border-neon/50 hover:bg-neon/5 transition-all group"
+                      >
+                        <div className="flex items-center gap-3">
+                          {opcao.url_imagem ? (
+                            <img src={opcao.url_imagem} className="w-8 h-8 rounded object-cover" />
+                          ) : (
+                            <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
+                              <Dumbbell className="w-4 h-4 text-dark-500" />
+                            </div>
+                          )}
+                          <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">{opcao.nome}</span>
+                        </div>
+                        <span className="text-sm font-medium text-neon">{formatCurrency(opcao.preco)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {showToast && (

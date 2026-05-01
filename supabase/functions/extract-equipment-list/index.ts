@@ -60,7 +60,7 @@ async function matchProdutos(
   supabase: ReturnType<typeof createClient>,
   itensIA: Array<{ termo: string; quantidade: number }>
 ) {
-  const matched: Array<Record<string, unknown>> = [];
+  const resolucoes: Array<{ termo_original: string; quantidade: number; opcoes: Array<Record<string, unknown>> }> = [];
 
   for (const item of itensIA) {
     // Build search words for ilike
@@ -69,47 +69,45 @@ async function matchProdutos(
       .split(/\s+/)
       .filter((w) => w.length > 2);
 
-    let found = null;
+    let matches: any[] = [];
 
     // Strategy 1: Try full ilike
     const { data: fullMatch } = await supabase
       .from("produtos")
       .select("id, nome, preco, peso_kg, url_imagem")
       .ilike("nome", `%${item.termo}%`)
-      .limit(1);
+      .limit(5);
 
     if (fullMatch && fullMatch.length > 0) {
-      found = fullMatch[0];
+      matches = fullMatch;
     }
 
     // Strategy 2: Try each significant word
-    if (!found && words.length > 0) {
+    if (matches.length === 0 && words.length > 0) {
       for (const word of words) {
         const { data: partialMatch } = await supabase
           .from("produtos")
           .select("id, nome, preco, peso_kg, url_imagem")
           .ilike("nome", `%${word}%`)
-          .limit(1);
+          .limit(5);
 
         if (partialMatch && partialMatch.length > 0) {
-          found = partialMatch[0];
+          matches = partialMatch;
           break;
         }
       }
     }
 
-    if (found) {
-      // Avoid duplicates — merge quantities
-      const existing = matched.find((m) => m.id === found!.id);
-      if (existing) {
-        (existing as any).quantidade += item.quantidade;
-      } else {
-        matched.push({ ...found, quantidade: item.quantidade });
-      }
+    if (matches.length > 0) {
+      resolucoes.push({
+        termo_original: item.termo,
+        quantidade: item.quantidade,
+        opcoes: matches
+      });
     }
   }
 
-  return matched;
+  return resolucoes;
 }
 
 // ── Handler ──
@@ -153,10 +151,10 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const produtos = await matchProdutos(supabase, itensIA);
+    const resolucoes = await matchProdutos(supabase, itensIA);
 
     return new Response(
-      JSON.stringify({ produtos, termos_ia: itensIA }),
+      JSON.stringify({ resolucoes, termos_ia: itensIA }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
