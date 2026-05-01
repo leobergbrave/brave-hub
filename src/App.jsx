@@ -39,6 +39,7 @@ export default function App() {
   const [estado, setEstado] = useState('');
   const [zona, setZona] = useState('');
   const [nomeCliente, setNomeCliente] = useState('');
+  const [telefoneCliente, setTelefoneCliente] = useState('');
   const [nomeConsultor, setNomeConsultor] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
@@ -262,7 +263,8 @@ export default function App() {
       const payload = {
         itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku })),
         estado,
-        zona
+        zona,
+        telefoneCliente
       };
 
       const { error } = await supabase.from('orcamentos_salvos').insert({
@@ -587,6 +589,12 @@ export default function App() {
                   <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Cliente / Box</span>
                   <input type="text" value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)}
                     placeholder="Ex: CrossFit Olympus"
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Telefone do Cliente (WhatsApp)</span>
+                  <input type="text" value={telefoneCliente} onChange={(e) => setTelefoneCliente(e.target.value)}
+                    placeholder="Ex: 11999999999"
                     className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
                 </label>
                 <label className="block">

@@ -140,7 +140,9 @@ export default function OrcamentoPage() {
     }, 600);
   }, [aprovado]);
 
-  const handleEnviarNegociacao = () => {
+  const [enviandoWebhook, setEnviandoWebhook] = useState(false);
+
+  const handleEnviarNegociacao = async () => {
     if (!motivoNegociacao || !orcamento) return;
     
     let texto = `Olá ${orcamento.consultor}! Analisei o projeto do meu box no valor de ${fmt(orcamento.total)}.\n\n`;
@@ -153,10 +155,42 @@ export default function OrcamentoPage() {
       texto += `Para viabilizarmos agora, pensei em ajustarmos alguns equipamentos e reduzir um pouco o escopo. Podemos reavaliar?`;
     }
 
-    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
-    window.open(url, '_blank');
-    setShowModalNegociacao(false);
-    setMotivoNegociacao(null);
+    const telefoneCliente = orcamentoSalvo?.payload?.telefoneCliente;
+    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+
+    if (telefoneCliente && webhookUrl) {
+      // Disparo invisível via Webhook
+      try {
+        setEnviandoWebhook(true);
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cliente: orcamento.cliente,
+            telefone: telefoneCliente,
+            consultor: orcamento.consultor,
+            total: orcamento.total,
+            motivo: motivoNegociacao,
+            mensagem_formatada: texto
+          })
+        });
+        setShowToast(true); // Reusando o toast para sucesso
+        setTimeout(() => setShowToast(false), 5000);
+      } catch (err) {
+        console.error('Erro ao enviar webhook:', err);
+        // Fallback pro WhatsApp manual se der erro
+        window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+      } finally {
+        setEnviandoWebhook(false);
+        setShowModalNegociacao(false);
+        setMotivoNegociacao(null);
+      }
+    } else {
+      // Fallback pro WhatsApp manual se não tiver telefone ou webhook configurado
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+      setShowModalNegociacao(false);
+      setMotivoNegociacao(null);
+    }
   };
 
   if (loading) {
