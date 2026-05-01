@@ -10,11 +10,23 @@ export default function DashboardTab() {
     async function load() {
       const [{ count: p }, { data: orcs }] = await Promise.all([
         supabase.from('produtos').select('*', { count: 'exact', head: true }),
-        supabase.from('orcamentos').select('status, valor_total'),
+        supabase.from('orcamentos_salvos').select('*'),
       ]);
-      const pend = (orcs || []).filter(o => o.status === 'Pendente').length;
-      const aprov = (orcs || []).filter(o => o.status === 'Aprovado');
-      setStats({ produtos: p || 0, pendentes: pend, aprovados: aprov.length, valorAprovado: aprov.reduce((s, o) => s + Number(o.valor_total), 0) });
+      
+      const pend = (orcs || []).filter(o => (o.payload?.status || 'Pendente') === 'Pendente').length;
+      const aprov = (orcs || []).filter(o => o.payload?.status === 'Aprovado');
+      
+      const calcTotal = (o) => {
+        const itens = o.payload?.itens || [];
+        return itens.reduce((acc, i) => acc + (i.preco * i.quantidade), 0);
+      };
+
+      setStats({ 
+        produtos: p || 0, 
+        pendentes: pend, 
+        aprovados: aprov.length, 
+        valorAprovado: aprov.reduce((s, o) => s + calcTotal(o), 0) 
+      });
     }
     load();
   }, []);
