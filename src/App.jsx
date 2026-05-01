@@ -32,6 +32,8 @@ export default function App() {
 
   // ── Form State ──
   const [produtoId, setProdutoId] = useState('');
+  const [buscaProduto, setBuscaProduto] = useState('');
+  const [dropdownAberto, setDropdownAberto] = useState(false);
   const [quantidade, setQuantidade] = useState(1);
   const [estado, setEstado] = useState('');
   const [zona, setZona] = useState('');
@@ -245,14 +247,65 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="relative">
-                    <select id="select-produto" value={produtoId} onChange={(e) => setProdutoId(e.target.value)}
-                      className="w-full appearance-none bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/20 transition-all cursor-pointer">
-                      <option value="">{produtos.length === 0 ? 'Nenhum produto cadastrado' : 'Selecione um produto...'}</option>
-                      {produtos.map((p) => (
-                        <option key={p.id} value={p.id}>{p.nome} — {formatCurrency(p.preco)}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                    {/* Selected Product Display / Search Input */}
+                    <div className="relative">
+                      {produtoId && !dropdownAberto ? (
+                        <div 
+                          onClick={() => {
+                            setDropdownAberto(true);
+                            setBuscaProduto('');
+                          }}
+                          className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 cursor-pointer flex justify-between items-center"
+                        >
+                          <span className="truncate pr-4">{produtos.find(p => p.id === produtoId)?.nome}</span>
+                          <span className="text-neon shrink-0">{formatCurrency(produtos.find(p => p.id === produtoId)?.preco || 0)}</span>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            placeholder="Digite para buscar..."
+                            value={buscaProduto}
+                            onChange={(e) => {
+                              setBuscaProduto(e.target.value);
+                              setDropdownAberto(true);
+                            }}
+                            onFocus={() => setDropdownAberto(true)}
+                            onBlur={() => setTimeout(() => setDropdownAberto(false), 200)}
+                            className="w-full bg-dark-900 border border-neon/50 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-neon/20 transition-all placeholder:text-dark-500"
+                            autoFocus={dropdownAberto}
+                          />
+                          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neon/50" />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Dropdown Options */}
+                    {dropdownAberto && (
+                      <div className="absolute z-50 w-full mt-2 bg-dark-800 border border-dark-600 rounded-xl shadow-xl shadow-dark-950/50 max-h-60 overflow-y-auto">
+                        {produtos
+                          .filter(p => p.nome.toLowerCase().includes(buscaProduto.toLowerCase()) || (p.codigo_sku && p.codigo_sku.toLowerCase().includes(buscaProduto.toLowerCase())))
+                          .slice(0, 50) // Limit to 50 results to prevent lag
+                          .map(p => (
+                          <div 
+                            key={p.id}
+                            onClick={() => {
+                              setProdutoId(p.id);
+                              setDropdownAberto(false);
+                              setBuscaProduto('');
+                            }}
+                            className="px-4 py-2.5 hover:bg-dark-700 cursor-pointer flex justify-between items-center border-b border-dark-700/50 last:border-0"
+                          >
+                            <span className="text-sm text-white truncate pr-4">{p.nome}</span>
+                            <span className="text-sm text-neon font-medium shrink-0">{formatCurrency(p.preco)}</span>
+                          </div>
+                        ))}
+                        {produtos.filter(p => p.nome.toLowerCase().includes(buscaProduto.toLowerCase()) || (p.codigo_sku && p.codigo_sku.toLowerCase().includes(buscaProduto.toLowerCase()))).length === 0 && (
+                          <div className="px-4 py-3 text-sm text-dark-500 text-center">Nenhum produto encontrado.</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </label>
