@@ -26,13 +26,21 @@ export default function OrcamentosTab() {
 
   const changeStatus = async (o, status) => {
     const newPayload = { ...o.payload, status };
-    await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', o.id);
+    const { error } = await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', o.id);
+    if (error) {
+      console.error(error);
+      alert("Erro ao atualizar o status: " + error.message);
+    }
     load();
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Excluir este orçamento?')) return;
-    await supabase.from('orcamentos_salvos').delete().eq('id', id);
+    const { error } = await supabase.from('orcamentos_salvos').delete().eq('id', id);
+    if (error) {
+      console.error(error);
+      alert("Erro ao excluir: " + error.message);
+    }
     setDetail(null);
     load();
   };
