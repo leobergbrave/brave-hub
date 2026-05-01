@@ -3,7 +3,7 @@ import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
   Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen,
-  Mic, Square, FileText, MapPinned
+  Mic, Square, FileText, MapPinned, CreditCard, Percent
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import {
@@ -57,6 +57,12 @@ export default function App() {
   const [uploadingImageId, setUploadingImageId] = useState(null);
   const [editingImageId, setEditingImageId] = useState(null);
   const [editImageUrl, setEditImageUrl] = useState('');
+
+  // ── Payment Conditions State ──
+  const [descontoAvista, setDescontoAvista] = useState(0);
+  const [acrescimoCartao, setAcrescimoCartao] = useState(0);
+  const [parcelasCartao, setParcelasCartao] = useState(12);
+  const [personalizarPorProduto, setPersonalizarPorProduto] = useState(false);
 
   // ── IA State ──
   const [iaTexto, setIaTexto] = useState('');
@@ -359,10 +365,16 @@ export default function App() {
       const slug = `${slugBase}-${slugId}`;
 
       const payload = {
-        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku })),
+        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, acrescimoCartaoItem: i.acrescimoCartaoItem })),
         estado,
         zona,
-        telefoneCliente
+        telefoneCliente,
+        condicoes: {
+          descontoAvista,
+          acrescimoCartao,
+          parcelas: parcelasCartao,
+          personalizarPorProduto
+        }
       };
 
       const { error } = await supabase.from('orcamentos_salvos').insert({
@@ -1093,6 +1105,77 @@ export default function App() {
                   </label>
                 </div>
               )}
+            </section>
+
+            {/* Card: Condições de Pagamento */}
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                  <CreditCard className="w-4 h-4 text-emerald-400" />
+                </div>
+                <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Condições de Pagamento</h2>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Desconto à Vista (%)</span>
+                    <div className="relative">
+                      <input type="number" min={0} max={100} step={1} value={descontoAvista}
+                        onChange={(e) => setDescontoAvista(Math.max(0, Math.min(100, Number(e.target.value))))}
+                        className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all" />
+                      <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Acréscimo Cartão (%)</span>
+                    <div className="relative">
+                      <input type="number" min={0} max={100} step={1} value={acrescimoCartao}
+                        onChange={(e) => setAcrescimoCartao(Math.max(0, Math.min(100, Number(e.target.value))))}
+                        className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all" />
+                      <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                    </div>
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Parcelas no Cartão</span>
+                  <div className="relative">
+                    <select value={parcelasCartao} onChange={(e) => setParcelasCartao(Number(e.target.value))}
+                      className="w-full appearance-none bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all cursor-pointer">
+                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                        <option key={n} value={n}>{n}x sem juros</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                  </div>
+                </label>
+
+                {/* Toggle per-product */}
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    onClick={() => setPersonalizarPorProduto(!personalizarPorProduto)}
+                    className={`relative w-10 h-5 rounded-full transition-colors duration-200 cursor-pointer ${personalizarPorProduto ? 'bg-emerald-500' : 'bg-dark-600'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${personalizarPorProduto ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                  <span className="text-xs text-zinc-400 font-medium">Personalizar % por produto</span>
+                </div>
+
+                {/* Preview */}
+                {(descontoAvista > 0 || acrescimoCartao > 0) && itens.length > 0 && (
+                  <div className="bg-dark-900/60 border border-emerald-500/20 rounded-xl px-4 py-3 space-y-1.5 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-zinc-500">💵 Valor à Vista</span>
+                      <span className="text-sm font-bold text-emerald-400">{formatCurrency(totalProjeto * (1 - descontoAvista / 100))}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-zinc-500">💳 Valor no Cartão ({parcelasCartao}x)</span>
+                      <span className="text-sm font-bold text-white">{formatCurrency(totalProjeto * (1 + acrescimoCartao / 100))}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* Info card */}
