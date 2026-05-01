@@ -6,10 +6,13 @@ import DescontosTab from '../admin/DescontosTab';
 import OrcamentosTab from '../admin/OrcamentosTab';
 import DashboardTab from '../admin/DashboardTab';
 import MarketingTab from '../admin/MarketingTab';
+import CategoriasTab from '../admin/CategoriasTab';
+import { Layers } from 'lucide-react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'produtos', label: 'Produtos', icon: Package },
+  { id: 'categorias', label: 'Categorias', icon: Layers },
   { id: 'descontos', label: 'Descontos', icon: Tag },
   { id: 'frete', label: 'Frete', icon: Truck },
   { id: 'orcamentos', label: 'Orçamentos', icon: Receipt },
@@ -23,6 +26,7 @@ export default function AdminPage() {
     switch (tab) {
       case 'dashboard': return <DashboardTab />;
       case 'produtos': return <ProdutosTab />;
+      case 'categorias': return <CategoriasTab />;
       case 'descontos': return <DescontosTab />;
       case 'frete': return <FreteTab />;
       case 'orcamentos': return <OrcamentosTab />;

@@ -7,16 +7,19 @@ export default function DescontosTab() {
   const [regras, setRegras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [maxManual, setMaxManual] = useState('12');
-  const [form, setForm] = useState({ linha: '', valor_min: '0', valor_max: '', desconto_cartao: '', desconto_pix: '' });
+  const [form, setForm] = useState({ categoria: '', valor_min: '0', valor_max: '', desconto_cartao: '', desconto_pix: '' });
+  const [categorias, setCategorias] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data }, { data: cfg }] = await Promise.all([
-      supabase.from('regras_desconto').select('*').order('linha').order('valor_min'),
+    const [{ data }, { data: cfg }, { data: catData }] = await Promise.all([
+      supabase.from('regras_desconto').select('*').order('categoria').order('valor_min'),
       supabase.from('config').select('*').eq('chave', 'desconto_manual_max').single(),
+      supabase.from('categorias').select('nome').order('nome')
     ]);
     setRegras(data || []);
+    setCategorias(catData?.map(c => c.nome) || []);
     if (cfg) setMaxManual(cfg.valor);
     setLoading(false);
   }, []);
@@ -24,16 +27,16 @@ export default function DescontosTab() {
   useEffect(() => { load(); }, [load]);
 
   const handleAdd = async () => {
-    if (!form.linha || form.desconto_cartao === '' || form.desconto_pix === '') return;
+    if (!form.categoria || form.desconto_cartao === '' || form.desconto_pix === '') return;
     setSaving(true);
     await supabase.from('regras_desconto').insert({
-      linha: form.linha.toUpperCase(),
+      categoria: form.categoria.toUpperCase(),
       valor_min: Number(form.valor_min) || 0,
       valor_max: form.valor_max ? Number(form.valor_max) : null,
       desconto_cartao: Number(form.desconto_cartao),
       desconto_pix: Number(form.desconto_pix),
     });
-    setForm({ linha: '', valor_min: '0', valor_max: '', desconto_cartao: '', desconto_pix: '' });
+    setForm({ categoria: '', valor_min: '0', valor_max: '', desconto_cartao: '', desconto_pix: '' });
     setSaving(false);
     load();
   };
@@ -53,11 +56,11 @@ export default function DescontosTab() {
     await supabase.from('config').update({ valor: maxManual }).eq('chave', 'desconto_manual_max');
   };
 
-  // Group by linha
+  // Group by categoria
   const grouped = {};
   regras.forEach(r => {
-    if (!grouped[r.linha]) grouped[r.linha] = [];
-    grouped[r.linha].push(r);
+    if (!grouped[r.categoria]) grouped[r.categoria] = [];
+    grouped[r.categoria].push(r);
   });
 
   if (loading) return <div className="flex items-center gap-2 text-zinc-500 py-8 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Carregando...</div>;
@@ -70,7 +73,10 @@ export default function DescontosTab() {
       <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-5">
         <p className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-wider">Nova Regra</p>
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          <input placeholder="Linha (ex: CROSS)" value={form.linha} onChange={e => setForm({...form, linha: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
+          <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50">
+            <option value="">Categoria...</option>
+            {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
           <input placeholder="Valor mín (R$)" type="number" value={form.valor_min} onChange={e => setForm({...form, valor_min: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
           <input placeholder="Valor máx (vazio=∞)" type="number" value={form.valor_max} onChange={e => setForm({...form, valor_max: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
           <input placeholder="% Cartão" type="number" value={form.desconto_cartao} onChange={e => setForm({...form, desconto_cartao: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-blue-500/50" />
@@ -83,11 +89,11 @@ export default function DescontosTab() {
       </div>
 
       {/* Grouped Rules */}
-      {Object.entries(grouped).map(([linha, rules]) => (
-        <section key={linha} className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
+      {Object.entries(grouped).map(([categoria, rules]) => (
+        <section key={categoria} className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
           <div className="px-5 py-4 border-b border-dark-700/50 flex items-center gap-2">
             <Tag className="w-5 h-5 text-neon" />
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Linha {linha}</h2>
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Categoria {categoria}</h2>
             <span className="text-xs text-zinc-500 ml-2">{rules.length} faixa{rules.length > 1 ? 's' : ''}</span>
           </div>
           <table className="w-full text-sm">

@@ -21,7 +21,7 @@ const EditableCell = ({ value, onSave, type = "text", className = "", options = 
         onChange={e => { setVal(e.target.value); onSave(e.target.value); }} 
         className={`bg-dark-800 rounded px-2 py-1 text-xs border border-transparent hover:border-dark-600 focus:border-neon focus:outline-none cursor-pointer ${className}`}
       >
-        <option value="">Sem linha</option>
+        <option value="">Sem categoria</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     );
@@ -42,17 +42,25 @@ export default function ProdutosTab() {
   const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: '' });
+  const [form, setForm] = useState({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', categoria: '', subcategoria: '' });
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [showCsv, setShowCsv] = useState(false);
+  const [categorias, setCategorias] = useState([]);
+  const [subcategorias, setSubcategorias] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('produtos').select('*').order('nome');
-    setProdutos(data || []);
+    const [prodRes, catRes, subRes] = await Promise.all([
+      supabase.from('produtos').select('*').order('nome'),
+      supabase.from('categorias').select('nome').order('nome'),
+      supabase.from('subcategorias').select('nome').order('nome')
+    ]);
+    setProdutos(prodRes.data || []);
+    setCategorias(catRes.data?.map(c => c.nome) || []);
+    setSubcategorias(subRes.data?.map(s => s.nome) || []);
     setLoading(false);
   }, []);
 
@@ -81,7 +89,7 @@ export default function ProdutosTab() {
     } else {
       await supabase.from('produtos').insert(payload);
     }
-    setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: '' });
+    setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', categoria: '', subcategoria: '' });
     setEditId(null);
     setSaving(false);
     load();
@@ -129,7 +137,7 @@ export default function ProdutosTab() {
 
   const handleEdit = (p) => {
     setEditId(p.id);
-    setForm({ codigo_sku: p.codigo_sku || '', nome: p.nome, preco: p.preco, peso_kg: p.peso_kg || '', url_imagem: p.url_imagem || '', linha: p.linha || '' });
+    setForm({ codigo_sku: p.codigo_sku || '', nome: p.nome, preco: p.preco, peso_kg: p.peso_kg || '', url_imagem: p.url_imagem || '', categoria: p.categoria || '', subcategoria: p.subcategoria || '' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -162,7 +170,8 @@ export default function ProdutosTab() {
         nome: (cols[1] || '').replace(/^"|"$/g, ''),
         preco: Number(precoStr.replace(',', '.')) || 0,
         peso_kg: pesoStr && pesoStr !== '0' ? Number(pesoStr.replace(',', '.')) : null,
-        linha: cols[4] || '',
+        categoria: cols[4] || '',
+        subcategoria: cols[5] || '',
       });
     }
     if (rows.length > 0) {
@@ -191,7 +200,7 @@ export default function ProdutosTab() {
       {/* CSV Import */}
       {showCsv && (
         <div className="bg-dark-800/60 border border-purple-500/30 rounded-2xl p-5 mb-6">
-          <p className="text-xs text-zinc-400 mb-2">Formato: <code className="text-purple-400">SKU, Nome, Preço, Peso, Linha</code> (separado por vírgula ou ponto e vírgula)</p>
+          <p className="text-xs text-zinc-400 mb-2">Formato: <code className="text-purple-400">SKU, Nome, Preço, Peso, Categoria, Subcategoria</code> (separado por vírgula ou ponto e vírgula)</p>
           <textarea value={csvText} onChange={e => setCsvText(e.target.value)} rows={5} placeholder="BIKE01, BikeErg Concept 2, 18900, 30, Cardio" className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 mb-3 font-mono" />
           <button onClick={handleCsvImport} disabled={saving} className="flex items-center gap-2 bg-purple-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-purple-500 transition-all cursor-pointer disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Importar
@@ -207,9 +216,13 @@ export default function ProdutosTab() {
           <input placeholder="Nome *" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} className="lg:col-span-2 bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
           <input placeholder="Preço" type="number" value={form.preco} onChange={e => setForm({...form, preco: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
           <input placeholder="Peso (kg)" type="number" value={form.peso_kg} onChange={e => setForm({...form, peso_kg: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
-          <select value={form.linha} onChange={e => setForm({...form, linha: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none cursor-pointer">
-            <option value="">Selecione...</option>
-            {['GYM','CROSS'].map(l => <option key={l}>{l}</option>)}
+          <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none cursor-pointer">
+            <option value="">Sem Categoria...</option>
+            {categorias.map(l => <option key={l}>{l}</option>)}
+          </select>
+          <select value={form.subcategoria} onChange={e => setForm({...form, subcategoria: e.target.value})} className="bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none cursor-pointer">
+            <option value="">Sem Subcategoria...</option>
+            {subcategorias.map(l => <option key={l}>{l}</option>)}
           </select>
         </div>
         <div className="flex gap-2 mt-3 items-center">
@@ -225,7 +238,7 @@ export default function ProdutosTab() {
           <button onClick={handleSave} disabled={saving || !form.nome} className="flex items-center gap-2 bg-neon text-dark-950 text-sm font-bold px-5 py-2.5 rounded-xl hover:shadow-lg hover:shadow-neon/25 transition-all cursor-pointer disabled:opacity-30">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editId ? 'Atualizar' : 'Salvar'}
           </button>
-          {editId && <button onClick={() => { setEditId(null); setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: '' }); }} className="text-sm text-zinc-400 px-4 py-2.5 rounded-xl hover:bg-dark-700 cursor-pointer">Cancelar</button>}
+          {editId && <button onClick={() => { setEditId(null); setForm({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', categoria: '', subcategoria: '' }); }} className="text-sm text-zinc-400 px-4 py-2.5 rounded-xl hover:bg-dark-700 cursor-pointer">Cancelar</button>}
         </div>
       </div>
 
@@ -242,7 +255,7 @@ export default function ProdutosTab() {
         <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-dark-700/50 text-xs text-zinc-500 uppercase">
-              <th className="text-left px-4 py-3">SKU</th><th className="text-left px-4 py-3">Nome</th><th className="text-left px-4 py-3">Linha</th><th className="text-right px-4 py-3">Preço</th><th className="text-right px-4 py-3">Peso</th><th className="px-4 py-3 w-20"></th>
+              <th className="text-left px-4 py-3">SKU</th><th className="text-left px-4 py-3">Nome</th><th className="text-left px-4 py-3">Categoria</th><th className="text-left px-4 py-3">Subcategoria</th><th className="text-right px-4 py-3">Preço</th><th className="text-right px-4 py-3">Peso</th><th className="px-4 py-3 w-20"></th>
             </tr></thead>
             <tbody>
               {filtered.map(p => (
@@ -253,9 +266,16 @@ export default function ProdutosTab() {
                   </td>
                   <td className="px-4 py-3">
                     <EditableCell 
-                      value={p.linha || ''} 
-                      options={['GYM','CROSS']}
-                      onSave={val => handleInlineUpdate(p.id, 'linha', val)} 
+                      value={p.categoria || ''} 
+                      options={categorias}
+                      onSave={val => handleInlineUpdate(p.id, 'categoria', val)} 
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <EditableCell 
+                      value={p.subcategoria || ''} 
+                      options={subcategorias}
+                      onSave={val => handleInlineUpdate(p.id, 'subcategoria', val)} 
                     />
                   </td>
                   <td className="px-4 py-3">
