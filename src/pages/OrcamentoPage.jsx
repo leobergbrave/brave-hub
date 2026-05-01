@@ -192,12 +192,11 @@ export default function OrcamentoPage() {
           </div>
 
           {/* Title */}
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-3">
-            Seu Orçamento <span className="text-neon">Exclusivo</span>
+          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-3 uppercase">
+            Orçamento Exclusivo <span className="text-neon">{orcamento.cliente}</span>
           </h1>
           <p className="text-sm sm:text-base text-zinc-400 font-medium">
-            Preparado com alta performance para{' '}
-            <span className="text-white font-semibold">{orcamento.cliente}</span>
+            Equipamentos de alta performance
           </p>
 
           {/* Badges */}
@@ -251,7 +250,12 @@ export default function OrcamentoPage() {
                     if (media.type === 'image') {
                       return <img src={media.url} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />;
                     } else if (media.type === 'folder') {
-                      return <FolderOpen className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 group-hover:scale-110 transition-transform duration-500" />;
+                      return (
+                        <div className="text-center group-hover:scale-110 transition-transform duration-500">
+                          <FolderOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 mx-auto" />
+                          <p className="text-[7px] sm:text-[8px] text-blue-400 mt-1 font-bold tracking-widest">FOTOS</p>
+                        </div>
+                      );
                     }
                   })()}
                 </div>
