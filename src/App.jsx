@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
-  Loader2, BrainCircuit, MessageSquareText, AlertTriangle
+  Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload
 } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
 import {
   fetchProdutos, fetchRegrasFrete, extrairEstadosEZonas,
   calcularFreteComRegra, formatCurrency, formatWeight
@@ -37,11 +38,20 @@ export default function App() {
   const [quantidade, setQuantidade] = useState(1);
   const [estado, setEstado] = useState('');
   const [zona, setZona] = useState('');
+  const [nomeCliente, setNomeCliente] = useState('');
+  const [nomeConsultor, setNomeConsultor] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastError, setToastError] = useState(false);
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editItemPrice, setEditItemPrice] = useState('');
+  const [editingWeightId, setEditingWeightId] = useState(null);
+  const [editItemWeight, setEditItemWeight] = useState('');
+  const [uploadingImageId, setUploadingImageId] = useState(null);
+  const [editingImageId, setEditingImageId] = useState(null);
+  const [editImageUrl, setEditImageUrl] = useState('');
 
   // ── IA State ──
   const [iaTexto, setIaTexto] = useState('');
@@ -128,17 +138,128 @@ export default function App() {
     setItens((prev) => prev.filter((i) => i.id !== id));
   }, []);
 
+  const handleIniciarEdicao = useCallback((item) => {
+    setEditingItemId(item.id);
+    setEditItemPrice(item.preco.toString());
+  }, []);
+
+  const handleSalvarPreco = useCallback((id) => {
+    const novoPreco = parseFloat(editItemPrice);
+    if (!isNaN(novoPreco) && novoPreco >= 0) {
+      setItens((prev) => prev.map((i) => i.id === id ? { ...i, preco: novoPreco } : i));
+    }
+    setEditingItemId(null);
+  }, [editItemPrice]);
+
+  const handleCancelarEdicao = useCallback(() => {
+    setEditingItemId(null);
+  }, []);
+
+  const handleIniciarEdicaoPeso = useCallback((item) => {
+    setEditingWeightId(item.id);
+    setEditItemWeight(item.peso_kg ? item.peso_kg.toString() : '');
+  }, []);
+
+  const handleSalvarPeso = useCallback(async (id) => {
+    const novoPeso = parseFloat(editItemWeight);
+    if (isNaN(novoPeso) || novoPeso < 0) {
+      setEditingWeightId(null);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('produtos')
+      .update({ peso_kg: novoPeso })
+      .eq('id', id);
+
+    if (error) {
+      showToastMessage('Erro ao salvar peso. Tente novamente.', true);
+      return;
+    }
+
+    setItens((prev) => prev.map((i) => i.id === id ? { ...i, peso_kg: novoPeso } : i));
+    setProdutos((prev) => prev.map((p) => p.id === id ? { ...p, peso_kg: novoPeso } : p));
+    setEditingWeightId(null);
+    showToastMessage('Peso cadastrado com sucesso!');
+  }, [editItemWeight, showToastMessage]);
+
+  const handleCancelarEdicaoPeso = useCallback(() => {
+    setEditingWeightId(null);
+  }, []);
+
+  const handleImageUpload = async (event, id) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImageId(id);
+    try {
+      showToastMessage('Comprimindo e enviando imagem...', false);
+      let fileToUpload = file;
+
+      if (file.type.startsWith('image/')) {
+        const options = { maxSizeMB: 1, maxWidthOrHeight: 1200, useWebWorker: true };
+        fileToUpload = await imageCompression(file, options);
+      }
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage.from('produtos_media').upload(fileName, fileToUpload);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('produtos_media').getPublicUrl(fileName);
+
+      const { error: dbError } = await supabase.from('produtos').update({ url_imagem: publicUrl }).eq('id', id);
+      if (dbError) throw dbError;
+
+      setItens((prev) => prev.map((i) => i.id === id ? { ...i, url_imagem: publicUrl } : i));
+      setProdutos((prev) => prev.map((p) => p.id === id ? { ...p, url_imagem: publicUrl } : p));
+      
+      showToastMessage('Imagem salva no produto com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showToastMessage('Erro ao salvar imagem.', true);
+    } finally {
+      setUploadingImageId(null);
+      setEditingImageId(null);
+      event.target.value = null;
+    }
+  };
+
+  const handleSaveImageUrl = async (id) => {
+    if (!editImageUrl.trim()) {
+      setEditingImageId(null);
+      return;
+    }
+    try {
+      showToastMessage('Salvando URL...', false);
+      const url = editImageUrl.trim();
+      const { error: dbError } = await supabase.from('produtos').update({ url_imagem: url }).eq('id', id);
+      if (dbError) throw dbError;
+
+      setItens((prev) => prev.map((i) => i.id === id ? { ...i, url_imagem: url } : i));
+      setProdutos((prev) => prev.map((p) => p.id === id ? { ...p, url_imagem: url } : p));
+      showToastMessage('URL salva com sucesso!');
+      setEditingImageId(null);
+    } catch (err) {
+      console.error(err);
+      showToastMessage('Erro ao salvar URL.', true);
+    }
+  };
+
   const handleGerarLink = useCallback(() => {
     if (itens.length === 0) return;
     const params = new URLSearchParams();
-    params.set('itens', JSON.stringify(itens.map((i) => ({ id: i.id, q: i.quantidade }))));
+    if (nomeCliente.trim()) params.set('c', nomeCliente.trim());
+    if (nomeConsultor.trim()) params.set('v', nomeConsultor.trim());
+    params.set('itens', JSON.stringify(itens.map((i) => ({ id: i.id, q: i.quantidade, p: i.preco }))));
     params.set('uf', estado);
     params.set('zona', zona);
     const link = `${window.location.origin}/orcamento?${params.toString()}`;
     setLinkGerado(link);
     navigator.clipboard.writeText(link).catch(() => {});
     showToastMessage('Link copiado para a área de transferência!');
-  }, [itens, estado, zona, showToastMessage]);
+  }, [itens, estado, zona, nomeCliente, nomeConsultor, showToastMessage]);
 
   // ── IA Handler (Edge Function) ──
   const handleProcessarIA = useCallback(async () => {
@@ -323,6 +444,30 @@ export default function App() {
               </button>
             </section>
 
+            {/* Card: Dados */}
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <UserRound className="w-4 h-4 text-blue-400" />
+                </div>
+                <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Dados do Orçamento</h2>
+              </div>
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Cliente / Box</span>
+                  <input type="text" value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)}
+                    placeholder="Ex: CrossFit Olympus"
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
+                  <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
+                    placeholder="Ex: Rafael Mendes"
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                </label>
+              </div>
+            </section>
+
             {/* Card: Destino */}
             <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-5">
@@ -414,24 +559,129 @@ export default function App() {
                         <li key={item.id}
                           className={`group bg-dark-900/50 border rounded-xl p-4 flex items-center gap-4 transition-all animate-slide-in-right ${semPeso ? 'border-amber-500/30' : 'border-dark-700/40 hover:border-dark-600'}`}
                           style={{ animationDelay: `${idx * 0.05}s` }}>
+                          
+                          {/* Image Upload / Preview */}
+                          {editingImageId === item.id ? (
+                            <div className="shrink-0 w-full sm:w-56 bg-dark-800 rounded-xl p-3 border border-dark-600 shadow-xl shadow-dark-950/50 z-10">
+                              <p className="text-[10px] font-bold text-zinc-400 mb-2 uppercase tracking-wider">Alterar Foto</p>
+                              <div className="flex flex-col gap-2">
+                                <label className={`flex items-center justify-center gap-2 bg-dark-700 hover:bg-dark-600 text-xs font-semibold text-white py-2 rounded-lg cursor-pointer transition-colors ${uploadingImageId === item.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  {uploadingImageId === item.id ? <Loader2 className="w-4 h-4 animate-spin text-neon" /> : <Upload className="w-4 h-4 text-zinc-400" />}
+                                  {uploadingImageId === item.id ? 'Enviando...' : 'Upload do Computador'}
+                                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, item.id)} disabled={uploadingImageId === item.id} />
+                                </label>
+                                <div className="flex items-center gap-1 mt-1">
+                                  <input type="text" placeholder="Ou cole a URL..." value={editImageUrl} onChange={e => setEditImageUrl(e.target.value)} className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:border-neon/50" />
+                                  <button onClick={() => handleSaveImageUrl(item.id)} className="bg-neon/10 text-neon p-1.5 rounded-lg hover:bg-neon/20 transition-colors" title="Salvar URL">
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button onClick={() => setEditingImageId(null)} className="bg-dark-700 text-zinc-400 p-1.5 rounded-lg hover:bg-dark-600 hover:text-white transition-colors" title="Cancelar">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="shrink-0 relative group/img cursor-pointer" onClick={() => { setEditingImageId(item.id); setEditImageUrl(item.url_imagem || ''); }} title="Alterar Foto">
+                              {item.url_imagem ? (
+                                <img src={item.url_imagem} alt={item.nome} className="w-12 h-12 rounded-lg object-cover border border-dark-700/50 group-hover/img:opacity-40 transition-opacity" />
+                              ) : (
+                                <div className={`w-12 h-12 rounded-lg border border-dashed border-dark-600 flex flex-col items-center justify-center hover:bg-dark-800 transition-colors group-hover/img:opacity-40`}>
+                                  <ImagePlus className="w-4 h-4 text-dark-500 group-hover/img:text-neon transition-colors" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity pointer-events-none">
+                                <Edit2 className="w-4 h-4 text-white drop-shadow-md" />
+                              </div>
+                            </div>
+                          )}
+
                           {/* Warning icon */}
                           {semPeso && (
                             <div className="shrink-0 w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center" title="Peso não cadastrado — frete impreciso">
                               <AlertTriangle className="w-4 h-4 text-amber-400" />
                             </div>
                           )}
+                          
                           {/* Info */}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate">{item.nome}</p>
-                            <div className="flex items-center gap-3 mt-1 flex-wrap">
-                              <span className="text-xs text-zinc-500">{item.quantidade}x {formatCurrency(item.preco)}</span>
-                              <span className="text-[10px] text-dark-500">•</span>
-                              {semPeso ? (
-                                <span className="text-xs text-amber-400 font-medium">Peso não informado</span>
-                              ) : (
-                                <span className="text-xs text-zinc-500">{formatWeight(item.peso_kg * item.quantidade)}</span>
-                              )}
-                            </div>
+                            
+                            {editingItemId === item.id ? (
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="text-xs text-zinc-500">{item.quantidade}x</span>
+                                <div className="flex items-center bg-dark-800 border border-dark-600 rounded-lg overflow-hidden h-7">
+                                  <span className="px-2 text-xs text-zinc-500 bg-dark-900 h-full flex items-center border-r border-dark-600">R$</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={editItemPrice}
+                                    onChange={(e) => setEditItemPrice(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSalvarPreco(item.id);
+                                      if (e.key === 'Escape') handleCancelarEdicao();
+                                    }}
+                                    className="w-20 bg-transparent text-white text-xs px-2 focus:outline-none h-full"
+                                    autoFocus
+                                  />
+                                </div>
+                                <button onClick={() => handleSalvarPreco(item.id)} className="w-7 h-7 flex items-center justify-center bg-neon/10 text-neon rounded-lg hover:bg-neon/20 transition-colors">
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={handleCancelarEdicao} className="w-7 h-7 flex items-center justify-center bg-dark-700 text-zinc-400 rounded-lg hover:bg-dark-600 hover:text-white transition-colors">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-zinc-500">{item.quantidade}x {formatCurrency(item.preco)}</span>
+                                  <button onClick={() => handleIniciarEdicao(item)} className="text-dark-500 hover:text-neon transition-colors" title="Editar valor unitário">
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <span className="text-[10px] text-dark-500">•</span>
+                                {editingWeightId === item.id ? (
+                                  <div className="flex items-center gap-1.5 h-6">
+                                    <div className="flex items-center bg-dark-800 border border-dark-600 rounded-md overflow-hidden h-full">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={editItemWeight}
+                                        onChange={(e) => setEditItemWeight(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleSalvarPeso(item.id);
+                                          if (e.key === 'Escape') handleCancelarEdicaoPeso();
+                                        }}
+                                        className="w-14 bg-transparent text-white text-[10px] px-2 focus:outline-none h-full"
+                                        placeholder="kg"
+                                        autoFocus
+                                      />
+                                      <span className="px-1.5 text-[10px] text-zinc-500 bg-dark-900 h-full flex items-center border-l border-dark-600">kg</span>
+                                    </div>
+                                    <button onClick={() => handleSalvarPeso(item.id)} className="w-6 h-6 flex items-center justify-center bg-neon/10 text-neon rounded-md hover:bg-neon/20 transition-colors">
+                                      <Check className="w-3 h-3" />
+                                    </button>
+                                    <button onClick={handleCancelarEdicaoPeso} className="w-6 h-6 flex items-center justify-center bg-dark-700 text-zinc-400 rounded-md hover:bg-dark-600 hover:text-white transition-colors">
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    {semPeso ? (
+                                      <span className="text-xs text-amber-400 font-medium">Peso não informado</span>
+                                    ) : (
+                                      <span className="text-xs text-zinc-500">{formatWeight(item.peso_kg * item.quantidade)}</span>
+                                    )}
+                                    <button onClick={() => handleIniciarEdicaoPeso(item)} className="text-dark-500 hover:text-neon transition-colors" title="Cadastrar peso do produto">
+                                      <Edit2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           {/* Subtotal */}
                           <div className="text-right shrink-0">

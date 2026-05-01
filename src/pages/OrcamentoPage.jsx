@@ -1,57 +1,98 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Shield, CalendarDays, Clock, UserRound, Package, Weight,
   Truck, CheckCircle2, MessageCircle, Sparkles, ChevronRight,
-  Star, Award, BadgeCheck
+  Star, Award, BadgeCheck, Loader2, X
 } from 'lucide-react';
+import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra } from '../data';
 
 /* ═══════════════════════════════════════════════
    VITRINE DO CLIENTE — Orçamento Final
    ═══════════════════════════════════════════════ */
-
-// ── Mock Data ──
-const ORCAMENTO = {
-  cliente: 'CrossFit Olympus',
-  consultor: 'Rafael Mendes',
-  data: new Date().toLocaleDateString('pt-BR'),
-  validade: '7 dias',
-  itens: [
-    {
-      id: 5,
-      nome: 'BikeErg Concept 2',
-      quantidade: 2,
-      preco: 18900.0,
-      peso: 30,
-    },
-    {
-      id: 1,
-      nome: 'Med Ball 09 kg Fitness Race',
-      quantidade: 5,
-      preco: 340.0,
-      peso: 9,
-    },
-  ],
-};
-
-const pesoTotal = ORCAMENTO.itens.reduce(
-  (acc, i) => acc + i.peso * i.quantidade,
-  0
-);
-const subtotal = ORCAMENTO.itens.reduce(
-  (acc, i) => acc + i.preco * i.quantidade,
-  0
-);
-const frete = 147.0;
-const total = subtotal + frete;
 
 function fmt(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 export default function OrcamentoPage() {
+  const [searchParams] = useSearchParams();
   const [aprovado, setAprovado] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [pulseBtn, setPulseBtn] = useState(false);
+  const [expandedImage, setExpandedImage] = useState(null);
+
+  const [produtosDb, setProdutosDb] = useState([]);
+  const [regrasFreteDb, setRegrasFreteDb] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([fetchProdutos(), fetchRegrasFrete()])
+      .then(([prods, regras]) => {
+        setProdutosDb(prods);
+        setRegrasFreteDb(regras);
+      })
+      .catch(err => console.error('Erro ao carregar dados:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const orcamento = useMemo(() => {
+    try {
+      const itensParam = searchParams.get('itens');
+      const ufParam = searchParams.get('uf');
+      const zonaParam = searchParams.get('zona');
+      const clienteParam = searchParams.get('c') || 'Cliente Brave';
+      const consultorParam = searchParams.get('v') || 'Consultor Oficial';
+
+      if (!itensParam || produtosDb.length === 0) return null;
+
+      const parsedItens = JSON.parse(itensParam);
+      
+      const itensCompletos = parsedItens.map(itemUrl => {
+        const prod = produtosDb.find(p => p.id === itemUrl.id);
+        if (!prod) return null;
+        
+        const precoVenda = itemUrl.p !== undefined ? itemUrl.p : prod.preco;
+        const precoOriginal = prod.preco;
+        const descontoUnitario = precoOriginal > precoVenda ? precoOriginal - precoVenda : 0;
+        
+        return {
+          id: prod.id,
+          nome: prod.nome,
+          url_imagem: prod.url_imagem,
+          quantidade: itemUrl.q,
+          precoOriginal: precoOriginal,
+          preco: precoVenda,
+          descontoUnitario: descontoUnitario,
+          peso: prod.peso_kg || 0
+        };
+      }).filter(Boolean);
+
+      const pesoTotal = itensCompletos.reduce((acc, i) => acc + i.peso * i.quantidade, 0);
+      const subtotal = itensCompletos.reduce((acc, i) => acc + i.preco * i.quantidade, 0);
+      const descontoTotal = itensCompletos.reduce((acc, i) => acc + i.descontoUnitario * i.quantidade, 0);
+
+      const regraFrete = regrasFreteDb.find(r => r.estado === ufParam && r.zona === zonaParam);
+      const frete = calcularFreteComRegra(pesoTotal, regraFrete);
+      const total = subtotal + frete;
+
+      return {
+        cliente: clienteParam,
+        consultor: consultorParam,
+        data: new Date().toLocaleDateString('pt-BR'),
+        validade: '7 dias',
+        itens: itensCompletos,
+        pesoTotal,
+        subtotal,
+        descontoTotal,
+        frete,
+        total
+      };
+    } catch (e) {
+      console.error('Erro ao processar orçamento:', e);
+      return null;
+    }
+  }, [searchParams, produtosDb, regrasFreteDb]);
 
   const handleAprovar = useCallback(() => {
     if (aprovado) return;
@@ -63,6 +104,24 @@ export default function OrcamentoPage() {
       setTimeout(() => setShowToast(false), 5000);
     }, 600);
   }, [aprovado]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center">
+        <Loader2 className="w-8 h-8 text-neon animate-spin mb-4" />
+        <p className="text-zinc-400 font-medium">Carregando seu orçamento exclusivo...</p>
+      </div>
+    );
+  }
+
+  if (!orcamento) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center text-center px-6">
+        <p className="text-white font-bold text-xl mb-2">Orçamento não encontrado</p>
+        <p className="text-zinc-500 text-sm">O link pode estar quebrado ou incompleto.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
@@ -97,9 +156,7 @@ export default function OrcamentoPage() {
         <div className="max-w-3xl mx-auto text-center">
           {/* Logo */}
           <div className="inline-flex items-center justify-center gap-1 mb-6">
-            <span className="text-3xl font-black tracking-[-0.04em] text-white">
-              BR<span className="text-neon">A</span>VE
-            </span>
+            <img src="/logo-orcamento.png" alt="Brave Hub Logo" className="h-14 object-contain" />
           </div>
 
           {/* Title */}
@@ -108,14 +165,14 @@ export default function OrcamentoPage() {
           </h1>
           <p className="text-sm sm:text-base text-zinc-400 font-medium">
             Preparado com alta performance para{' '}
-            <span className="text-white font-semibold">{ORCAMENTO.cliente}</span>
+            <span className="text-white font-semibold">{orcamento.cliente}</span>
           </p>
 
           {/* Badges */}
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-            <Badge icon={CalendarDays} label="Data" value={ORCAMENTO.data} />
-            <Badge icon={Clock} label="Validade" value={ORCAMENTO.validade} />
-            <Badge icon={UserRound} label="Consultor" value={ORCAMENTO.consultor} />
+            <Badge icon={CalendarDays} label="Data" value={orcamento.data} />
+            <Badge icon={Clock} label="Validade" value={orcamento.validade} />
+            <Badge icon={UserRound} label="Consultor" value={orcamento.consultor} />
           </div>
         </div>
       </header>
@@ -137,18 +194,25 @@ export default function OrcamentoPage() {
         </div>
 
         <div className="space-y-4">
-          {ORCAMENTO.itens.map((item, idx) => (
+          {orcamento.itens.map((item, idx) => (
             <div
               key={item.id}
               className="group bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-5 flex items-center gap-5 hover:border-dark-600 transition-all animate-fade-in-up"
               style={{ animationDelay: `${idx * 0.1}s` }}
             >
-              {/* Image Placeholder */}
-              <div className="shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden">
-                <div className="text-center">
-                  <Package className="w-6 h-6 text-dark-500 mx-auto" />
-                  <p className="text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
-                </div>
+              {/* Image / Placeholder */}
+              <div 
+                className={`shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`}
+                onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
+              >
+                {item.url_imagem ? (
+                  <img src={item.url_imagem} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
+                ) : (
+                  <div className="text-center">
+                    <Package className="w-6 h-6 text-dark-500 mx-auto" />
+                    <p className="text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
+                  </div>
+                )}
               </div>
 
               {/* Info */}
@@ -160,8 +224,19 @@ export default function OrcamentoPage() {
                   <span className="text-xs text-zinc-500">
                     Qtd: <span className="text-zinc-300 font-semibold">{item.quantidade}</span>
                   </span>
-                  <span className="text-xs text-zinc-500">
-                    Unit: <span className="text-zinc-300 font-semibold">{fmt(item.preco)}</span>
+                  <span className="text-xs text-zinc-500 flex items-center gap-1 flex-wrap">
+                    Unit: 
+                    {item.descontoUnitario > 0 ? (
+                      <>
+                        <span className="text-zinc-500 line-through text-[10px] ml-0.5">{fmt(item.precoOriginal)}</span>
+                        <span className="text-neon font-bold ml-1">{fmt(item.preco)}</span>
+                        <span className="bg-neon/10 text-neon border border-neon/20 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ml-1.5">
+                          -{Math.round((item.descontoUnitario / item.precoOriginal) * 100)}%
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-300 font-semibold">{fmt(item.preco)}</span>
+                    )}
                   </span>
                   <span className="text-xs text-zinc-500">
                     Peso: <span className="text-zinc-300 font-semibold">{item.peso * item.quantidade} kg</span>
@@ -203,17 +278,25 @@ export default function OrcamentoPage() {
             <SummaryRow
               icon={<Weight className="w-4 h-4" />}
               label="Peso Total da Carga"
-              value={`${pesoTotal} kg`}
+              value={`${orcamento.pesoTotal} kg`}
             />
             <SummaryRow
               icon={<Package className="w-4 h-4" />}
               label="Subtotal dos Equipamentos"
-              value={fmt(subtotal)}
+              value={fmt(orcamento.subtotal + orcamento.descontoTotal)}
             />
+            {orcamento.descontoTotal > 0 && (
+              <SummaryRow
+                icon={<BadgeCheck className="w-4 h-4 text-neon" />}
+                label="Desconto Especial Aplicado"
+                value={`- ${fmt(orcamento.descontoTotal)}`}
+                valueClass="text-neon font-bold"
+              />
+            )}
             <SummaryRow
               icon={<Truck className="w-4 h-4" />}
               label="Frete Aplicado"
-              value={fmt(frete)}
+              value={fmt(orcamento.frete)}
               valueClass="text-orange-accent"
             />
           </div>
@@ -233,7 +316,7 @@ export default function OrcamentoPage() {
               </div>
             </div>
             <p className="text-3xl sm:text-4xl font-black text-neon tracking-tight">
-              {fmt(total)}
+              {fmt(orcamento.total)}
             </p>
           </div>
         </div>
@@ -303,6 +386,16 @@ export default function OrcamentoPage() {
           </p>
         </div>
       </footer>
+
+      {/* Lightbox / Modal de Imagem Expandida */}
+      {expandedImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-dark-950/90 backdrop-blur-sm p-4 animate-fade-in cursor-zoom-out" onClick={() => setExpandedImage(null)}>
+          <button onClick={() => setExpandedImage(null)} className="absolute top-6 right-6 w-10 h-10 bg-dark-800 text-white rounded-full flex items-center justify-center hover:bg-neon hover:text-dark-950 transition-colors cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+          <img src={expandedImage} alt="Imagem ampliada" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl shadow-neon/10 cursor-default" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
