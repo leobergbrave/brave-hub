@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
-import { Plus, Trash2, Save, Upload, Loader2, AlertTriangle, Search } from 'lucide-react';
+import { Plus, Trash2, Save, Upload, Loader2, AlertTriangle, Search, ImagePlus } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
 
 export default function ProdutosTab() {
   const [produtos, setProdutos] = useState([]);
@@ -10,6 +11,7 @@ export default function ProdutosTab() {
   const [form, setForm] = useState({ codigo_sku: '', nome: '', preco: '', peso_kg: '', url_imagem: '', linha: 'Geral' });
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [showCsv, setShowCsv] = useState(false);
 
@@ -35,6 +37,46 @@ export default function ProdutosTab() {
     setEditId(null);
     setSaving(false);
     load();
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingMedia(true);
+    try {
+      let fileToUpload = file;
+
+      // Compress if it's an image
+      if (file.type.startsWith('image/')) {
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1200,
+          useWebWorker: true,
+        };
+        fileToUpload = await imageCompression(file, options);
+      }
+
+      // Generate unique name
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { error } = await supabase.storage.from('produtos_media').upload(fileName, fileToUpload);
+      if (error) throw error;
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage.from('produtos_media').getPublicUrl(fileName);
+      
+      setForm({ ...form, url_imagem: publicUrlData.publicUrl });
+    } catch (err) {
+      console.error('Error uploading media:', err);
+      alert('Erro ao fazer upload da mídia: ' + err.message);
+    } finally {
+      setUploadingMedia(false);
+      // Reset input value to allow uploading the same file again if needed
+      e.target.value = null;
+    }
   };
 
   const handleEdit = (p) => {
@@ -121,7 +163,15 @@ export default function ProdutosTab() {
             {['Geral','Cardio','Rigs','Pisos','Acessórios','Barras','Anilhas','Kettlebells','Boxes'].map(l => <option key={l}>{l}</option>)}
           </select>
         </div>
-        <input placeholder="URL da Imagem" value={form.url_imagem} onChange={e => setForm({...form, url_imagem: e.target.value})} className="w-full mt-3 bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
+        <div className="flex gap-2 mt-3 items-center">
+          <input placeholder="URL da Imagem ou Vídeo" value={form.url_imagem} onChange={e => setForm({...form, url_imagem: e.target.value})} className="flex-1 bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
+          
+          <label className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${uploadingMedia ? 'bg-dark-700 text-zinc-500' : 'bg-dark-800 border border-dark-600 text-zinc-300 hover:bg-dark-700 hover:text-white'}`}>
+            {uploadingMedia ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+            {uploadingMedia ? 'Enviando...' : 'Anexar Mídia'}
+            <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} disabled={uploadingMedia} />
+          </label>
+        </div>
         <div className="flex gap-2 mt-3">
           <button onClick={handleSave} disabled={saving || !form.nome} className="flex items-center gap-2 bg-neon text-dark-950 text-sm font-bold px-5 py-2.5 rounded-xl hover:shadow-lg hover:shadow-neon/25 transition-all cursor-pointer disabled:opacity-30">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {editId ? 'Atualizar' : 'Salvar'}
