@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send } from 'lucide-react';
+import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone } from 'lucide-react';
 
 export default function MarketingTab() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
+  const [testing, setTesting] = useState(null);
   const [pendingDisparos, setPendingDisparos] = useState([]);
   const [sending, setSending] = useState(false);
 
@@ -107,6 +108,42 @@ export default function MarketingTab() {
     load(); // Refresh lists
   };
 
+  const handleTestar = async (template) => {
+    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+    if (!webhookUrl) {
+      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada!");
+      return;
+    }
+
+    const telefone = window.prompt("Digite o número do seu WhatsApp com DDD para receber o teste (ex: 11999999999):");
+    if (!telefone) return;
+
+    setTesting(template.id);
+    try {
+      const mensagemFormatada = template.mensagem.replace(/{cliente}/g, "BOX TESTE BRAVE");
+      
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente: "BOX TESTE BRAVE",
+          telefone: telefone.replace(/\D/g, ''),
+          consultor: "Consultor de Teste",
+          campanha: `[TESTE] ${template.nome}`,
+          mensagem_formatada: mensagemFormatada,
+          media_url: template.media_url || ''
+        })
+      });
+
+      alert("✅ Teste enviado com sucesso! Verifique seu WhatsApp em alguns instantes.");
+    } catch (err) {
+      console.error("Erro no teste:", err);
+      alert("❌ Erro ao enviar teste. Verifique o console.");
+    } finally {
+      setTesting(null);
+    }
+  };
+
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
@@ -203,7 +240,14 @@ export default function MarketingTab() {
                   <p className="text-[10px] text-zinc-500 mt-1">Opcional. Adicione o link de um vídeo, PDF ou imagem para enviar junto com a mensagem.</p>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end gap-2 pt-2">
+                  <button 
+                    onClick={() => handleTestar(t)}
+                    disabled={testing === t.id}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg border border-dark-600 text-zinc-300 font-bold text-sm hover:bg-dark-700 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {testing === t.id ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Smartphone className="w-4 h-4" /> Testar no WhatsApp</>}
+                  </button>
                   <button 
                     onClick={() => handleSave(t.id)}
                     disabled={saving === t.id}
