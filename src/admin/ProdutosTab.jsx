@@ -54,14 +54,19 @@ export default function ProdutosTab() {
     const lines = csvText.trim().split('\n');
     const rows = [];
     for (let i = 0; i < lines.length; i++) {
-      const cols = lines[i].split(';').map(c => c.trim());
+      // Support either semicolon or comma as separator
+      const separator = lines[i].includes(';') ? ';' : ',';
+      const cols = lines[i].split(separator).map(c => c.trim());
       if (cols.length < 3) continue;
-      // Format: SKU;Nome;Preco;Peso;Linha
+      
+      const precoStr = cols[2] || '0';
+      const pesoStr = cols[3] || '';
+      
       rows.push({
         codigo_sku: cols[0] || null,
         nome: cols[1],
-        preco: Number(cols[2]?.replace(',', '.')) || 0,
-        peso_kg: cols[3] ? Number(cols[3]?.replace(',', '.')) : null,
+        preco: Number(precoStr.replace(',', '.')) || 0,
+        peso_kg: pesoStr && pesoStr !== '0' ? Number(pesoStr.replace(',', '.')) : null,
         linha: cols[4] || 'Geral',
       });
     }
@@ -91,8 +96,8 @@ export default function ProdutosTab() {
       {/* CSV Import */}
       {showCsv && (
         <div className="bg-dark-800/60 border border-purple-500/30 rounded-2xl p-5 mb-6">
-          <p className="text-xs text-zinc-400 mb-2">Formato: <code className="text-purple-400">SKU;Nome;Preço;Peso;Linha</code> (uma linha por produto)</p>
-          <textarea value={csvText} onChange={e => setCsvText(e.target.value)} rows={5} placeholder="BIKE01;BikeErg Concept 2;18900;30;Cardio" className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 mb-3 font-mono" />
+          <p className="text-xs text-zinc-400 mb-2">Formato: <code className="text-purple-400">SKU, Nome, Preço, Peso, Linha</code> (separado por vírgula ou ponto e vírgula)</p>
+          <textarea value={csvText} onChange={e => setCsvText(e.target.value)} rows={5} placeholder="BIKE01, BikeErg Concept 2, 18900, 30, Cardio" className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 mb-3 font-mono" />
           <button onClick={handleCsvImport} disabled={saving} className="flex items-center gap-2 bg-purple-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-purple-500 transition-all cursor-pointer disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Importar
           </button>
