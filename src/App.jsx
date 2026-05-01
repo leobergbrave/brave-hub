@@ -185,16 +185,9 @@ export default function App() {
       {/* Header */}
       <header className="relative z-10 border-b border-dark-700/60">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon/20 to-neon/5 border border-neon/20 flex items-center justify-center animate-pulse-neon">
-              <Dumbbell className="w-5 h-5 text-neon" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">
-                BRAVE <span className="text-neon">HUB</span>
-              </h1>
-              <p className="text-[11px] font-medium text-dark-500 tracking-widest uppercase">Gerador de Orçamentos</p>
-            </div>
+          <div className="flex items-center gap-4">
+            <img src="/logo.png" alt="Brave Hub Logo" className="h-10 object-contain" />
+            <p className="text-[11px] font-medium text-dark-500 tracking-widest uppercase mt-1">Gerador de Orçamentos</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-dark-500">
             <Sparkles className="w-4 h-4" />

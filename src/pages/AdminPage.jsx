@@ -34,8 +34,8 @@ export default function AdminPage() {
       <aside className="w-56 shrink-0 bg-dark-900/80 border-r border-dark-700/50 flex flex-col">
         <div className="px-5 py-6 border-b border-dark-700/40">
           <div className="flex items-center gap-2">
-            <Dumbbell className="w-5 h-5 text-neon" />
-            <span className="text-sm font-bold text-white tracking-tight">BRAVE <span className="text-neon">ADMIN</span></span>
+            <img src="/logo.png" alt="Brave Hub Logo" className="h-8 object-contain" />
+            <span className="text-[10px] font-bold text-neon tracking-widest uppercase mt-1 px-2 py-0.5 rounded-full bg-neon/10">Admin</span>
           </div>
         </div>
         <nav className="flex-1 py-4 space-y-1 px-3">
