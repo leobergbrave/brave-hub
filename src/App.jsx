@@ -365,7 +365,7 @@ export default function App() {
       const slug = `${slugBase}-${slugId}`;
 
       const payload = {
-        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, descontoCartaoItem: i.descontoCartaoItem })),
+        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, preco_avista: i.preco_avista || null, preco_prazo: i.preco_prazo || null, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, descontoCartaoItem: i.descontoCartaoItem })),
         estado,
         zona,
         telefoneCliente,
@@ -1163,15 +1163,25 @@ export default function App() {
                 </div>
 
                 {/* Preview */}
-                {(descontoAvista > 0 || descontoCartao > 0) && itens.length > 0 && (
+                {itens.length > 0 && (
                   <div className="bg-dark-900/60 border border-emerald-500/20 rounded-xl px-4 py-3 space-y-1.5 mt-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-500">💵 À Vista{descontoAvista > 0 ? ` (-${descontoAvista}%)` : ''}</span>
-                      <span className="text-sm font-bold text-emerald-400">{formatCurrency(descontoAvista > 0 ? totalProjeto * (1 - descontoAvista / 100) : totalProjeto)}</span>
+                      <span className="text-sm font-bold text-emerald-400">{formatCurrency(
+                        itens.reduce((acc, i) => {
+                          if (i.preco_avista) return acc + i.preco_avista * i.quantidade;
+                          return acc + i.preco * (1 - descontoAvista / 100) * i.quantidade;
+                        }, 0) + freteFinal
+                      )}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-500">💳 Cartão {parcelasCartao}x{descontoCartao > 0 ? ` (-${descontoCartao}%)` : ''}</span>
-                      <span className="text-sm font-bold text-white">{formatCurrency(descontoCartao > 0 ? totalProjeto * (1 - descontoCartao / 100) : totalProjeto)}</span>
+                      <span className="text-sm font-bold text-white">{formatCurrency(
+                        itens.reduce((acc, i) => {
+                          if (i.preco_prazo) return acc + i.preco_prazo * i.quantidade;
+                          return acc + i.preco * (1 - descontoCartao / 100) * i.quantidade;
+                        }, 0) + freteFinal
+                      )}</span>
                     </div>
                   </div>
                 )}
@@ -1294,6 +1304,13 @@ export default function App() {
                             ) : (
                               <div className="flex items-center gap-1">
                                 <span className="text-zinc-500">{item.quantidade}x {formatCurrency(item.preco)}</span>
+                                {(item.preco_avista || item.preco_prazo) && (
+                                  <span className="text-[10px] text-emerald-400/70 ml-1">
+                                    {item.preco_avista ? `À vista: ${formatCurrency(item.preco_avista)}` : ''}
+                                    {item.preco_avista && item.preco_prazo ? ' · ' : ''}
+                                    {item.preco_prazo ? `Prazo: ${formatCurrency(item.preco_prazo)}` : ''}
+                                  </span>
+                                )}
                                 <button onClick={() => handleIniciarEdicao(item)} className="text-dark-500 hover:text-neon transition-colors"><Edit2 className="w-2.5 h-2.5" /></button>
                               </div>
                             )}

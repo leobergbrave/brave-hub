@@ -114,6 +114,10 @@ export default function OrcamentoPage() {
         const precoOriginal = prod.preco;
         const descontoUnitario = precoOriginal > precoVenda ? precoOriginal - precoVenda : 0;
         
+        // Fixed prices: from payload first, then from product DB
+        const precoAvista = itemRaw.preco_avista || prod.preco_avista || null;
+        const precoPrazo = itemRaw.preco_prazo || prod.preco_prazo || null;
+        
         return {
           id: prod.id,
           nome: prod.nome,
@@ -121,6 +125,8 @@ export default function OrcamentoPage() {
           quantidade: quantidade,
           precoOriginal: precoOriginal,
           preco: precoVenda,
+          preco_avista: precoAvista,
+          preco_prazo: precoPrazo,
           descontoUnitario: descontoUnitario,
           peso: prod.peso_kg || 0
         };
@@ -140,9 +146,22 @@ export default function OrcamentoPage() {
       const descCartao = condicoes.descontoCartao || 0;
       const parcelas = condicoes.parcelas || 12;
 
-      const totalAvista = descAvista > 0 ? total * (1 - descAvista / 100) : total;
-      const totalCartao = descCartao > 0 ? total * (1 - descCartao / 100) : total;
+      // Hybrid calculation: fixed price per product when available, % fallback
+      const subtotalAvista = itensCompletos.reduce((acc, i) => {
+        if (i.preco_avista) return acc + i.preco_avista * i.quantidade;
+        return acc + i.preco * (1 - descAvista / 100) * i.quantidade;
+      }, 0);
+      const totalAvista = subtotalAvista + frete;
+
+      const subtotalCartao = itensCompletos.reduce((acc, i) => {
+        if (i.preco_prazo) return acc + i.preco_prazo * i.quantidade;
+        return acc + i.preco * (1 - descCartao / 100) * i.quantidade;
+      }, 0);
+      const totalCartao = subtotalCartao + frete;
       const parcelaValor = totalCartao / parcelas;
+
+      // Check if any product has fixed pricing
+      const temPrecoFixo = itensCompletos.some(i => i.preco_avista || i.preco_prazo);
 
       return {
         cliente: clienteParam,
@@ -160,7 +179,8 @@ export default function OrcamentoPage() {
         parcelas,
         totalAvista,
         totalCartao,
-        parcelaValor
+        parcelaValor,
+        temPrecoFixo
       };
     } catch (e) {
       console.error('Erro ao processar orçamento:', e);
@@ -388,6 +408,22 @@ export default function OrcamentoPage() {
                   <span className="text-[11px] sm:text-xs text-zinc-500">
                     Peso: <span className="text-zinc-300 font-semibold">{item.peso * item.quantidade} kg</span>
                   </span>
+                  {(item.preco_avista || item.preco_prazo) && (
+                    <>
+                      {item.preco_avista && (
+                        <span className="text-[11px] sm:text-xs flex items-center gap-1">
+                          <span className="text-emerald-400/60">💵</span>
+                          <span className="text-emerald-400 font-semibold">{fmt(item.preco_avista)}</span>
+                        </span>
+                      )}
+                      {item.preco_prazo && (
+                        <span className="text-[11px] sm:text-xs flex items-center gap-1">
+                          <span className="text-blue-400/60">💳</span>
+                          <span className="text-blue-400 font-semibold">{fmt(item.preco_prazo)}</span>
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
 

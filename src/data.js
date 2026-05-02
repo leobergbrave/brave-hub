@@ -13,7 +13,7 @@ export function formatWeight(kg) {
 export async function fetchProdutos() {
   const { data, error } = await supabase
     .from('produtos')
-    .select('id, codigo_sku, nome, preco, peso_kg, url_imagem')
+    .select('id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem')
     .order('nome');
 
   if (error) throw error;
