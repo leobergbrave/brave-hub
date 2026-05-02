@@ -868,7 +868,7 @@ export default function App() {
                         e.currentTarget.classList.remove('border-purple-500/50', 'bg-purple-500/5');
                         const f = e.dataTransfer.files?.[0];
                         if (f && (f.type === 'application/pdf' || f.name.endsWith('.pdf'))) {
-                          if (f.size > 10 * 1024 * 1024) { showToastMessage('PDF muito grande. Limite: 10 MB.', true); return; }
+                          if (f.size > 50 * 1024 * 1024) { showToastMessage('PDF muito grande. Limite: 50 MB.', true); return; }
                           setPdfFile(f);
                         } else {
                           showToastMessage('Apenas arquivos PDF são aceitos.', true);
@@ -877,11 +877,11 @@ export default function App() {
                     >
                       <FileText className="w-8 h-8 text-dark-500 group-hover:text-purple-400 transition-colors mb-2" />
                       <span className="text-xs text-dark-500 group-hover:text-zinc-400 transition-colors">Arraste um PDF aqui ou clique para selecionar</span>
-                      <span className="text-[10px] text-dark-600 mt-1">Limite: 10 MB</span>
+                      <span className="text-[10px] text-dark-600 mt-1">Limite: 50 MB</span>
                       <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f) {
-                          if (f.size > 10 * 1024 * 1024) { showToastMessage('PDF muito grande. Limite: 10 MB.', true); return; }
+                          if (f.size > 50 * 1024 * 1024) { showToastMessage('PDF muito grande. Limite: 50 MB.', true); return; }
                           setPdfFile(f);
                         }
                       }} />
