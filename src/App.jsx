@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
@@ -47,6 +48,7 @@ export default function App() {
   const [nomeConsultor, setNomeConsultor] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
+  const [editingSlug, setEditingSlug] = useState(null); // slug of the quote being edited
   const [toastMsg, setToastMsg] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [toastError, setToastError] = useState(false);
@@ -126,6 +128,61 @@ export default function App() {
   useEffect(() => {
     fetchHistorico();
   }, [fetchHistorico]);
+
+  // ── Edit mode: load quote from ?edit=slug ──
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const editSlug = searchParams.get('edit');
+    if (!editSlug || !produtos.length) return;
+
+    (async () => {
+      try {
+        const { data: orc, error } = await supabase.from('orcamentos_salvos').select('*').eq('slug', editSlug).single();
+        if (error || !orc) return;
+
+        setEditingSlug(editSlug);
+        setNomeCliente(orc.cliente || '');
+        setNomeConsultor(orc.consultor || '');
+
+        const p = orc.payload || {};
+        setEstado(p.estado || '');
+        setZona(p.zona || '');
+        setTelefoneCliente(p.telefoneCliente || '');
+
+        // Payment conditions
+        const c = p.condicoes || {};
+        setDescontoAvista(c.descontoAvista || 0);
+        setDescontoCartao(c.descontoCartao || 0);
+        setParcelasCartao(c.parcelas || 12);
+        setPersonalizarPorProduto(c.personalizarPorProduto || false);
+
+        // Items — merge with current product data
+        const itensCarregados = (p.itens || []).map(itemSalvo => {
+          const prodDb = produtos.find(pr => pr.id === itemSalvo.id);
+          return {
+            id: itemSalvo.id,
+            nome: itemSalvo.nome || prodDb?.nome || 'Produto',
+            preco: itemSalvo.preco ?? prodDb?.preco ?? 0,
+            preco_avista: itemSalvo.preco_avista ?? prodDb?.preco_avista ?? null,
+            preco_prazo: itemSalvo.preco_prazo ?? prodDb?.preco_prazo ?? null,
+            peso_kg: itemSalvo.peso_kg ?? prodDb?.peso_kg ?? 0,
+            url_imagem: itemSalvo.url_imagem ?? prodDb?.url_imagem ?? '',
+            codigo_sku: itemSalvo.codigo_sku ?? prodDb?.codigo_sku ?? '',
+            quantidade: itemSalvo.quantidade ?? itemSalvo.q ?? 1,
+            descontoAvistaItem: itemSalvo.descontoAvistaItem || 0,
+            descontoCartaoItem: itemSalvo.descontoCartaoItem || 0,
+          };
+        });
+        setItens(itensCarregados);
+        setLinkGerado('');
+
+        // Clear the ?edit param so it doesn't re-trigger
+        setSearchParams({}, { replace: true });
+      } catch (err) {
+        console.error('Erro ao carregar orçamento para edição:', err);
+      }
+    })();
+  }, [searchParams, produtos]);
 
   // ── Derived calculations ──
   const pesoTotal = useMemo(
@@ -1344,6 +1401,14 @@ export default function App() {
                 )}
               </div>
 
+              {/* Editing banner */}
+              {editingSlug && (
+                <div className="mx-6 mt-4 flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-2.5">
+                  <Edit2 className="w-4 h-4 text-blue-400 shrink-0" />
+                  <p className="text-xs text-blue-300 font-medium">Editando orçamento existente. Ao gerar o link, um <strong>novo link</strong> será criado com as alterações.</p>
+                </div>
+              )}
+
               {/* Painel de Resumo */}
               <div className="border-t border-dark-700/50 bg-dark-900/40 px-6 py-5 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1369,7 +1434,7 @@ export default function App() {
                 </div>
                 <button id="btn-gerar-link" onClick={handleGerarLink} disabled={itens.length === 0}
                   className="w-full mt-3 flex items-center justify-center gap-2.5 bg-gradient-to-r from-orange-dim to-orange-accent text-white font-bold text-sm py-4 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-orange-accent/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer">
-                  <Link2 className="w-5 h-5" />Gerar Link para o Cliente
+                  <Link2 className="w-5 h-5" />{editingSlug ? 'Regerar Link (Edição)' : 'Gerar Link para o Cliente'}
                 </button>
                 {linkGerado && (
                   <div className="mt-3 bg-dark-800 border border-dark-600 rounded-xl p-3 animate-fade-in-up">

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
-import { Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle, Edit2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_MAP = {
   Pendente: { icon: Clock, color: 'text-amber-400', bg: 'bg-amber-400/10' },
@@ -14,6 +15,7 @@ export default function OrcamentosTab() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('Todos');
   const [detail, setDetail] = useState(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +111,7 @@ export default function OrcamentosTab() {
                 <div className="flex items-center gap-2">
                   <button onClick={() => setDetail(detail === o.id ? null : o.id)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white px-2 py-1 rounded hover:bg-dark-700 cursor-pointer"><Eye className="w-3 h-3" /> {detail === o.id ? 'Fechar' : 'Detalhes'}</button>
                   <button onClick={() => copyLink(o.slug)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-neon px-2 py-1 rounded hover:bg-dark-700 cursor-pointer"><Copy className="w-3 h-3" /> Link</button>
+                  <button onClick={() => navigate(`/?edit=${o.slug}`)} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-500/10 cursor-pointer"><Edit2 className="w-3 h-3" /> Editar</button>
                   {statusStr === 'Pendente' && <button onClick={() => changeStatus(o, 'Aprovado')} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2 py-1 rounded hover:bg-emerald-500/10 cursor-pointer"><CheckCircle2 className="w-3 h-3" /> Aprovar</button>}
                   {statusStr === 'Pendente' && <button onClick={() => changeStatus(o, 'Expirado')} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer"><XCircle className="w-3 h-3" /> Expirar</button>}
                   <button onClick={() => handleDelete(o.id)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400 px-2 py-1 rounded hover:bg-dark-700 cursor-pointer ml-auto"><Trash2 className="w-3 h-3" /> Excluir</button>
