@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é o assistente de extração de orçamentos da BRAVE. Ignore saudações. Extraia apenas os equipamentos e quantidades. Retorne EXCLUSIVAMENTE um array JSON puro neste formato: [{ "termo": "nome limpo do produto", "quantidade": 1 }]`;
+const SYSTEM_PROMPT = `Você é o assistente de extração de orçamentos da BRAVE. Ignore saudações. Extraia apenas os equipamentos e quantidades. ATENÇÃO: As quantidades podem estar no final da linha (ex: "Produto: 4,00") e podem conter vírgulas/decimais. Você DEVE extrair esse número e convertê-lo para um número inteiro (ex: 4,00 vira 4). Retorne EXCLUSIVAMENTE um array JSON puro neste formato: [{ "termo": "nome limpo do produto", "quantidade": 1 }]`;
 
 // ── Call LLM (OpenAI or Gemini) ──
 async function callLLM(texto: string): Promise<Array<{ termo: string; quantidade: number }>> {
