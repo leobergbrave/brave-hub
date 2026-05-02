@@ -4,7 +4,7 @@ import { formatCurrency } from '../data';
 import { Plus, Trash2, Save, Upload, Loader2, AlertTriangle, Search, ImagePlus } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 
-const EditableCell = ({ value, onSave, type = "text", className = "", options = null }) => {
+const EditableCell = ({ value, onSave, type = "text", className = "", options = null, placeholder = "" }) => {
   const [val, setVal] = useState(value ?? '');
   useEffect(() => { setVal(value ?? ''); }, [value]);
 
@@ -31,9 +31,10 @@ const EditableCell = ({ value, onSave, type = "text", className = "", options = 
     <input 
       type={type}
       value={val}
+      placeholder={placeholder}
       onChange={e => setVal(e.target.value)}
       onBlur={handleBlur}
-      className={`bg-transparent px-1 border-b border-transparent hover:border-dark-600 focus:border-neon focus:outline-none w-full ${className}`}
+      className={`bg-transparent px-1 border-b border-transparent hover:border-dark-600 focus:border-neon focus:outline-none w-full placeholder:text-dark-600 placeholder:text-[10px] ${className}`}
     />
   );
 };
@@ -69,8 +70,13 @@ export default function ProdutosTab() {
   const handleInlineUpdate = async (id, field, value) => {
     let finalValue = value;
     if (field === 'preco' || field === 'preco_avista' || field === 'preco_prazo' || field === 'peso_kg') {
-      finalValue = Number(value.toString().replace(',', '.'));
-      if (isNaN(finalValue)) finalValue = null;
+      const strVal = value.toString().trim();
+      if (strVal === '' && (field === 'preco_avista' || field === 'preco_prazo' || field === 'peso_kg')) {
+        finalValue = null;
+      } else {
+        finalValue = Number(strVal.replace(',', '.'));
+        if (isNaN(finalValue)) finalValue = null;
+      }
     }
     const { error } = await supabase.from('produtos').update({ [field]: finalValue }).eq('id', id);
     if (!error) {
@@ -292,14 +298,14 @@ export default function ProdutosTab() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      {p.preco_avista != null && <span className="text-emerald-500/50 text-xs">R$</span>}
-                      <EditableCell value={p.preco_avista ?? ''} onSave={val => handleInlineUpdate(p.id, 'preco_avista', val)} className="text-right text-emerald-400 font-semibold w-20" />
+                      <span className="text-emerald-500/50 text-xs">R$</span>
+                      <EditableCell value={p.preco_avista ?? ''} onSave={val => handleInlineUpdate(p.id, 'preco_avista', val)} placeholder="—" className="text-right text-emerald-400 font-semibold w-20" />
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      {p.preco_prazo != null && <span className="text-blue-500/50 text-xs">R$</span>}
-                      <EditableCell value={p.preco_prazo ?? ''} onSave={val => handleInlineUpdate(p.id, 'preco_prazo', val)} className="text-right text-blue-400 font-semibold w-20" />
+                      <span className="text-blue-500/50 text-xs">R$</span>
+                      <EditableCell value={p.preco_prazo ?? ''} onSave={val => handleInlineUpdate(p.id, 'preco_prazo', val)} placeholder="—" className="text-right text-blue-400 font-semibold w-20" />
                     </div>
                   </td>
                   <td className="px-4 py-3">
