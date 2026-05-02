@@ -339,7 +339,7 @@ export default function OrcamentoPage() {
       <section className="relative z-10 max-w-3xl mx-auto px-6 py-8">
         <div className="flex flex-col sm:flex-row items-center gap-4 mb-8 bg-dark-900/50 p-2 rounded-2xl border border-dark-700/50">
           <button onClick={() => setModoPagamento('avista')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${modoPagamento === 'avista' ? 'bg-neon text-dark-950 shadow-lg shadow-neon/20' : 'text-zinc-400 hover:text-white'}`}>
-            <Banknote className="w-4 h-4" /> À Vista {orcamento.descAvista > 0 && `(-${orcamento.descAvista}%)`}
+            <Banknote className="w-4 h-4" /> À Vista
           </button>
           <button onClick={() => setModoPagamento('cartao')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${modoPagamento === 'cartao' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'text-zinc-400 hover:text-white'}`}>
             <CreditCard className="w-4 h-4" /> Cartão {orcamento.parcelas}x
