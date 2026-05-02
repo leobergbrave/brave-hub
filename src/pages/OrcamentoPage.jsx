@@ -23,6 +23,7 @@ export default function OrcamentoPage() {
   const [showToast, setShowToast] = useState(false);
   const [pulseBtn, setPulseBtn] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
+  const [modoPagamento, setModoPagamento] = useState('avista');
   
   const [showModalNegociacao, setShowModalNegociacao] = useState(false);
   const [motivoNegociacao, setMotivoNegociacao] = useState(null);
@@ -270,6 +271,10 @@ export default function OrcamentoPage() {
     );
   }
 
+  const descAvista = orcamento?.descAvista || 0;
+  const descCartao = orcamento?.descCartao || 0;
+  const totalModo = modoPagamento === 'avista' ? orcamento.totalAvista : orcamento.totalCartao;
+
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
       {/* ── Ambient ── */}
@@ -329,111 +334,43 @@ export default function OrcamentoPage() {
       </div>
 
       {/* ══════════════════════════════════════════
-          2. LISTA DE EQUIPAMENTOS
+          2. TOGGLE DE PAGAMENTO + LISTA
           ══════════════════════════════════════════ */}
       <section className="relative z-10 max-w-3xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-2 mb-6">
-          <Package className="w-5 h-5 text-neon" />
-          <h2 className="text-sm font-bold text-white uppercase tracking-widest">
-            Equipamentos do Projeto
-          </h2>
+        <div className="flex flex-col sm:flex-row items-center gap-4 mb-8 bg-dark-900/50 p-2 rounded-2xl border border-dark-700/50">
+          <button onClick={() => setModoPagamento('avista')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${modoPagamento === 'avista' ? 'bg-neon text-dark-950 shadow-lg shadow-neon/20' : 'text-zinc-400 hover:text-white'}`}>
+            <Banknote className="w-4 h-4" /> À Vista {orcamento.descAvista > 0 && `(-${orcamento.descAvista}%)`}
+          </button>
+          <button onClick={() => setModoPagamento('cartao')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${modoPagamento === 'cartao' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'text-zinc-400 hover:text-white'}`}>
+            <CreditCard className="w-4 h-4" /> Cartão {orcamento.parcelas}x
+          </button>
         </div>
 
         <div className="space-y-4">
           {orcamento.itens.map((item, idx) => (
-            <div
-              key={item.id}
-              className="group bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:gap-5 sm:items-center hover:border-dark-600 transition-all animate-fade-in-up"
-              style={{ animationDelay: `${idx * 0.1}s` }}
-            >
+            <div key={item.id} className="group bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:gap-5 sm:items-center hover:border-dark-600 transition-all animate-fade-in-up" style={{ animationDelay: `${idx * 0.1}s` }}>
               <div className="flex items-center gap-4">
-                {/* Image / Placeholder */}
-                <div 
-                  className={`shrink-0 w-16 h-16 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`}
-                  onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
-                >
+                <div className={`shrink-0 w-16 h-16 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`} onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}>
                   {(() => {
-                    if (!item.url_imagem) {
-                      return (
-                        <div className="text-center">
-                          <Package className="w-5 h-5 sm:w-6 sm:h-6 text-dark-500 mx-auto" />
-                          <p className="text-[7px] sm:text-[8px] text-dark-500 mt-1 font-medium">FOTO</p>
-                        </div>
-                      );
-                    }
+                    if (!item.url_imagem) return <div className="text-center"><Package className="w-5 h-5 sm:w-6 sm:h-6 text-dark-500 mx-auto" /></div>;
                     const media = parseMediaUrl(item.url_imagem);
-                    if (media.type === 'image') {
-                      return <img src={media.url} alt={item.nome} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />;
-                    } else if (media.type === 'folder') {
-                      return (
-                        <div className="text-center group-hover:scale-110 transition-transform duration-500">
-                          <FolderOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 mx-auto" />
-                          <p className="text-[7px] sm:text-[8px] text-blue-400 mt-1 font-bold tracking-widest">FOTOS</p>
-                        </div>
-                      );
-                    }
+                    return media.type === 'image' ? <img src={media.url} alt={item.nome} className="w-full h-full object-cover" /> : <FolderOpen className="w-5 h-5 text-blue-400" />;
                   })()}
                 </div>
-                
-                {/* Mobile Title & Total */}
                 <div className="flex-1 sm:hidden">
-                  <p className="text-sm font-bold text-white leading-tight mb-1 line-clamp-2">{item.nome}</p>
-                  <p className="text-lg font-black text-neon">{fmt(item.preco * item.quantidade)}</p>
+                  <p className="text-sm font-bold text-white">{item.nome}</p>
                 </div>
               </div>
-
-              {/* Info Desktop + Meta Mobile */}
               <div className="flex-1 min-w-0">
-                <p className="hidden sm:block text-base sm:text-lg font-bold text-white truncate mb-1.5">
-                  {item.nome}
-                </p>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-dark-900/40 sm:bg-transparent p-2.5 sm:p-0 rounded-lg border border-dark-700/30 sm:border-0">
-                  <span className="text-[11px] sm:text-xs text-zinc-500">
-                    Qtd: <span className="text-zinc-300 font-semibold">{item.quantidade}</span>
-                  </span>
-                  <span className="text-[11px] sm:text-xs text-zinc-500 flex items-center gap-1 flex-wrap">
-                    Unit: 
-                    {item.descontoUnitario > 0 ? (
-                      <>
-                        <span className="text-zinc-500 line-through text-[9px] sm:text-[10px] ml-0.5">{fmt(item.precoOriginal)}</span>
-                        <span className="text-neon font-bold ml-1">{fmt(item.preco)}</span>
-                        <span className="bg-neon/10 text-neon border border-neon/20 text-[9px] px-1 py-0.5 rounded uppercase font-bold tracking-wider ml-1">
-                          -{Math.round((item.descontoUnitario / item.precoOriginal) * 100)}%
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-zinc-300 font-semibold">{fmt(item.preco)}</span>
-                    )}
-                  </span>
-                  <span className="text-[11px] sm:text-xs text-zinc-500">
-                    Peso: <span className="text-zinc-300 font-semibold">{item.peso * item.quantidade} kg</span>
-                  </span>
-                  {(item.preco_avista || item.preco_prazo) && (
-                    <>
-                      {item.preco_avista && (
-                        <span className="text-[11px] sm:text-xs flex items-center gap-1">
-                          <span className="text-emerald-400/60">💵</span>
-                          <span className="text-emerald-400 font-semibold">{fmt(item.preco_avista)}</span>
-                        </span>
-                      )}
-                      {item.preco_prazo && (
-                        <span className="text-[11px] sm:text-xs flex items-center gap-1">
-                          <span className="text-blue-400/60">💳</span>
-                          <span className="text-blue-400 font-semibold">{fmt(item.preco_prazo)}</span>
-                        </span>
-                      )}
-                    </>
-                  )}
+                <p className="hidden sm:block text-base font-bold text-white mb-1.5">{item.nome}</p>
+                <div className="flex flex-wrap items-center gap-4 text-zinc-400 text-xs">
+                  <span>Qtd: {item.quantidade}</span>
+                  <span>{modoPagamento === 'avista' ? (item.preco_avista ? fmt(item.preco_avista) : fmt(item.preco * (1 - descAvista / 100))) : (item.preco_prazo ? fmt(item.preco_prazo) : fmt(item.preco * (1 - descCartao / 100)))} un</span>
                 </div>
               </div>
-
-              {/* Subtotal Desktop */}
-              <div className="hidden sm:block text-right shrink-0">
-                <p className="text-[10px] text-zinc-500 uppercase font-semibold tracking-wider mb-0.5">
-                  Subtotal
-                </p>
-                <p className="text-lg sm:text-xl font-black text-neon">
-                  {fmt(item.preco * item.quantidade)}
+              <div className="text-right">
+                <p className="text-lg font-black text-neon">
+                  {fmt((modoPagamento === 'avista' ? (item.preco_avista || item.preco * (1 - descAvista / 100)) : (item.preco_prazo || item.preco * (1 - descCartao / 100))) * item.quantidade)}
                 </p>
               </div>
             </div>
@@ -446,7 +383,6 @@ export default function OrcamentoPage() {
           ══════════════════════════════════════════ */}
       <section className="relative z-10 max-w-3xl mx-auto px-6 pb-6">
         <div className="bg-dark-800/80 backdrop-blur-md border border-dark-700/60 rounded-2xl p-6 sm:p-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          {/* Mini header */}
           <div className="flex items-center gap-2 mb-6">
             <div className="w-8 h-8 rounded-lg bg-neon/10 flex items-center justify-center">
               <Award className="w-4 h-4 text-neon" />
@@ -456,78 +392,52 @@ export default function OrcamentoPage() {
             </h3>
           </div>
 
-          {/* Rows */}
           <div className="space-y-4">
-            <SummaryRow
-              icon={<Weight className="w-4 h-4" />}
-              label="Peso Total da Carga"
-              value={`${orcamento.pesoTotal} kg`}
-            />
-            <SummaryRow
-              icon={<Package className="w-4 h-4" />}
-              label="Subtotal dos Equipamentos"
-              value={fmt(orcamento.subtotal + orcamento.descontoTotal)}
-            />
-            {orcamento.descontoTotal > 0 && (
-              <SummaryRow
-                icon={<BadgeCheck className="w-4 h-4 text-neon" />}
-                label="Desconto Especial Aplicado"
-                value={`- ${fmt(orcamento.descontoTotal)}`}
-                valueClass="text-neon font-bold"
-              />
-            )}
-            <SummaryRow
-              icon={<Truck className="w-4 h-4" />}
-              label="Frete Aplicado"
-              value={fmt(orcamento.frete)}
-              valueClass="text-orange-accent"
-            />
+            <SummaryRow icon={<Weight className="w-4 h-4" />} label="Peso Total da Carga" value={`${orcamento.pesoTotal} kg`} />
+            <SummaryRow icon={<Package className="w-4 h-4" />} label="Subtotal dos Equipamentos" value={fmt(modoPagamento === 'avista' ? (orcamento.totalAvista - orcamento.frete) : (orcamento.totalCartao - orcamento.frete))} />
+            <SummaryRow icon={<Truck className="w-4 h-4" />} label="Frete Aplicado" value={fmt(orcamento.frete)} valueClass="text-orange-accent" />
           </div>
 
-          {/* Divider */}
           <div className="my-6 h-px bg-gradient-to-r from-transparent via-dark-500/50 to-transparent" />
 
-          {/* Payment Options — sempre exibe */}
-          <div className="space-y-4">
-            {/* À Vista */}
-            <div className={`relative ${orcamento.descAvista > 0 ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30' : 'bg-dark-900/40 border border-dark-600'} rounded-2xl p-4 sm:p-5 overflow-hidden`}>
-              {orcamento.descAvista > 0 && <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-[40px] pointer-events-none" />}
-              <div className="relative flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${orcamento.descAvista > 0 ? 'bg-emerald-500/15' : 'bg-dark-700'} flex items-center justify-center shrink-0`}>
-                    <Banknote className={`w-4 h-4 sm:w-5 sm:h-5 ${orcamento.descAvista > 0 ? 'text-emerald-400' : 'text-zinc-400'}`} />
-                  </div>
-                  <div>
-                    <p className={`text-[11px] sm:text-xs font-bold uppercase tracking-wider ${orcamento.descAvista > 0 ? 'text-emerald-400' : 'text-zinc-300'}`}>À Vista (PIX / Boleto)</p>
-                    {orcamento.descAvista > 0 && <p className="text-[10px] text-emerald-400/60 mt-0.5">Desconto de {orcamento.descAvista}%</p>}
-                  </div>
+          {/* Total único baseado no toggle */}
+          <div className={`relative overflow-hidden rounded-2xl p-5 sm:p-6 ${modoPagamento === 'avista' ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30' : 'bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30'}`}>
+            <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: modoPagamento === 'avista' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)' }} />
+            <div className="relative flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${modoPagamento === 'avista' ? 'bg-emerald-500/15' : 'bg-blue-500/15'}`}>
+                  {modoPagamento === 'avista' ? <Banknote className="w-5 h-5 text-emerald-400" /> : <CreditCard className="w-5 h-5 text-blue-400" />}
                 </div>
-                <div className="text-right shrink-0">
-                  <p className={`text-xl sm:text-3xl font-black ${orcamento.descAvista > 0 ? 'text-emerald-400' : 'text-neon'}`}>{fmt(orcamento.totalAvista)}</p>
-                  {orcamento.descAvista > 0 && <p className="text-[10px] text-emerald-400/50 mt-0.5">economize {fmt(orcamento.total - orcamento.totalAvista)}</p>}
+                <div>
+                  <p className={`text-xs sm:text-sm font-bold uppercase tracking-wider ${modoPagamento === 'avista' ? 'text-emerald-400' : 'text-blue-300'}`}>
+                    {modoPagamento === 'avista' ? 'Total À Vista' : `Total no Cartão`}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
+                    {modoPagamento === 'avista' 
+                      ? 'PIX / Boleto' 
+                      : `${orcamento.parcelas}x de ${fmt(orcamento.parcelaValor)} sem juros`
+                    }
+                  </p>
                 </div>
               </div>
-            </div>
-
-            {/* Cartão */}
-            <div className={`relative ${orcamento.descCartao > 0 ? 'bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30' : 'bg-dark-900/40 border border-dark-600'} rounded-2xl p-4 sm:p-5`}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${orcamento.descCartao > 0 ? 'bg-blue-500/15' : 'bg-dark-700'} flex items-center justify-center shrink-0`}>
-                    <CreditCard className={`w-4 h-4 sm:w-5 sm:h-5 ${orcamento.descCartao > 0 ? 'text-blue-400' : 'text-zinc-400'}`} />
-                  </div>
-                  <div>
-                    <p className={`text-[11px] sm:text-xs font-bold uppercase tracking-wider ${orcamento.descCartao > 0 ? 'text-blue-300' : 'text-zinc-300'}`}>No Cartão</p>
-                    <p className="text-[10px] text-dark-500 mt-0.5">{orcamento.parcelas}x sem juros{orcamento.descCartao > 0 ? ` • -${orcamento.descCartao}%` : ''}</p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className={`text-xl sm:text-3xl font-black ${orcamento.descCartao > 0 ? 'text-blue-300' : 'text-white'}`}>{fmt(orcamento.totalCartao)}</p>
-                  <p className="text-[10px] text-dark-500 mt-0.5">{orcamento.parcelas}x de {fmt(orcamento.parcelaValor)}</p>
-                </div>
+              <div className="text-right">
+                <p className={`text-2xl sm:text-4xl font-black ${modoPagamento === 'avista' ? 'text-emerald-400' : 'text-blue-300'}`}>
+                  {fmt(totalModo)}
+                </p>
+                {modoPagamento === 'avista' && totalModo < orcamento.totalCartao && (
+                  <p className="text-[10px] text-emerald-400/60 mt-1">economize {fmt(orcamento.totalCartao - totalModo)}</p>
+                )}
               </div>
             </div>
           </div>
+
+          {/* Link para alternar */}
+          <p className="text-center text-[11px] text-zinc-500 mt-4">
+            {modoPagamento === 'avista' 
+              ? <button onClick={() => setModoPagamento('cartao')} className="text-blue-400 hover:underline cursor-pointer">Ver condições no Cartão →</button>
+              : <button onClick={() => setModoPagamento('avista')} className="text-emerald-400 hover:underline cursor-pointer">← Ver condição À Vista</button>
+            }
+          </p>
         </div>
       </section>
 
