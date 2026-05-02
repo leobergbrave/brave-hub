@@ -46,6 +46,7 @@ export default function App() {
   const [cepInfo, setCepInfo] = useState(null); // { localidade, uf, logradouro, bairro }
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [nomeConsultor, setNomeConsultor] = useState('');
+  const [dataCriacaoCustom, setDataCriacaoCustom] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
   const [editingSlug, setEditingSlug] = useState(null); // slug of the quote being edited
@@ -143,6 +144,16 @@ export default function App() {
         setEditingSlug(editSlug);
         setNomeCliente(orc.cliente || '');
         setNomeConsultor(orc.consultor || '');
+        
+        // Formatar data para o input datetime-local (yyyy-MM-ddThh:mm)
+        if (orc.criado_em) {
+          const d = new Date(orc.criado_em);
+          const offset = d.getTimezoneOffset() * 60000;
+          const localISOTime = (new Date(d.getTime() - offset)).toISOString().slice(0,16);
+          setDataCriacaoCustom(localISOTime);
+        } else {
+          setDataCriacaoCustom('');
+        }
 
         const p = orc.payload || {};
         setEstado(p.estado || '');
@@ -434,12 +445,18 @@ export default function App() {
         }
       };
 
-      const { error } = await supabase.from('orcamentos_salvos').insert({
+      const novoOrcamento = {
         slug,
         cliente: nomeCliente || 'Cliente Brave',
         consultor: nomeConsultor || 'Consultor Oficial',
         payload
-      });
+      };
+
+      if (dataCriacaoCustom) {
+        novoOrcamento.criado_em = new Date(dataCriacaoCustom).toISOString();
+      }
+
+      const { error } = await supabase.from('orcamentos_salvos').insert(novoOrcamento);
 
       if (error) throw error;
 
@@ -1080,12 +1097,19 @@ export default function App() {
                     placeholder="Ex: 11999999999"
                     className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
                 </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
-                  <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
-                    placeholder="Ex: Rafael Mendes"
-                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
-                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
+                    <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
+                      placeholder="Ex: Rafael Mendes"
+                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Data do Orçamento (Opcional)</span>
+                    <input type="datetime-local" value={dataCriacaoCustom} onChange={(e) => setDataCriacaoCustom(e.target.value)}
+                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all [color-scheme:dark]" />
+                  </label>
+                </div>
               </div>
             </section>
 
