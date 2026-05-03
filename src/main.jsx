@@ -15,6 +15,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/orcamento/:slug" element={<OrcamentoPage />} />
         <Route path="/orcamento-rapido/:alias" element={<OrcamentoRapidoPage />} />
         <Route path="/orcamento-rapido" element={<OrcamentoRapidoPage />} />
+        <Route path="/q/:codigo" element={<OrcamentoRapidoPage />} />
         <Route path="/admin" element={<AdminPage />} />
       </Routes>
     </BrowserRouter>
