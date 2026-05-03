@@ -32,6 +32,7 @@ export default function OrcamentoRapidoPage() {
   const { alias } = useParams();
   const [searchParams] = useSearchParams();
   const nomeUrl = searchParams.get('nome') || '';
+  const produtosParam = searchParams.get('produtos') || '';
 
   // ── States ──
   const [produtos, setProdutos] = useState([]); // array of products
@@ -51,26 +52,39 @@ export default function OrcamentoRapidoPage() {
   const [salvando, setSalvando] = useState(false);
   const [modoPagamento, setModoPagamento] = useState('avista');
 
-  // ── Parse aliases from URL (comma-separated) ──
-  const aliasesParsed = useMemo(() => {
-    return (alias || '').split(',').map(a => a.trim().toLowerCase().replace(/[\s_-]/g, '')).filter(Boolean);
-  }, [alias]);
+  // ── Parse product terms from URL ──
+  // Supports:  /orcamento-rapido/remo,skierg  (alias via path)
+  //            /orcamento-rapido?produtos=Remo,Ski,Bike Erg  (query param from BotConversa)
+  const termosProdutos = useMemo(() => {
+    const raw = produtosParam || alias || '';
+    return raw.split(',').map(t => t.trim()).filter(Boolean);
+  }, [alias, produtosParam]);
+
+  // ── Fuzzy match a search term against a product name ──
+  function matchScore(termo, nomeProduto) {
+    const t = termo.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const n = nomeProduto.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Exact alias match
+    if (PRODUCT_ALIASES[t] && PRODUCT_ALIASES[t].toLowerCase() === nomeProduto.toLowerCase()) return 100;
+    // Full inclusion either way
+    if (n.includes(t) || t.includes(n)) return 80;
+    // Word overlap
+    const tWords = termo.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+    const nWords = nomeProduto.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+    let overlap = 0;
+    for (const tw of tWords) {
+      if (nWords.some(nw => nw.includes(tw) || tw.includes(nw))) overlap++;
+    }
+    if (tWords.length > 0 && overlap > 0) return 20 + (overlap / tWords.length) * 40;
+    return 0;
+  }
 
   // ── Load products + freight rules ──
   useEffect(() => {
     async function load() {
       try {
-        // Resolve alias names
-        const nomesBuscados = [];
-        const aliasesNaoEncontrados = [];
-        for (const a of aliasesParsed) {
-          const nome = PRODUCT_ALIASES[a];
-          if (nome) nomesBuscados.push(nome);
-          else aliasesNaoEncontrados.push(a);
-        }
-
-        if (nomesBuscados.length === 0) {
-          setErro('Nenhum produto encontrado. Verifique o link.');
+        if (termosProdutos.length === 0) {
+          setErro('Nenhum produto informado. Verifique o link.');
           setLoading(false);
           return;
         }
@@ -80,14 +94,42 @@ export default function OrcamentoRapidoPage() {
           supabase.from('regras_frete').select('estado, zona, multiplicador, valor_minimo').order('estado, zona'),
         ]);
 
-        // Match each alias to a product
+        if (!allProds || allProds.length === 0) {
+          setErro('Catálogo vazio.');
+          setLoading(false);
+          return;
+        }
+
+        // For each search term, find the best matching product
         const prodsEncontrados = [];
         const qtds = {};
-        for (const nomeBuscado of nomesBuscados) {
-          const prod = allProds?.find(p => p.nome.toLowerCase().includes(nomeBuscado.toLowerCase()));
-          if (prod && !prodsEncontrados.find(p => p.id === prod.id)) {
-            prodsEncontrados.push(prod);
-            qtds[prod.id] = 1;
+        for (const termo of termosProdutos) {
+          // First try exact alias
+          const aliasClean = termo.toLowerCase().replace(/[\s_-]/g, '');
+          const nomeAlias = PRODUCT_ALIASES[aliasClean];
+          let bestProd = null;
+
+          if (nomeAlias) {
+            bestProd = allProds.find(p => p.nome.toLowerCase().includes(nomeAlias.toLowerCase()));
+          }
+
+          // If no alias match, try fuzzy against all products
+          if (!bestProd) {
+            let bestScore = 0;
+            for (const p of allProds) {
+              const score = matchScore(termo, p.nome);
+              if (score > bestScore) {
+                bestScore = score;
+                bestProd = p;
+              }
+            }
+            // Only accept if score is decent
+            if (bestScore < 20) bestProd = null;
+          }
+
+          if (bestProd && !prodsEncontrados.find(p => p.id === bestProd.id)) {
+            prodsEncontrados.push(bestProd);
+            qtds[bestProd.id] = 1;
           }
         }
 
@@ -108,7 +150,7 @@ export default function OrcamentoRapidoPage() {
       }
     }
     load();
-  }, [aliasesParsed]);
+  }, [termosProdutos]);
 
   // ── Quantity updater ──
   const updateQtd = useCallback((id, delta) => {
