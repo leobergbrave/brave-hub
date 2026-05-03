@@ -8,12 +8,12 @@ import { supabase } from '../lib/supabase';
 
 /* ═══════════════════════════════════════════════
    ORÇAMENTO RÁPIDO — Página self-service para leads do WhatsApp
-   URL: /orcamento-rapido/:alias?nome=Fulano
+   URL: /orcamento-rapido/:aliases?nome=Fulano
+   Suporta múltiplos produtos: /orcamento-rapido/remo,esteira,skierg
    ═══════════════════════════════════════════════ */
 
 const LOGO_URL = 'https://jisbvqrnnujqgbsfondy.supabase.co/storage/v1/object/public/produtos_media/brave_logo.png';
 
-// Alias → nome do produto (busca fuzzy no banco)
 const PRODUCT_ALIASES = {
   remo: 'Remo Indoor Profissional',
   esteira: 'Esteira Curva Brave 2.0',
@@ -34,7 +34,8 @@ export default function OrcamentoRapidoPage() {
   const nomeUrl = searchParams.get('nome') || '';
 
   // ── States ──
-  const [produto, setProduto] = useState(null);
+  const [produtos, setProdutos] = useState([]); // array of products
+  const [quantidades, setQuantidades] = useState({}); // { productId: qty }
   const [regras, setRegras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -45,46 +46,74 @@ export default function OrcamentoRapidoPage() {
   const [estado, setEstado] = useState('');
   const [zona, setZona] = useState('');
 
-  const [quantidade, setQuantidade] = useState(1);
   const [orcamentoGerado, setOrcamentoGerado] = useState(false);
   const [linkGerado, setLinkGerado] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [modoPagamento, setModoPagamento] = useState('avista');
 
-  // ── Load product + freight rules ──
+  // ── Parse aliases from URL (comma-separated) ──
+  const aliasesParsed = useMemo(() => {
+    return (alias || '').split(',').map(a => a.trim().toLowerCase().replace(/[\s_-]/g, '')).filter(Boolean);
+  }, [alias]);
+
+  // ── Load products + freight rules ──
   useEffect(() => {
     async function load() {
       try {
-        const nomeProduto = PRODUCT_ALIASES[(alias || '').toLowerCase().replace(/[\s_-]/g, '')];
-        if (!nomeProduto) {
-          setErro('Produto não encontrado. Verifique o link.');
+        // Resolve alias names
+        const nomesBuscados = [];
+        const aliasesNaoEncontrados = [];
+        for (const a of aliasesParsed) {
+          const nome = PRODUCT_ALIASES[a];
+          if (nome) nomesBuscados.push(nome);
+          else aliasesNaoEncontrados.push(a);
+        }
+
+        if (nomesBuscados.length === 0) {
+          setErro('Nenhum produto encontrado. Verifique o link.');
           setLoading(false);
           return;
         }
 
-        const [{ data: prods }, { data: freteData }] = await Promise.all([
-          supabase.from('produtos').select('id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem').ilike('nome', `%${nomeProduto}%`),
+        const [{ data: allProds }, { data: freteData }] = await Promise.all([
+          supabase.from('produtos').select('id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem'),
           supabase.from('regras_frete').select('estado, zona, multiplicador, valor_minimo').order('estado, zona'),
         ]);
 
-        const prod = prods?.find(p => p.nome.toLowerCase().includes(nomeProduto.toLowerCase())) || prods?.[0];
-        if (!prod) {
-          setErro('Produto não encontrado no catálogo.');
+        // Match each alias to a product
+        const prodsEncontrados = [];
+        const qtds = {};
+        for (const nomeBuscado of nomesBuscados) {
+          const prod = allProds?.find(p => p.nome.toLowerCase().includes(nomeBuscado.toLowerCase()));
+          if (prod && !prodsEncontrados.find(p => p.id === prod.id)) {
+            prodsEncontrados.push(prod);
+            qtds[prod.id] = 1;
+          }
+        }
+
+        if (prodsEncontrados.length === 0) {
+          setErro('Produtos não encontrados no catálogo.');
           setLoading(false);
           return;
         }
 
-        setProduto(prod);
+        setProdutos(prodsEncontrados);
+        setQuantidades(qtds);
         setRegras(freteData || []);
       } catch (err) {
         console.error(err);
-        setErro('Erro ao carregar o produto.');
+        setErro('Erro ao carregar os produtos.');
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [alias]);
+  }, [aliasesParsed]);
+
+  // ── Quantity updater ──
+  const updateQtd = useCallback((id, delta) => {
+    setQuantidades(prev => ({ ...prev, [id]: Math.max(1, (prev[id] || 1) + delta) }));
+  }, []);
 
   // ── CEP lookup ──
   const buscarCep = useCallback(async (cepValue) => {
@@ -105,7 +134,6 @@ export default function OrcamentoRapidoPage() {
       setCepInfo(data);
       setEstado(data.uf);
 
-      // Detect zone
       const capitais = {
         AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
         BA: 'Salvador', CE: 'Fortaleza', DF: 'Brasília', ES: 'Vitória',
@@ -119,7 +147,6 @@ export default function OrcamentoRapidoPage() {
       const isCapital = capital && data.localidade && data.localidade.toLowerCase() === capital.toLowerCase();
       const zonaDetectada = isCapital ? 'CAPITAL' : 'INTERIOR 1';
 
-      // Check if zone exists in rules, fallback
       const regraExata = regras.find(r => r.estado === data.uf && r.zona === zonaDetectada);
       if (regraExata) {
         setZona(zonaDetectada);
@@ -140,7 +167,10 @@ export default function OrcamentoRapidoPage() {
     [regras, estado, zona]
   );
 
-  const pesoTotal = produto ? (produto.peso_kg || 0) * quantidade : 0;
+  const pesoTotal = useMemo(
+    () => produtos.reduce((acc, p) => acc + (p.peso_kg || 0) * (quantidades[p.id] || 1), 0),
+    [produtos, quantidades]
+  );
 
   const frete = useMemo(() => {
     if (!regraFrete) return 0;
@@ -149,25 +179,26 @@ export default function OrcamentoRapidoPage() {
     return Math.max(fretePorPeso, regraFrete.valor_minimo || 0);
   }, [regraFrete, pesoTotal]);
 
-  const subtotal = produto ? produto.preco * quantidade : 0;
-
   const precoAvista = useMemo(() => {
-    if (!produto) return 0;
-    const precoUnit = produto.preco_avista ?? produto.preco;
-    return precoUnit * quantidade + frete;
-  }, [produto, quantidade, frete]);
+    return produtos.reduce((acc, p) => {
+      const precoUnit = p.preco_avista ?? p.preco;
+      return acc + precoUnit * (quantidades[p.id] || 1);
+    }, 0) + frete;
+  }, [produtos, quantidades, frete]);
 
   const precoPrazo = useMemo(() => {
-    if (!produto) return 0;
-    const precoUnit = produto.preco_prazo ?? produto.preco;
-    return precoUnit * quantidade + frete;
-  }, [produto, quantidade, frete]);
+    return produtos.reduce((acc, p) => {
+      const precoUnit = p.preco_prazo ?? p.preco;
+      return acc + precoUnit * (quantidades[p.id] || 1);
+    }, 0) + frete;
+  }, [produtos, quantidades, frete]);
 
   const economia = precoPrazo - precoAvista;
+  const totalModo = modoPagamento === 'avista' ? precoAvista : precoPrazo;
 
   // ── Generate quote ──
   const handleGerarOrcamento = useCallback(async () => {
-    if (!produto || !estado || salvando) return;
+    if (produtos.length === 0 || !estado || salvando) return;
     setSalvando(true);
 
     try {
@@ -177,19 +208,19 @@ export default function OrcamentoRapidoPage() {
       const slug = `${slugBase}-${slugId}`;
 
       const payload = {
-        itens: [{
-          id: produto.id,
-          nome: produto.nome,
-          preco: produto.preco,
-          preco_avista: produto.preco_avista || null,
-          preco_prazo: produto.preco_prazo || null,
-          peso_kg: produto.peso_kg || 0,
-          url_imagem: produto.url_imagem || '',
-          codigo_sku: produto.codigo_sku || '',
-          quantidade,
+        itens: produtos.map(p => ({
+          id: p.id,
+          nome: p.nome,
+          preco: p.preco,
+          preco_avista: p.preco_avista || null,
+          preco_prazo: p.preco_prazo || null,
+          peso_kg: p.peso_kg || 0,
+          url_imagem: p.url_imagem || '',
+          codigo_sku: p.codigo_sku || '',
+          quantidade: quantidades[p.id] || 1,
           descontoAvistaItem: 0,
           descontoCartaoItem: 0,
-        }],
+        })),
         estado,
         zona,
         telefoneCliente: '',
@@ -217,14 +248,14 @@ export default function OrcamentoRapidoPage() {
     } finally {
       setSalvando(false);
     }
-  }, [produto, estado, zona, quantidade, nomeUrl, salvando]);
+  }, [produtos, quantidades, estado, zona, nomeUrl, salvando]);
 
   // ── Auto-gerar quando CEP é validado ──
   useEffect(() => {
-    if (cepInfo && estado && zona && produto && !orcamentoGerado && !salvando) {
+    if (cepInfo && estado && zona && produtos.length > 0 && !orcamentoGerado && !salvando) {
       handleGerarOrcamento();
     }
-  }, [cepInfo, estado, zona, produto, orcamentoGerado]);
+  }, [cepInfo, estado, zona, produtos, orcamentoGerado]);
 
   // ── Render ──
   if (loading) {
@@ -249,9 +280,6 @@ export default function OrcamentoRapidoPage() {
     );
   }
 
-  const imgUrl = produto?.url_imagem || '';
-  const totalModo = modoPagamento === 'avista' ? precoAvista : precoPrazo;
-
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
       {/* Ambient glow */}
@@ -265,46 +293,54 @@ export default function OrcamentoRapidoPage() {
             Olá, <span className="text-neon">{nomeUrl}</span>! 👋
           </h1>
         )}
-        <p className="text-zinc-400 text-sm mt-2">Seu orçamento personalizado está a um passo</p>
+        <p className="text-zinc-400 text-sm mt-2">
+          {produtos.length === 1 ? 'Seu orçamento personalizado está a um passo' : `${produtos.length} equipamentos selecionados para você`}
+        </p>
       </header>
 
-      {/* Product Card */}
-      <section className="relative z-10 max-w-lg mx-auto px-6 mb-6">
-        <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden">
-          {imgUrl && (
-            <div className="w-full h-48 bg-dark-900 flex items-center justify-center overflow-hidden">
-              <img src={imgUrl} alt={produto.nome} className="max-h-full max-w-full object-contain" />
-            </div>
-          )}
-          <div className="p-5">
-            <h2 className="text-lg font-bold text-white mb-1">{produto.nome}</h2>
-            <div className="flex items-center gap-3 text-sm text-zinc-400">
-              {produto.peso_kg > 0 && (
-                <span className="flex items-center gap-1"><Weight className="w-3.5 h-3.5" /> {produto.peso_kg} kg</span>
-              )}
-              {produto.codigo_sku && (
-                <span className="text-xs text-dark-500 font-mono">{produto.codigo_sku}</span>
-              )}
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-neon">{fmt(produto.preco_avista ?? produto.preco)}</span>
-              {produto.preco_avista && produto.preco_avista < produto.preco && (
-                <span className="text-xs text-zinc-500 line-through">{fmt(produto.preco)}</span>
-              )}
-              <span className="text-xs text-zinc-500">à vista</span>
-            </div>
+      {/* Product Cards */}
+      <section className="relative z-10 max-w-lg mx-auto px-6 mb-6 space-y-3">
+        {produtos.map(prod => {
+          const imgUrl = prod.url_imagem || '';
+          const qty = quantidades[prod.id] || 1;
+          return (
+            <div key={prod.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-4 p-4">
+                {/* Thumbnail */}
+                <div className="w-20 h-20 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden shrink-0">
+                  {imgUrl ? (
+                    <img src={imgUrl} alt={prod.nome} className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <Package className="w-6 h-6 text-dark-600" />
+                  )}
+                </div>
 
-            {/* Quantity */}
-            <div className="mt-4 flex items-center gap-3">
-              <span className="text-xs text-zinc-400">Quantidade:</span>
-              <div className="flex items-center bg-dark-900 rounded-lg border border-dark-600">
-                <button onClick={() => setQuantidade(q => Math.max(1, q - 1))} className="px-3 py-1.5 text-zinc-400 hover:text-white text-sm font-bold cursor-pointer">−</button>
-                <span className="px-3 py-1.5 text-white font-bold text-sm min-w-[2rem] text-center">{quantidade}</span>
-                <button onClick={() => setQuantidade(q => q + 1)} className="px-3 py-1.5 text-zinc-400 hover:text-white text-sm font-bold cursor-pointer">+</button>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-bold text-white truncate">{prod.nome}</h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {prod.peso_kg > 0 && (
+                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><Weight className="w-3 h-3" /> {prod.peso_kg}kg</span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="text-base font-black text-neon">{fmt(prod.preco_avista ?? prod.preco)}</span>
+                    {prod.preco_avista && prod.preco_avista < prod.preco && (
+                      <span className="text-[10px] text-zinc-500 line-through">{fmt(prod.preco)}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quantity */}
+                <div className="flex items-center bg-dark-900 rounded-lg border border-dark-600 shrink-0">
+                  <button onClick={() => updateQtd(prod.id, -1)} className="px-2.5 py-1.5 text-zinc-400 hover:text-white text-xs font-bold cursor-pointer">−</button>
+                  <span className="px-2 py-1.5 text-white font-bold text-xs min-w-[1.5rem] text-center">{qty}</span>
+                  <button onClick={() => updateQtd(prod.id, 1)} className="px-2.5 py-1.5 text-zinc-400 hover:text-white text-xs font-bold cursor-pointer">+</button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </section>
 
       {/* CEP Input */}
@@ -332,6 +368,7 @@ export default function OrcamentoRapidoPage() {
                   if (v.replace(/\D/g, '').length === 8) buscarCep(v);
                 }}
                 placeholder="00000-000"
+                autoFocus
                 className="w-full bg-dark-900 border border-dark-600 text-white text-lg font-mono rounded-xl px-4 py-4 focus:outline-none focus:border-neon/50 focus:ring-2 focus:ring-neon/20 transition-all placeholder:text-dark-500 text-center tracking-[0.3em]"
               />
               {buscandoCep && (
@@ -374,12 +411,18 @@ export default function OrcamentoRapidoPage() {
               <Sparkles className="w-4 h-4 text-neon" /> Resumo do Investimento
             </h3>
 
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-zinc-400">{quantidade}x {produto.nome}</span>
-                <span className="text-white font-semibold">{fmt((modoPagamento === 'avista' ? (produto.preco_avista ?? produto.preco) : (produto.preco_prazo ?? produto.preco)) * quantidade)}</span>
-              </div>
-              <div className="flex justify-between">
+            <div className="space-y-2 text-sm">
+              {produtos.map(p => {
+                const qty = quantidades[p.id] || 1;
+                const precoUnit = modoPagamento === 'avista' ? (p.preco_avista ?? p.preco) : (p.preco_prazo ?? p.preco);
+                return (
+                  <div key={p.id} className="flex justify-between">
+                    <span className="text-zinc-400">{qty}x {p.nome}</span>
+                    <span className="text-white font-semibold">{fmt(precoUnit * qty)}</span>
+                  </div>
+                );
+              })}
+              <div className="flex justify-between pt-1 border-t border-dark-700/30">
                 <span className="text-zinc-400 flex items-center gap-1"><Truck className="w-3.5 h-3.5" /> Frete ({estado} · {zona})</span>
                 <span className="text-orange-accent font-semibold">{fmt(frete)}</span>
               </div>
