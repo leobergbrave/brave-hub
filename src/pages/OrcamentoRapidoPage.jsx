@@ -385,10 +385,20 @@ export default function OrcamentoRapidoPage() {
                     )}
                   </div>
                   <div className="mt-1 flex items-baseline gap-1.5">
-                    <span className="text-base font-black text-neon">{fmt(prod.preco_avista ?? prod.preco)}</span>
-                    {prod.preco_avista && prod.preco_avista < prod.preco && (
-                      <span className="text-[10px] text-zinc-500 line-through">{fmt(prod.preco)}</span>
-                    )}
+                    {(() => {
+                      const precoAtual = modoPagamento === 'avista'
+                        ? (prod.preco_avista ?? prod.preco)
+                        : (prod.preco_prazo ?? prod.preco);
+                      const precoRef = prod.preco;
+                      return (
+                        <>
+                          <span className={`text-base font-black ${modoPagamento === 'avista' ? 'text-neon' : 'text-blue-400'}`}>{fmt(precoAtual)}</span>
+                          {precoAtual < precoRef && (
+                            <span className="text-[10px] text-zinc-500 line-through">{fmt(precoRef)}</span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
