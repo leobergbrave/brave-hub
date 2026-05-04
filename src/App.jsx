@@ -65,7 +65,6 @@ export default function App() {
   const [descontoAvista, setDescontoAvista] = useState(0);
   const [descontoCartao, setDescontoCartao] = useState(0);
   const [parcelasCartao, setParcelasCartao] = useState(12);
-  const [personalizarPorProduto, setPersonalizarPorProduto] = useState(false);
 
   // ── IA State ──
   const [iaTexto, setIaTexto] = useState('');
@@ -165,7 +164,6 @@ export default function App() {
         setDescontoAvista(c.descontoAvista || 0);
         setDescontoCartao(c.descontoCartao || 0);
         setParcelasCartao(c.parcelas || 12);
-        setPersonalizarPorProduto(c.personalizarPorProduto || false);
 
         // Items — merge with current product data
         const itensCarregados = (p.itens || []).map(itemSalvo => {
@@ -224,6 +222,26 @@ export default function App() {
     setToastError(isError);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 4000);
+  }, []);
+
+  const handleGlobalDescontoAvistaChange = useCallback((e) => {
+    const num = Math.max(0, Math.min(100, Number(e.target.value)));
+    setDescontoAvista(num);
+    setItens((prev) => prev.map(item => ({
+      ...item,
+      descontoAvistaItem: num,
+      preco_avista: item.preco * (1 - num / 100)
+    })));
+  }, []);
+
+  const handleGlobalDescontoCartaoChange = useCallback((e) => {
+    const num = Math.max(0, Math.min(100, Number(e.target.value)));
+    setDescontoCartao(num);
+    setItens((prev) => prev.map(item => ({
+      ...item,
+      descontoCartaoItem: num,
+      preco_prazo: item.preco * (1 - num / 100)
+    })));
   }, []);
 
   const adicionarProduto = useCallback((produto, qtd) => {
@@ -474,8 +492,7 @@ export default function App() {
         condicoes: {
           descontoAvista,
           descontoCartao,
-          parcelas: parcelasCartao,
-          personalizarPorProduto
+          parcelas: parcelasCartao
         }
       };
 
@@ -1237,7 +1254,7 @@ export default function App() {
                     <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Desconto à Vista (%)</span>
                     <div className="relative">
                       <input type="number" min={0} max={100} step={1} value={descontoAvista}
-                        onChange={(e) => setDescontoAvista(Math.max(0, Math.min(100, Number(e.target.value))))}
+                        onChange={handleGlobalDescontoAvistaChange}
                         className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all" />
                       <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
                     </div>
@@ -1246,7 +1263,7 @@ export default function App() {
                     <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Desconto Cartão (%)</span>
                     <div className="relative">
                       <input type="number" min={0} max={100} step={1} value={descontoCartao}
-                        onChange={(e) => setDescontoCartao(Math.max(0, Math.min(100, Number(e.target.value))))}
+                        onChange={handleGlobalDescontoCartaoChange}
                         className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all" />
                       <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
                     </div>
@@ -1265,17 +1282,6 @@ export default function App() {
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
                   </div>
                 </label>
-
-                {/* Toggle per-product */}
-                <div className="flex items-center gap-3 pt-1">
-                  <button
-                    onClick={() => setPersonalizarPorProduto(!personalizarPorProduto)}
-                    className={`relative w-10 h-5 rounded-full transition-colors duration-200 cursor-pointer ${personalizarPorProduto ? 'bg-emerald-500' : 'bg-dark-600'}`}
-                  >
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${personalizarPorProduto ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </button>
-                  <span className="text-xs text-zinc-400 font-medium">Personalizar % por produto</span>
-                </div>
 
                 {/* Preview */}
                 {itens.length > 0 && (
@@ -1454,41 +1460,39 @@ export default function App() {
                           </div>
                           
                           {/* Item Discounts */}
-                          {personalizarPorProduto && (
-                            <div className="flex flex-col gap-2 mt-2 w-full pt-2 border-t border-dark-700/50">
-                              {/* À Vista */}
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-emerald-400 font-medium w-12 shrink-0">À vista</span>
-                                <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
-                                  <input type="number" min="0" max="100" step="0.1" value={item.descontoAvistaItem ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoAvistaItem', e.target.value, 'percentual')}
-                                    className="w-12 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="%" />
-                                  <span className="text-emerald-500/70 text-[10px] pr-1.5">%</span>
-                                </div>
-                                <span className="text-[10px] text-zinc-600">=</span>
-                                <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
-                                  <span className="text-emerald-500/70 text-[10px] pl-1.5">R$</span>
-                                  <input type="number" min="0" step="0.01" value={item.preco_avista ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'preco_avista', e.target.value, 'valor')}
-                                    className="w-20 bg-transparent py-1 px-1.5 text-white text-xs focus:outline-none appearance-none" placeholder={item.preco.toFixed(2)} />
-                                </div>
+                          <div className="flex flex-col gap-2 mt-2 w-full pt-2 border-t border-dark-700/50">
+                            {/* À Vista */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-emerald-400 font-medium w-12 shrink-0">À vista</span>
+                              <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
+                                <input type="number" min="0" max="100" step="0.1" value={item.descontoAvistaItem ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoAvistaItem', e.target.value, 'percentual')}
+                                  className="w-12 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="%" />
+                                <span className="text-emerald-500/70 text-[10px] pr-1.5">%</span>
                               </div>
-                              
-                              {/* Cartão */}
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-emerald-400/80 font-medium w-12 shrink-0">Cartão</span>
-                                <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
-                                  <input type="number" min="0" max="100" step="0.1" value={item.descontoCartaoItem ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoCartaoItem', e.target.value, 'percentual')}
-                                    className="w-12 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="%" />
-                                  <span className="text-emerald-500/50 text-[10px] pr-1.5">%</span>
-                                </div>
-                                <span className="text-[10px] text-zinc-600">=</span>
-                                <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
-                                  <span className="text-emerald-500/50 text-[10px] pl-1.5">R$</span>
-                                  <input type="number" min="0" step="0.01" value={item.preco_prazo ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'preco_prazo', e.target.value, 'valor')}
-                                    className="w-20 bg-transparent py-1 px-1.5 text-white text-xs focus:outline-none appearance-none" placeholder={item.preco.toFixed(2)} />
-                                </div>
+                              <span className="text-[10px] text-zinc-600">=</span>
+                              <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
+                                <span className="text-emerald-500/70 text-[10px] pl-1.5">R$</span>
+                                <input type="number" min="0" step="0.01" value={item.preco_avista ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'preco_avista', e.target.value, 'valor')}
+                                  className="w-20 bg-transparent py-1 px-1.5 text-white text-xs focus:outline-none appearance-none" placeholder={item.preco.toFixed(2)} />
                               </div>
                             </div>
-                          )}
+                            
+                            {/* Cartão */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-emerald-400/80 font-medium w-12 shrink-0">Cartão</span>
+                              <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
+                                <input type="number" min="0" max="100" step="0.1" value={item.descontoCartaoItem ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoCartaoItem', e.target.value, 'percentual')}
+                                  className="w-12 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="%" />
+                                <span className="text-emerald-500/50 text-[10px] pr-1.5">%</span>
+                              </div>
+                              <span className="text-[10px] text-zinc-600">=</span>
+                              <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
+                                <span className="text-emerald-500/50 text-[10px] pl-1.5">R$</span>
+                                <input type="number" min="0" step="0.01" value={item.preco_prazo ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'preco_prazo', e.target.value, 'valor')}
+                                  className="w-20 bg-transparent py-1 px-1.5 text-white text-xs focus:outline-none appearance-none" placeholder={item.preco.toFixed(2)} />
+                              </div>
+                            </div>
+                          </div>
                         </li>
                       );
                     })}
