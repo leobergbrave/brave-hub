@@ -330,6 +330,11 @@ export default function App() {
     setItens((prev) => prev.filter((i) => i.id !== id));
   }, []);
 
+  const handleAlterarQuantidade = useCallback((id, novaQuantidade) => {
+    if (novaQuantidade < 1) return;
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, quantidade: novaQuantidade } : i)));
+  }, []);
+
   const handleIniciarEdicao = useCallback((item) => {
     setEditingItemId(item.id);
     setEditItemPrice(item.preco.toString());
@@ -1412,7 +1417,11 @@ export default function App() {
                           <div className="flex items-center gap-2 mt-1.5 pl-[52px] flex-wrap text-[11px]">
                             {editingItemId === item.id ? (
                               <div className="flex items-center gap-1.5">
-                                <span className="text-zinc-500">{item.quantidade}x</span>
+                                <div className="flex items-center gap-1 bg-dark-900 border border-dark-700 rounded overflow-hidden">
+                                  <button onClick={() => handleAlterarQuantidade(item.id, item.quantidade - 1)} className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors">-</button>
+                                  <span className="text-xs text-white w-6 text-center">{item.quantidade}</span>
+                                  <button onClick={() => handleAlterarQuantidade(item.id, item.quantidade + 1)} className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors">+</button>
+                                </div>
                                 <div className="flex items-center bg-dark-800 border border-dark-600 rounded-lg overflow-hidden h-6">
                                   <span className="px-1.5 text-[10px] text-zinc-500 bg-dark-900 h-full flex items-center border-r border-dark-600">R$</span>
                                   <input type="number" min="0" step="0.01" value={editItemPrice} onChange={(e) => setEditItemPrice(e.target.value)}
@@ -1424,7 +1433,12 @@ export default function App() {
                               </div>
                             ) : (
                               <div className="flex items-center gap-1">
-                                <span className="text-zinc-500">{item.quantidade}x {formatCurrency(item.preco)}</span>
+                                <div className="flex items-center gap-1 bg-dark-900 border border-dark-700 rounded overflow-hidden">
+                                  <button onClick={() => handleAlterarQuantidade(item.id, item.quantidade - 1)} className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors">-</button>
+                                  <span className="text-xs text-white w-6 text-center">{item.quantidade}</span>
+                                  <button onClick={() => handleAlterarQuantidade(item.id, item.quantidade + 1)} className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors">+</button>
+                                </div>
+                                <span className="text-zinc-500 ml-1">{formatCurrency(item.preco)}</span>
                                 {(item.preco_avista || item.preco_prazo) && (
                                   <span className="text-[10px] text-emerald-400/70 ml-1">
                                     {item.preco_avista ? `À vista: ${formatCurrency(item.preco_avista)}` : ''}
