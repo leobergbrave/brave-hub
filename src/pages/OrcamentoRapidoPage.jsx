@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   MapPin, Loader2, Truck, Package, CreditCard, Banknote,
-  ChevronRight, Sparkles, Shield, CheckCircle2, Weight
+  ChevronRight, Sparkles, Shield, CheckCircle2, Weight, FolderOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { parseMediaUrl } from '../data';
 
 /* ═══════════════════════════════════════════════
    ORÇAMENTO RÁPIDO — Página self-service para leads do WhatsApp
@@ -359,15 +360,17 @@ export default function OrcamentoRapidoPage() {
       {/* Product Cards */}
       <section className="relative z-10 max-w-lg mx-auto px-6 mb-6 space-y-3">
         {produtos.map(prod => {
-          const imgUrl = prod.url_imagem || '';
           const qty = quantidades[prod.id] || 1;
+          const media = prod.url_imagem ? parseMediaUrl(prod.url_imagem) : null;
           return (
             <div key={prod.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden">
               <div className="flex items-center gap-4 p-4">
                 {/* Thumbnail */}
                 <div className="w-20 h-20 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden shrink-0">
-                  {imgUrl ? (
-                    <img src={imgUrl} alt={prod.nome} className="max-h-full max-w-full object-contain" />
+                  {media && media.type === 'image' ? (
+                    <img src={media.url} alt={prod.nome} className="max-h-full max-w-full object-contain" />
+                  ) : media && media.type === 'folder' ? (
+                    <FolderOpen className="w-6 h-6 text-blue-400" />
                   ) : (
                     <Package className="w-6 h-6 text-dark-600" />
                   )}
