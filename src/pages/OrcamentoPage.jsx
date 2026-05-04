@@ -300,16 +300,16 @@ export default function OrcamentoPage() {
                 <p className="hidden sm:block text-base font-bold text-white mb-1.5">{item.nome}</p>
                 <div className="flex flex-wrap items-center gap-4 text-zinc-400 text-xs">
                   <span>Qtd: {item.quantidade}</span>
-                  <span className="text-emerald-400/80">À vista: {item.preco_avista ? fmt(item.preco_avista) : fmt(item.preco * (1 - descAvista / 100))}</span>
-                  <span className="text-blue-300/80">Cartão: {item.preco_prazo ? fmt(item.preco_prazo) : fmt(item.preco * (1 - descCartao / 100))}</span>
+                  <span className="text-emerald-400/80">À vista: {item.preco_avista ? fmt(item.preco_avista) : fmt(item.preco * (1 - orcamento.descAvista / 100))}</span>
+                  <span className="text-blue-300/80">Cartão: {item.preco_prazo ? fmt(item.preco_prazo) : fmt(item.preco * (1 - orcamento.descCartao / 100))}</span>
                 </div>
               </div>
               <div className="text-right flex flex-col items-end justify-center">
                 <p className="text-sm font-bold text-emerald-400">
-                  {fmt((item.preco_avista || item.preco * (1 - descAvista / 100)) * item.quantidade)}
+                  {fmt((item.preco_avista || item.preco * (1 - orcamento.descAvista / 100)) * item.quantidade)}
                 </p>
                 <p className="text-[10px] text-blue-300/80">
-                  {fmt((item.preco_prazo || item.preco * (1 - descCartao / 100)) * item.quantidade)}
+                  {fmt((item.preco_prazo || item.preco * (1 - orcamento.descCartao / 100)) * item.quantidade)}
                 </p>
               </div>
             </div>
