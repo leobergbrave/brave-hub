@@ -12,11 +12,14 @@ import { createClient } from '@supabase/supabase-js';
 const PRODUCT_ALIASES = {
   remo: 'Remo Indoor Profissional',
   esteira: 'Esteira Curva Brave 2.0',
+  esteiracurva: 'Esteira Curva Brave 2.0',
   skierg: 'SkiErg com Plataforma',
+  ski: 'SkiErg com Plataforma',
   bikeerg: 'Bike Erg Brave',
   bike: 'Bike Erg Brave',
   stormbike: 'STORM Bike Brave',
   storm: 'STORM Bike Brave',
+  escada: 'Escada Ergométrica - Painel de LED + Botões',
 };
 
 // ── CEP → Estado/Zona mapping ──
