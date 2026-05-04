@@ -19,14 +19,7 @@ function fmt(v) {
 export default function OrcamentoPage() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
-  const [aprovado, setAprovado] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [pulseBtn, setPulseBtn] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
-  const [modoPagamento, setModoPagamento] = useState('avista');
-  
-  const [showModalNegociacao, setShowModalNegociacao] = useState(false);
-  const [motivoNegociacao, setMotivoNegociacao] = useState(null);
 
   const [produtosDb, setProdutosDb] = useState([]);
   const [regrasFreteDb, setRegrasFreteDb] = useState([]);
@@ -189,69 +182,11 @@ export default function OrcamentoPage() {
     }
   }, [searchParams, produtosDb, regrasFreteDb, orcamentoSalvo]);
 
-  const handleAprovar = useCallback(() => {
-    if (aprovado) return;
-    setPulseBtn(true);
-    setTimeout(() => {
-      setAprovado(true);
-      setShowToast(true);
-      setPulseBtn(false);
-      setTimeout(() => setShowToast(false), 5000);
-    }, 600);
-  }, [aprovado]);
-
-  const [enviandoWebhook, setEnviandoWebhook] = useState(false);
-
-  const handleEnviarNegociacao = async () => {
-    if (!motivoNegociacao || !orcamento) return;
-    
-    let texto = `Olá ${orcamento.consultor}! Analisei o projeto do meu box no valor de ${fmt(orcamento.total)}.\n\n`;
-    
-    if (motivoNegociacao === 'concorrente') {
-      texto += `Gostei muito, mas tenho uma proposta menor de outra marca. Conseguimos revisar as condições para fecharmos com a Brave?`;
-    } else if (motivoNegociacao === 'pagamento') {
-      texto += `O investimento ficou um pouco acima do esperado no momento. Podemos ver algumas opções flexíveis de pagamento ou parcelamento?`;
-    } else if (motivoNegociacao === 'escopo') {
-      texto += `Para viabilizarmos agora, pensei em ajustarmos alguns equipamentos e reduzir um pouco o escopo. Podemos reavaliar?`;
-    }
-
-    const telefoneCliente = orcamentoSalvo?.payload?.telefoneCliente;
-    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
-
-    if (telefoneCliente && webhookUrl) {
-      // Disparo invisível via Webhook
-      try {
-        setEnviandoWebhook(true);
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            cliente: orcamento.cliente,
-            telefone: telefoneCliente,
-            consultor: orcamento.consultor,
-            total: orcamento.total,
-            motivo: motivoNegociacao,
-            mensagem_formatada: texto
-          })
-        });
-        setShowToast(true); // Reusando o toast para sucesso
-        setTimeout(() => setShowToast(false), 5000);
-      } catch (err) {
-        console.error('Erro ao enviar webhook:', err);
-        // Fallback pro WhatsApp manual se der erro
-        window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
-      } finally {
-        setEnviandoWebhook(false);
-        setShowModalNegociacao(false);
-        setMotivoNegociacao(null);
-      }
-    } else {
-      // Fallback pro WhatsApp manual se não tiver telefone ou webhook configurado
-      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
-      setShowModalNegociacao(false);
-      setMotivoNegociacao(null);
-    }
-  };
+  const handleNegociarProjeto = useCallback(() => {
+    if (!orcamento) return;
+    const texto = `Olá ${orcamento.consultor}! Analisei o orçamento no valor de ${fmt(orcamento.totalAvista)} à vista / ${fmt(orcamento.totalCartao)} parcelado. Podemos conversar sobre o projeto?`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+  }, [orcamento]);
 
   if (loading) {
     return (
@@ -365,12 +300,16 @@ export default function OrcamentoPage() {
                 <p className="hidden sm:block text-base font-bold text-white mb-1.5">{item.nome}</p>
                 <div className="flex flex-wrap items-center gap-4 text-zinc-400 text-xs">
                   <span>Qtd: {item.quantidade}</span>
-                  <span>{modoPagamento === 'avista' ? (item.preco_avista ? fmt(item.preco_avista) : fmt(item.preco * (1 - descAvista / 100))) : (item.preco_prazo ? fmt(item.preco_prazo) : fmt(item.preco * (1 - descCartao / 100)))} un</span>
+                  <span className="text-emerald-400/80">À vista: {item.preco_avista ? fmt(item.preco_avista) : fmt(item.preco * (1 - descAvista / 100))}</span>
+                  <span className="text-blue-300/80">Cartão: {item.preco_prazo ? fmt(item.preco_prazo) : fmt(item.preco * (1 - descCartao / 100))}</span>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-lg font-black text-neon">
-                  {fmt((modoPagamento === 'avista' ? (item.preco_avista || item.preco * (1 - descAvista / 100)) : (item.preco_prazo || item.preco * (1 - descCartao / 100))) * item.quantidade)}
+              <div className="text-right flex flex-col items-end justify-center">
+                <p className="text-sm font-bold text-emerald-400">
+                  {fmt((item.preco_avista || item.preco * (1 - descAvista / 100)) * item.quantidade)}
+                </p>
+                <p className="text-[10px] text-blue-300/80">
+                  {fmt((item.preco_prazo || item.preco * (1 - descCartao / 100)) * item.quantidade)}
                 </p>
               </div>
             </div>
@@ -394,50 +333,67 @@ export default function OrcamentoPage() {
 
           <div className="space-y-4">
             <SummaryRow icon={<Weight className="w-4 h-4" />} label="Peso Total da Carga" value={`${orcamento.pesoTotal} kg`} />
-            <SummaryRow icon={<Package className="w-4 h-4" />} label="Subtotal dos Equipamentos" value={fmt(modoPagamento === 'avista' ? (orcamento.totalAvista - orcamento.frete) : (orcamento.totalCartao - orcamento.frete))} />
+            <SummaryRow icon={<Package className="w-4 h-4" />} label="Subtotal dos Equipamentos (À Vista)" value={fmt(orcamento.totalAvista - orcamento.frete)} />
             <SummaryRow icon={<Truck className="w-4 h-4" />} label="Frete Aplicado" value={fmt(orcamento.frete)} valueClass="text-orange-accent" />
           </div>
 
           <div className="my-6 h-px bg-gradient-to-r from-transparent via-dark-500/50 to-transparent" />
 
-          {/* Total único baseado no toggle */}
-          <div className={`relative overflow-hidden rounded-2xl p-5 sm:p-6 ${modoPagamento === 'avista' ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30' : 'bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30'}`}>
-            <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: modoPagamento === 'avista' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)' }} />
-            <div className="relative flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${modoPagamento === 'avista' ? 'bg-emerald-500/15' : 'bg-blue-500/15'}`}>
-                  {modoPagamento === 'avista' ? <Banknote className="w-5 h-5 text-emerald-400" /> : <CreditCard className="w-5 h-5 text-blue-400" />}
+          {/* Totais: À Vista e Cartão */}
+          <div className="space-y-4">
+            {/* Bloco À Vista */}
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: 'rgba(16,185,129,0.1)' }} />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 bg-emerald-500/15">
+                    <Banknote className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-400">
+                      Total À Vista
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
+                      PIX / Boleto
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className={`text-xs sm:text-sm font-bold uppercase tracking-wider ${modoPagamento === 'avista' ? 'text-emerald-400' : 'text-blue-300'}`}>
-                    {modoPagamento === 'avista' ? 'Total À Vista' : `Total no Cartão`}
+                <div className="text-right">
+                  <p className="text-2xl sm:text-4xl font-black text-emerald-400">
+                    {fmt(orcamento.totalAvista)}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
-                    {modoPagamento === 'avista' 
-                      ? 'PIX / Boleto' 
-                      : `${orcamento.parcelas}x de ${fmt(orcamento.parcelaValor)} sem juros`
-                    }
-                  </p>
+                  {orcamento.totalAvista < orcamento.totalCartao && (
+                    <p className="text-[10px] text-emerald-400/60 mt-1">economize {fmt(orcamento.totalCartao - orcamento.totalAvista)}</p>
+                  )}
                 </div>
               </div>
-              <div className="text-right">
-                <p className={`text-2xl sm:text-4xl font-black ${modoPagamento === 'avista' ? 'text-emerald-400' : 'text-blue-300'}`}>
-                  {fmt(totalModo)}
-                </p>
-                {modoPagamento === 'avista' && totalModo < orcamento.totalCartao && (
-                  <p className="text-[10px] text-emerald-400/60 mt-1">economize {fmt(orcamento.totalCartao - totalModo)}</p>
-                )}
+            </div>
+
+            {/* Bloco Cartão */}
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: 'rgba(59,130,246,0.1)' }} />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 bg-blue-500/15">
+                    <CreditCard className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-300">
+                      Total no Cartão
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
+                      {orcamento.parcelas}x de {fmt(orcamento.parcelaValor)} sem juros
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl sm:text-4xl font-black text-blue-300">
+                    {fmt(orcamento.totalCartao)}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-
-          {/* Link para alternar */}
-          <p className="text-center text-[11px] text-zinc-500 mt-4">
-            {modoPagamento === 'avista' 
-              ? <button onClick={() => setModoPagamento('cartao')} className="text-blue-400 hover:underline cursor-pointer">Ver condições no Cartão →</button>
-              : <button onClick={() => setModoPagamento('avista')} className="text-emerald-400 hover:underline cursor-pointer">← Ver condição À Vista</button>
-            }
-          </p>
         </div>
       </section>
 
@@ -454,43 +410,16 @@ export default function OrcamentoPage() {
           </p>
         </div>
 
-        {/* Botão Aprovar */}
+        {/* Botão Negociar */}
         <button
-          id="btn-aprovar"
-          onClick={handleAprovar}
-          disabled={aprovado}
-          className={`w-full flex items-center justify-center gap-3 text-lg font-black py-5 rounded-2xl transition-all duration-300 cursor-pointer ${
-            aprovado
-              ? 'bg-neon/20 text-neon border-2 border-neon/30'
-              : 'bg-gradient-to-r from-neon-dim to-neon text-dark-950 hover:shadow-2xl hover:shadow-neon/30 hover:scale-[1.02] active:scale-[0.98]'
-          } ${pulseBtn ? 'animate-pulse-neon scale-[1.03]' : ''}`}
+          id="btn-negociar"
+          onClick={handleNegociarProjeto}
+          className="w-full flex items-center justify-center gap-3 text-lg font-black py-5 rounded-2xl transition-all duration-300 cursor-pointer bg-gradient-to-r from-neon-dim to-neon text-dark-950 hover:shadow-2xl hover:shadow-neon/30 hover:scale-[1.02] active:scale-[0.98]"
         >
-          {aprovado ? (
-            <>
-              <CheckCircle2 className="w-6 h-6" />
-              Projeto Aprovado
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-6 h-6" />
-              Aprovar Projeto
-              <ChevronRight className="w-5 h-5" />
-            </>
-          )}
+          <MessageCircle className="w-6 h-6" />
+          Negociar Projeto
+          <ChevronRight className="w-5 h-5" />
         </button>
-
-        {/* Botão Personalizar Condições */}
-        {!aprovado && (
-          <div className="text-center mt-5">
-            <button 
-              onClick={() => setShowModalNegociacao(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-dark-600 bg-dark-800 text-sm font-semibold text-zinc-300 hover:text-white hover:border-dark-500 hover:bg-dark-700 transition-all duration-300 cursor-pointer"
-            >
-              <MessageCircle className="w-4 h-4 text-zinc-400" />
-              Personalizar Condições
-            </button>
-          </div>
-        )}
       </section>
 
       {/* ── Selo de confiança ── */}
@@ -530,48 +459,7 @@ export default function OrcamentoPage() {
         );
       })()}
 
-      {/* Modal de Negociação */}
-      {showModalNegociacao && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-dark-950/80 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowModalNegociacao(false)}>
-          <div className="w-full max-w-lg bg-dark-800 border border-dark-600 rounded-3xl p-6 sm:p-8 shadow-2xl cursor-default" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h3 className="text-xl font-bold text-white mb-1">Como podemos viabilizar?</h3>
-                <p className="text-sm text-zinc-400">A Brave tem o compromisso de entregar o melhor Custo x Performance do mercado. Nos conte qual o próximo passo:</p>
-              </div>
-              <button onClick={() => setShowModalNegociacao(false)} className="p-2 bg-dark-700 hover:bg-dark-600 rounded-full text-zinc-400 transition-colors cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <div className="space-y-3 mb-8">
-              <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${motivoNegociacao === 'concorrente' ? 'border-neon bg-neon/10' : 'border-dark-600 bg-dark-900/50 hover:border-dark-500'}`}>
-                <input type="radio" name="motivo" value="concorrente" checked={motivoNegociacao === 'concorrente'} onChange={(e) => setMotivoNegociacao(e.target.value)} className="w-4 h-4 text-neon focus:ring-neon bg-dark-700 border-dark-500" />
-                <span className="text-sm font-medium text-white">Tenho um orçamento de <span className="text-neon">outra marca</span> e quero saber se a Brave cobre.</span>
-              </label>
-
-              <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${motivoNegociacao === 'pagamento' ? 'border-neon bg-neon/10' : 'border-dark-600 bg-dark-900/50 hover:border-dark-500'}`}>
-                <input type="radio" name="motivo" value="pagamento" checked={motivoNegociacao === 'pagamento'} onChange={(e) => setMotivoNegociacao(e.target.value)} className="w-4 h-4 text-neon focus:ring-neon bg-dark-700 border-dark-500" />
-                <span className="text-sm font-medium text-white">O valor está um pouco acima. Quero ver <span className="text-neon">condições de pagamento</span>.</span>
-              </label>
-
-              <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${motivoNegociacao === 'escopo' ? 'border-neon bg-neon/10' : 'border-dark-600 bg-dark-900/50 hover:border-dark-500'}`}>
-                <input type="radio" name="motivo" value="escopo" checked={motivoNegociacao === 'escopo'} onChange={(e) => setMotivoNegociacao(e.target.value)} className="w-4 h-4 text-neon focus:ring-neon bg-dark-700 border-dark-500" />
-                <span className="text-sm font-medium text-white">Quero <span className="text-neon">reavaliar alguns equipamentos</span> para diminuir o valor total.</span>
-              </label>
-            </div>
-
-            <button
-              onClick={handleEnviarNegociacao}
-              disabled={!motivoNegociacao}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-xl font-bold bg-dark-700 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-dark-600 transition-colors"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Avisar Consultor no WhatsApp
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
