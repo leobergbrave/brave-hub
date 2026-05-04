@@ -361,16 +361,38 @@ export default function App() {
     setEditingWeightId(null);
   }, []);
 
-  const handleDescontoItemChange = useCallback((id, campo, valor) => {
-    let num;
-    if (valor === '') {
-      num = 0;
-    } else {
-      num = parseInt(valor, 10);
-      if (isNaN(num) || num < 0) num = 0;
-      if (num > 100) num = 100;
-    }
-    setItens((prev) => prev.map((i) => i.id === id ? { ...i, [campo]: num } : i));
+  const handleDescontoItemChange = useCallback((id, campo, valor, tipo = 'percentual') => {
+    setItens((prev) => prev.map((i) => {
+      if (i.id !== id) return i;
+      
+      let num = valor === '' ? '' : parseFloat(valor);
+      const basePrice = i.preco;
+      const updated = { ...i };
+
+      if (tipo === 'percentual') {
+        if (num !== '') {
+          if (num > 100) num = 100;
+          if (num < 0) num = 0;
+        }
+        updated[campo] = num;
+        
+        if (campo === 'descontoAvistaItem') {
+           updated.preco_avista = num === '' ? null : basePrice * (1 - num / 100);
+        } else if (campo === 'descontoCartaoItem') {
+           updated.preco_prazo = num === '' ? null : basePrice * (1 - num / 100);
+        }
+      } else {
+        if (num !== '' && num < 0) num = 0;
+        updated[campo] = num === '' ? null : num;
+        
+        if (campo === 'preco_avista') {
+           updated.descontoAvistaItem = num === '' || basePrice === 0 ? '' : parseFloat((((basePrice - num) / basePrice) * 100).toFixed(2));
+        } else if (campo === 'preco_prazo') {
+           updated.descontoCartaoItem = num === '' || basePrice === 0 ? '' : parseFloat((((basePrice - num) / basePrice) * 100).toFixed(2));
+        }
+      }
+      return updated;
+    }));
   }, []);
 
   const handleImageUpload = async (event, id) => {
@@ -1433,23 +1455,38 @@ export default function App() {
                           
                           {/* Item Discounts */}
                           {personalizarPorProduto && (
-                            <div className="flex items-center gap-4 mt-2 w-full pt-2 border-t border-dark-700/50">
-                              <label className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
-                                % À vista
+                            <div className="flex flex-col gap-2 mt-2 w-full pt-2 border-t border-dark-700/50">
+                              {/* À Vista */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-emerald-400 font-medium w-12 shrink-0">À vista</span>
                                 <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
-                                  <input type="number" min="0" max="100" value={item.descontoAvistaItem || ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoAvistaItem', e.target.value)}
-                                    className="w-10 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="0" />
+                                  <input type="number" min="0" max="100" step="0.1" value={item.descontoAvistaItem ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoAvistaItem', e.target.value, 'percentual')}
+                                    className="w-12 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="%" />
                                   <span className="text-emerald-500/70 text-[10px] pr-1.5">%</span>
                                 </div>
-                              </label>
-                              <label className="flex items-center gap-1.5 text-[10px] text-emerald-400/80 font-medium">
-                                % Cartão
+                                <span className="text-[10px] text-zinc-600">=</span>
+                                <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
+                                  <span className="text-emerald-500/70 text-[10px] pl-1.5">R$</span>
+                                  <input type="number" min="0" step="0.01" value={item.preco_avista ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'preco_avista', e.target.value, 'valor')}
+                                    className="w-20 bg-transparent py-1 px-1.5 text-white text-xs focus:outline-none appearance-none" placeholder={item.preco.toFixed(2)} />
+                                </div>
+                              </div>
+                              
+                              {/* Cartão */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-emerald-400/80 font-medium w-12 shrink-0">Cartão</span>
                                 <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
-                                  <input type="number" min="0" max="100" value={item.descontoCartaoItem || ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoCartaoItem', e.target.value)}
-                                    className="w-10 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="0" />
+                                  <input type="number" min="0" max="100" step="0.1" value={item.descontoCartaoItem ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoCartaoItem', e.target.value, 'percentual')}
+                                    className="w-12 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="%" />
                                   <span className="text-emerald-500/50 text-[10px] pr-1.5">%</span>
                                 </div>
-                              </label>
+                                <span className="text-[10px] text-zinc-600">=</span>
+                                <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
+                                  <span className="text-emerald-500/50 text-[10px] pl-1.5">R$</span>
+                                  <input type="number" min="0" step="0.01" value={item.preco_prazo ?? ''} onChange={(e) => handleDescontoItemChange(item.id, 'preco_prazo', e.target.value, 'valor')}
+                                    className="w-20 bg-transparent py-1 px-1.5 text-white text-xs focus:outline-none appearance-none" placeholder={item.preco.toFixed(2)} />
+                                </div>
+                              </div>
                             </div>
                           )}
                         </li>
