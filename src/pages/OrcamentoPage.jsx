@@ -215,22 +215,7 @@ export default function OrcamentoPage() {
         <div className="absolute top-[60%] left-[-5%] w-[350px] h-[350px] rounded-full bg-purple-500/[0.025] blur-[100px]" />
       </div>
 
-      {/* ── Toast de Aprovação ── */}
-      {showToast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-slide-in-right w-[90%] max-w-lg">
-          <div className="flex items-start gap-3 bg-dark-700 border border-neon/40 px-5 py-4 rounded-2xl shadow-2xl shadow-neon/15">
-            <div className="w-10 h-10 rounded-full bg-neon/15 flex items-center justify-center shrink-0 mt-0.5">
-              <CheckCircle2 className="w-5 h-5 text-neon" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white">Projeto Aprovado! 🎉</p>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                Seu consultor foi notificado e entrará em contato para o pagamento.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* ══════════════════════════════════════════
           1. HEADER
