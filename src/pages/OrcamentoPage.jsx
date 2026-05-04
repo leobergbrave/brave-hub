@@ -206,10 +206,6 @@ export default function OrcamentoPage() {
     );
   }
 
-  const descAvista = orcamento?.descAvista || 0;
-  const descCartao = orcamento?.descCartao || 0;
-  const totalModo = modoPagamento === 'avista' ? orcamento.totalAvista : orcamento.totalCartao;
-
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
       {/* ── Ambient ── */}
@@ -269,17 +265,9 @@ export default function OrcamentoPage() {
       </div>
 
       {/* ══════════════════════════════════════════
-          2. TOGGLE DE PAGAMENTO + LISTA
+          2. LISTA DE EQUIPAMENTOS
           ══════════════════════════════════════════ */}
       <section className="relative z-10 max-w-3xl mx-auto px-6 py-8">
-        <div className="flex flex-col sm:flex-row items-center gap-4 mb-8 bg-dark-900/50 p-2 rounded-2xl border border-dark-700/50">
-          <button onClick={() => setModoPagamento('avista')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${modoPagamento === 'avista' ? 'bg-neon text-dark-950 shadow-lg shadow-neon/20' : 'text-zinc-400 hover:text-white'}`}>
-            <Banknote className="w-4 h-4" /> À Vista
-          </button>
-          <button onClick={() => setModoPagamento('cartao')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${modoPagamento === 'cartao' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'text-zinc-400 hover:text-white'}`}>
-            <CreditCard className="w-4 h-4" /> Cartão {orcamento.parcelas}x
-          </button>
-        </div>
 
         <div className="space-y-4">
           {orcamento.itens.map((item, idx) => (
