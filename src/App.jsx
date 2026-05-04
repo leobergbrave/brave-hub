@@ -361,6 +361,18 @@ export default function App() {
     setEditingWeightId(null);
   }, []);
 
+  const handleDescontoItemChange = useCallback((id, campo, valor) => {
+    let num;
+    if (valor === '') {
+      num = 0;
+    } else {
+      num = parseInt(valor, 10);
+      if (isNaN(num) || num < 0) num = 0;
+      if (num > 100) num = 100;
+    }
+    setItens((prev) => prev.map((i) => i.id === id ? { ...i, [campo]: num } : i));
+  }, []);
+
   const handleImageUpload = async (event, id) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1418,6 +1430,28 @@ export default function App() {
                               </div>
                             )}
                           </div>
+                          
+                          {/* Item Discounts */}
+                          {personalizarPorProduto && (
+                            <div className="flex items-center gap-4 mt-2 w-full pt-2 border-t border-dark-700/50">
+                              <label className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
+                                % À vista
+                                <div className="flex items-center bg-dark-900 border border-emerald-500/30 rounded focus-within:border-emerald-500/60 overflow-hidden">
+                                  <input type="number" min="0" max="100" value={item.descontoAvistaItem || ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoAvistaItem', e.target.value)}
+                                    className="w-10 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="0" />
+                                  <span className="text-emerald-500/70 text-[10px] pr-1.5">%</span>
+                                </div>
+                              </label>
+                              <label className="flex items-center gap-1.5 text-[10px] text-emerald-400/80 font-medium">
+                                % Cartão
+                                <div className="flex items-center bg-dark-900 border border-emerald-500/20 rounded focus-within:border-emerald-500/50 overflow-hidden">
+                                  <input type="number" min="0" max="100" value={item.descontoCartaoItem || ''} onChange={(e) => handleDescontoItemChange(item.id, 'descontoCartaoItem', e.target.value)}
+                                    className="w-10 bg-transparent py-1 px-1.5 text-white text-center text-xs focus:outline-none appearance-none" placeholder="0" />
+                                  <span className="text-emerald-500/50 text-[10px] pr-1.5">%</span>
+                                </div>
+                              </label>
+                            </div>
+                          )}
                         </li>
                       );
                     })}
