@@ -4,7 +4,7 @@ import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
   Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen,
-  Mic, Square, FileText, MapPinned, CreditCard, Percent
+  Mic, Square, FileText, MapPinned, CreditCard, Percent, Bookmark, Save
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import {
@@ -87,6 +87,13 @@ export default function App() {
   const [historico, setHistorico] = useState([]);
   const [loadingHistorico, setLoadingHistorico] = useState(true);
 
+  // ── Template State ──
+  const [modelos, setModelos] = useState([]);
+  const [loadingModelos, setLoadingModelos] = useState(true);
+  const [showSalvarModelo, setShowSalvarModelo] = useState(false);
+  const [nomeModelo, setNomeModelo] = useState('');
+  const [descricaoModelo, setDescricaoModelo] = useState('');
+
   // ── Fetch products on mount ──
   useEffect(() => {
     setLoadingProdutos(true);
@@ -128,6 +135,23 @@ export default function App() {
   useEffect(() => {
     fetchHistorico();
   }, [fetchHistorico]);
+
+  // ── Fetch templates on mount ──
+  const fetchModelos = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('orcamentos_modelo').select('*').eq('ativo', true).order('nome');
+      if (error) throw error;
+      setModelos(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar modelos:', err);
+    } finally {
+      setLoadingModelos(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchModelos();
+  }, [fetchModelos]);
 
   // ── Edit mode: load quote from ?edit=slug ──
   const [searchParams, setSearchParams] = useSearchParams();
@@ -227,21 +251,27 @@ export default function App() {
   const handleGlobalDescontoAvistaChange = useCallback((e) => {
     const num = Math.max(0, Math.min(100, Number(e.target.value)));
     setDescontoAvista(num);
-    setItens((prev) => prev.map(item => ({
-      ...item,
-      descontoAvistaItem: num,
-      preco_avista: item.preco * (1 - num / 100)
-    })));
+    setItens((prev) => prev.map(item => {
+      if (item._precoAvistaFixo) return item;
+      return {
+        ...item,
+        descontoAvistaItem: num,
+        preco_avista: item.preco * (1 - num / 100)
+      };
+    }));
   }, []);
 
   const handleGlobalDescontoCartaoChange = useCallback((e) => {
     const num = Math.max(0, Math.min(100, Number(e.target.value)));
     setDescontoCartao(num);
-    setItens((prev) => prev.map(item => ({
-      ...item,
-      descontoCartaoItem: num,
-      preco_prazo: item.preco * (1 - num / 100)
-    })));
+    setItens((prev) => prev.map(item => {
+      if (item._precoPrazoFixo) return item;
+      return {
+        ...item,
+        descontoCartaoItem: num,
+        preco_prazo: item.preco * (1 - num / 100)
+      };
+    }));
   }, []);
 
   const adicionarProduto = useCallback((produto, qtd) => {
@@ -252,7 +282,25 @@ export default function App() {
           i.id === produto.id ? { ...i, quantidade: i.quantidade + qtd } : i
         );
       }
-      return [...prev, { ...produto, quantidade: qtd }];
+      const item = { ...produto, quantidade: qtd };
+
+      // Pre-fill preco_avista from DB and calculate reverse discount %
+      if (produto.preco_avista != null && produto.preco > 0) {
+        item.descontoAvistaItem = parseFloat((((produto.preco - produto.preco_avista) / produto.preco) * 100).toFixed(2));
+        item._precoAvistaFixo = true;
+      } else {
+        item.descontoAvistaItem = 0;
+      }
+
+      // Pre-fill preco_prazo from DB and calculate reverse discount %
+      if (produto.preco_prazo != null && produto.preco > 0) {
+        item.descontoCartaoItem = parseFloat((((produto.preco - produto.preco_prazo) / produto.preco) * 100).toFixed(2));
+        item._precoPrazoFixo = true;
+      } else {
+        item.descontoCartaoItem = 0;
+      }
+
+      return [...prev, item];
     });
   }, []);
 
@@ -531,6 +579,83 @@ export default function App() {
       if (btnGerarLink) btnGerarLink.disabled = false;
     }
   }, [itens, estado, zona, nomeCliente, nomeConsultor, showToastMessage]);
+
+  // ── Template Handlers ──
+  const handleCarregarModelo = useCallback((modelo) => {
+    if (!modelo?.itens || !Array.isArray(modelo.itens)) return;
+
+    const itensCarregados = modelo.itens.map(itemModelo => {
+      const prodDb = produtos.find(p => p.id === (itemModelo.produto_id || itemModelo.id));
+      if (!prodDb) return null;
+
+      const item = { ...prodDb, quantidade: itemModelo.quantidade || 1 };
+
+      if (prodDb.preco_avista != null && prodDb.preco > 0) {
+        item.descontoAvistaItem = parseFloat((((prodDb.preco - prodDb.preco_avista) / prodDb.preco) * 100).toFixed(2));
+        item._precoAvistaFixo = true;
+      } else {
+        item.descontoAvistaItem = 0;
+      }
+      if (prodDb.preco_prazo != null && prodDb.preco > 0) {
+        item.descontoCartaoItem = parseFloat((((prodDb.preco - prodDb.preco_prazo) / prodDb.preco) * 100).toFixed(2));
+        item._precoPrazoFixo = true;
+      } else {
+        item.descontoCartaoItem = 0;
+      }
+
+      return item;
+    }).filter(Boolean);
+
+    if (itensCarregados.length === 0) {
+      showToastMessage('Nenhum produto do modelo foi encontrado no catálogo.', true);
+      return;
+    }
+
+    setItens(itensCarregados);
+    if (modelo.consultor) setNomeConsultor(modelo.consultor);
+    showToastMessage(`Modelo "${modelo.nome}" carregado com ${itensCarregados.length} itens!`);
+  }, [produtos, showToastMessage]);
+
+  const handleSalvarModelo = useCallback(async () => {
+    if (!nomeModelo.trim() || itens.length === 0) return;
+
+    try {
+      const itensModelo = itens.map(i => ({
+        produto_id: i.id,
+        quantidade: i.quantidade,
+      }));
+
+      const { error } = await supabase.from('orcamentos_modelo').insert({
+        nome: nomeModelo.trim(),
+        descricao: descricaoModelo.trim() || null,
+        itens: itensModelo,
+        consultor: nomeConsultor || null,
+      });
+
+      if (error) throw error;
+
+      showToastMessage(`Modelo "${nomeModelo}" salvo com sucesso!`);
+      setNomeModelo('');
+      setDescricaoModelo('');
+      setShowSalvarModelo(false);
+      fetchModelos();
+    } catch (err) {
+      console.error('Erro ao salvar modelo:', err);
+      showToastMessage('Erro ao salvar modelo. Tente novamente.', true);
+    }
+  }, [nomeModelo, descricaoModelo, itens, nomeConsultor, showToastMessage, fetchModelos]);
+
+  const handleExcluirModelo = useCallback(async (modeloId) => {
+    try {
+      const { error } = await supabase.from('orcamentos_modelo').update({ ativo: false }).eq('id', modeloId);
+      if (error) throw error;
+      showToastMessage('Modelo removido!');
+      fetchModelos();
+    } catch (err) {
+      console.error('Erro ao excluir modelo:', err);
+      showToastMessage('Erro ao remover modelo.', true);
+    }
+  }, [showToastMessage, fetchModelos]);
 
   // ── IA Handler (Edge Function) ──
   const handleProcessarIA = useCallback(async () => {
@@ -1035,6 +1160,57 @@ export default function App() {
                   className="relative w-full mt-4 flex items-center justify-center gap-2.5 bg-gradient-to-r from-purple-600 to-violet-500 text-white font-bold text-sm py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer overflow-hidden disabled:opacity-50">
                   {iaExtraindo ? (<><Loader2 className="w-4 h-4 animate-spin" />Transcrevendo...</>) : (<><Mic className="w-4 h-4" />Transcrever Áudio</>)}
                 </button>
+              )}
+            </section>
+
+            {/* Card: Orçamentos Modelo */}
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-amber-500/20 rounded-2xl p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <Bookmark className="w-4 h-4 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Orçamentos Modelo</h2>
+                  <p className="text-[10px] text-amber-400/70 font-medium tracking-wide">Carregar template rápido</p>
+                </div>
+              </div>
+
+              {loadingModelos ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : modelos.length === 0 ? (
+                <p className="text-xs text-zinc-500 text-center py-4">Nenhum modelo salvo ainda.<br/>Crie um orçamento e clique em "Salvar como Modelo".</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {modelos.map(modelo => (
+                    <div key={modelo.id} className="flex items-center justify-between bg-dark-900/60 border border-dark-700/40 rounded-xl px-3 py-2.5 hover:border-amber-500/30 transition-all group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{modelo.nome}</p>
+                        {modelo.descricao && (
+                          <p className="text-[10px] text-zinc-500 truncate">{modelo.descricao}</p>
+                        )}
+                        <p className="text-[10px] text-zinc-600">{modelo.itens?.length || 0} {(modelo.itens?.length || 0) === 1 ? 'item' : 'itens'}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <button
+                          onClick={() => handleCarregarModelo(modelo)}
+                          disabled={loadingProdutos}
+                          className="px-3 py-1.5 text-[10px] font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition-colors cursor-pointer disabled:opacity-30"
+                        >
+                          Usar
+                        </button>
+                        <button
+                          onClick={() => handleExcluirModelo(modelo.id)}
+                          className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </section>
 
@@ -1553,6 +1729,59 @@ export default function App() {
                   <div className="mt-3 bg-dark-800 border border-dark-600 rounded-xl p-3 animate-fade-in-up">
                     <p className="text-[10px] uppercase font-semibold text-zinc-500 mb-1.5 tracking-wider">Link do Orçamento</p>
                     <p className="text-xs text-neon/80 break-all font-mono leading-relaxed select-all">{linkGerado}</p>
+                  </div>
+                )}
+
+                {/* Salvar como Modelo */}
+                {itens.length > 0 && (
+                  <div className="mt-3">
+                    {!showSalvarModelo ? (
+                      <button
+                        onClick={() => setShowSalvarModelo(true)}
+                        className="w-full flex items-center justify-center gap-2 text-xs text-zinc-500 hover:text-amber-400 transition-colors py-2 cursor-pointer"
+                      >
+                        <Bookmark className="w-3.5 h-3.5" />
+                        Salvar como Modelo
+                      </button>
+                    ) : (
+                      <div className="bg-dark-800 border border-amber-500/30 rounded-xl p-4 space-y-3 animate-fade-in-up">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Bookmark className="w-4 h-4 text-amber-400" />
+                          <span className="text-xs font-bold text-white uppercase tracking-wider">Salvar como Modelo</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={nomeModelo}
+                          onChange={(e) => setNomeModelo(e.target.value)}
+                          placeholder="Nome do modelo (ex: Kit Básico CrossFit)"
+                          className="w-full bg-dark-900 border border-dark-600 text-white text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all placeholder:text-dark-500"
+                          autoFocus
+                        />
+                        <input
+                          type="text"
+                          value={descricaoModelo}
+                          onChange={(e) => setDescricaoModelo(e.target.value)}
+                          placeholder="Descrição (opcional)"
+                          className="w-full bg-dark-900 border border-dark-600 text-white text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all placeholder:text-dark-500"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleSalvarModelo}
+                            disabled={!nomeModelo.trim()}
+                            className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-500 text-white font-bold text-xs py-2.5 rounded-lg transition-all hover:shadow-lg hover:shadow-amber-500/20 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            Salvar Modelo
+                          </button>
+                          <button
+                            onClick={() => { setShowSalvarModelo(false); setNomeModelo(''); setDescricaoModelo(''); }}
+                            className="px-3 py-2.5 bg-dark-700 text-zinc-400 hover:text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
