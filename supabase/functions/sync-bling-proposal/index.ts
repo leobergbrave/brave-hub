@@ -6,13 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function getBlingToken(supabase) {
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function getBlingToken(supabase: any) {
   const { data, error } = await supabase.from('bling_config').select('*').eq('id', 1).single();
   if (error || !data) throw new Error('Credenciais da Bling não encontradas no banco.');
   return data;
 }
 
-async function refreshBlingToken(supabase, config) {
+async function refreshBlingToken(supabase: any, config: any) {
   const credentials = btoa(`${config.client_id}:${config.client_secret}`);
   
   const response = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
@@ -36,7 +38,6 @@ async function refreshBlingToken(supabase, config) {
 
   const tokenData = await response.json();
   
-  // Atualiza no banco
   await supabase.from('bling_config').update({
     access_token: tokenData.access_token,
     refresh_token: tokenData.refresh_token,
@@ -46,7 +47,7 @@ async function refreshBlingToken(supabase, config) {
   return tokenData.access_token;
 }
 
-async function fetchWithBlingAuth(url, options, supabase) {
+async function fetchWithBlingAuth(url: string, options: any, supabase: any) {
   let config = await getBlingToken(supabase);
   
   let res = await fetch(url, {
@@ -86,7 +87,7 @@ serve(async (req) => {
     );
 
     const body = await req.json();
-    const { cliente, payload } = body;
+    const { cliente, consultor, payload } = body;
 
     if (!payload || !payload.itens) {
       return new Response(JSON.stringify({ error: 'Payload de orçamento inválido' }), {
@@ -95,23 +96,75 @@ serve(async (req) => {
       });
     }
 
-    // 1. Mapear os itens
-    const itensBling = payload.itens.map(item => {
-      // Usar preco_avista se estiver disponível no payload (se for à vista), senão preco normal
+    const nomeCliente = cliente || 'Cliente Brave HUB';
+    const nomeConsultor = consultor || 'Léo Berg';
+
+    // 1. Buscar Vendedor (para preencher o ID obrigatório)
+    let idVendedor = undefined;
+    const resVend = await fetchWithBlingAuth('https://api.bling.com.br/v3/vendedores', { method: 'GET' }, supabaseClient);
+    if (resVend.ok) {
+      const vendData = await resVend.json();
+      if (vendData && vendData.data) {
+        const vendedor = vendData.data.find((v: any) => v.contato.nome.toLowerCase() === nomeConsultor.toLowerCase());
+        if (vendedor) idVendedor = vendedor.id;
+      }
+    }
+    
+    await sleep(400); // Evitar rate limit (max 3 req/sec)
+
+    // 2. Buscar ou Criar Contato
+    let idContato = null;
+    const resContBusca = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?pesquisa=${encodeURIComponent(nomeCliente)}`, { method: 'GET' }, supabaseClient);
+    
+    if (resContBusca.ok) {
+      const contData = await resContBusca.json();
+      if (contData && contData.data && contData.data.length > 0) {
+        idContato = contData.data[0].id;
+      }
+    }
+
+    await sleep(400);
+
+    if (!idContato) {
+      // Criar Contato
+      const resContCria = await fetchWithBlingAuth('https://api.bling.com.br/v3/contatos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: nomeCliente,
+          tipo: 'F', // F = Física, J = Jurídica (como padrão vamos de F)
+          situacao: 'A',
+          contribuinte: 9 // 9 = Não contribuinte
+        })
+      }, supabaseClient);
+
+      if (resContCria.ok) {
+        const newContData = await resContCria.json();
+        if (newContData && newContData.data) {
+          idContato = newContData.data.id;
+        }
+      } else {
+        const errText = await resContCria.text();
+        throw new Error(`Erro ao criar contato na Bling: ${errText}`);
+      }
+      await sleep(400);
+    }
+
+    if (!idContato) throw new Error('Não foi possível obter ou criar o contato na Bling.');
+
+    // 3. Mapear os itens e criar Proposta Comercial
+    const itensBling = payload.itens.map((item: any) => {
       // Como a proposta no Bling é geral, vamos enviar o preço base e aplicar o desconto total
       return {
         codigo: item.codigo_sku || '',
         descricao: item.nome,
         quantidade: item.quantidade,
-        valor: item.preco
+        valor: Number(item.preco)
       };
     });
 
-    // 2. Montar Proposta Comercial
-    const proposta = {
-      contato: {
-        nome: cliente || 'Cliente Brave HUB'
-      },
+    const proposta: any = {
+      contato: { id: idContato },
       itens: itensBling,
       transporte: {
         fretePorConta: 0, // 0 = Contratação do Frete por conta do Remetente (CIF)
@@ -119,8 +172,11 @@ serve(async (req) => {
       }
     };
 
-    // 3. Enviar para a Bling
-    const blingResponse = await fetchWithBlingAuth('https://www.bling.com.br/Api/v3/propostas-comerciais', {
+    if (idVendedor) {
+      proposta.vendedor = { id: idVendedor };
+    }
+
+    const blingResponse = await fetchWithBlingAuth('https://api.bling.com.br/v3/propostas-comerciais', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -140,7 +196,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Edge Function Error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -68,7 +68,7 @@ export default function MarketingTab() {
   const handleDisparar = async () => {
     const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
     if (!webhookUrl) {
-      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada no Netlify!");
+      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada na Vercel!");
       return;
     }
 
