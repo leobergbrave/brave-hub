@@ -8,7 +8,7 @@ async function checkBling() {
   const { data } = await supabase.from('bling_config').select('access_token').eq('id', 1).single();
   const token = data.access_token;
   
-  const res = await fetch('https://api.bling.com.br/v3/propostas-comerciais/25730180680', {
+  const res = await fetch('https://api.bling.com.br/v3/propostas-comerciais?limite=10&pagina=1', {
     headers: { 'Authorization': `Bearer ${token}`, 'Accept': '1.0' }
   });
   console.log(await res.text());

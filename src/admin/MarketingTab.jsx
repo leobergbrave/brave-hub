@@ -113,6 +113,54 @@ export default function MarketingTab() {
     load(); // Refresh lists
   };
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDisparo, setEditingDisparo] = useState(null); // The one currently being edited/viewed
+
+  const handleOpenDisparos = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleSendIndividual = async (d, customMessage) => {
+    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+    if (!webhookUrl) {
+      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada na Vercel!");
+      return;
+    }
+
+    setSending(true);
+    try {
+      let cleanPhone = (d.orcamento.payload.telefoneCliente || '').replace(/\D/g, '');
+      if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+        cleanPhone = '55' + cleanPhone;
+      }
+
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente: d.orcamento.cliente,
+          telefone: cleanPhone,
+          consultor: d.orcamento.consultor,
+          campanha: d.template.nome,
+          mensagem_formatada: customMessage || d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente),
+          media_url: d.template.media_url || ''
+        })
+      });
+
+      const sent = d.orcamento.payload.marketing_sent || [];
+      const newPayload = { ...d.orcamento.payload, marketing_sent: [...sent, d.template.id] };
+      await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', d.orcamento.id);
+      
+      // Remove from list
+      setPendingDisparos(prev => prev.filter(p => !(p.orcamento.id === d.orcamento.id && p.template.id === d.template.id)));
+      alert("✅ Campanha enviada com sucesso para " + d.orcamento.cliente);
+    } catch (err) {
+      console.error("Erro disparando:", err);
+      alert("❌ Erro ao enviar. Verifique o console.");
+    }
+    setSending(false);
+  };
+
   const handleTestar = async (template) => {
     const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
     if (!webhookUrl) {
@@ -186,11 +234,11 @@ export default function MarketingTab() {
             </div>
             
             <button
-              onClick={handleDisparar}
-              disabled={pendingDisparos.length === 0 || sending}
+              onClick={handleOpenDisparos}
+              disabled={pendingDisparos.length === 0}
               className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0 shadow-lg shadow-blue-500/20"
             >
-              {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Processando...</> : <><Send className="w-4 h-4" /> Enviar Campanhas de Hoje</>}
+              <Send className="w-4 h-4" /> Ver Campanhas Pendentes
             </button>
           </div>
           {templates.map(t => (
@@ -269,6 +317,86 @@ export default function MarketingTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* MODAL DE DISPAROS */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-3xl rounded-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-6 border-b border-dark-800">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Send className="w-5 h-5 text-neon" />
+                Campanhas Pendentes ({pendingDisparos.length})
+              </h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors">
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {pendingDisparos.length === 0 ? (
+                <p className="text-center text-zinc-500 py-10">Não há mais campanhas pendentes hoje!</p>
+              ) : (
+                pendingDisparos.map((d, index) => {
+                  const defaultMessage = d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente);
+                  const isEditing = editingDisparo?.id === d.orcamento.id && editingDisparo?.templateId === d.template.id;
+                  
+                  return (
+                    <div key={`${d.orcamento.id}-${d.template.id}`} className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-bold text-white">{d.orcamento.cliente}</h4>
+                          <p className="text-sm text-zinc-400">📲 {d.orcamento.payload.telefoneCliente}</p>
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 mt-2">
+                            {d.template.nome}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (isEditing) {
+                              handleSendIndividual(d, editingDisparo.message);
+                            } else {
+                              setEditingDisparo({ id: d.orcamento.id, templateId: d.template.id, message: defaultMessage });
+                            }
+                          }}
+                          disabled={sending}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
+                            isEditing ? 'bg-neon text-dark-950 hover:bg-neon/90' : 'bg-blue-600 text-white hover:bg-blue-500'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {sending && isEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                          {isEditing ? 'Confirmar e Enviar' : 'Revisar e Enviar'}
+                        </button>
+                      </div>
+                      
+                      {isEditing ? (
+                        <textarea
+                          value={editingDisparo.message}
+                          onChange={(e) => setEditingDisparo({ ...editingDisparo, message: e.target.value })}
+                          rows={4}
+                          className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/20 transition-all mt-3"
+                        />
+                      ) : (
+                        <div className="bg-dark-900/50 border border-dark-700 rounded-lg p-3 mt-3">
+                          <p className="text-sm text-zinc-300 whitespace-pre-wrap">{defaultMessage}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-dark-800 bg-dark-900/50 rounded-b-2xl">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-full py-3 rounded-xl border border-dark-600 text-white font-bold hover:bg-dark-800 transition-colors"
+              >
+                Fechar Painel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
