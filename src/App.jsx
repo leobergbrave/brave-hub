@@ -678,8 +678,9 @@ export default function App() {
 
       resolucoes.forEach((res) => {
         if (res.opcoes && res.opcoes.length === 1) {
-          // Apenas uma opção, adiciona direto
-          adicionarProduto(res.opcoes[0], res.quantidade || 1);
+          // Apenas uma opção, adiciona direto — buscar produto completo do catálogo local
+          const prodCompleto = produtos.find(p => p.id === res.opcoes[0].id) || res.opcoes[0];
+          adicionarProduto(prodCompleto, res.quantidade || 1);
           adicionados++;
         } else if (res.opcoes && res.opcoes.length > 1) {
           // Mais de uma opção, manda pra resolução
@@ -704,12 +705,14 @@ export default function App() {
     } finally {
       setIaProcessando(false);
     }
-  }, [iaProcessando, iaTexto, adicionarProduto, showToastMessage]);
+  }, [iaProcessando, iaTexto, adicionarProduto, produtos, showToastMessage]);
 
   // Handle Resolution Choice
   const handleResolucaoEscolha = (indexPendente, opcaoEscolhida) => {
     const pendente = iaPendentes[indexPendente];
-    adicionarProduto(opcaoEscolhida, pendente.quantidade || 1);
+    // Buscar produto completo do catálogo local (com preco_avista/preco_prazo)
+    const prodCompleto = produtos.find(p => p.id === opcaoEscolhida.id) || opcaoEscolhida;
+    adicionarProduto(prodCompleto, pendente.quantidade || 1);
     
     // Remove from pendentes
     const novosPendentes = [...iaPendentes];
