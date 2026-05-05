@@ -578,6 +578,11 @@ export default function App() {
       navigator.clipboard.writeText(link).catch(() => {});
       showToastMessage('Link gerado e copiado para a área de transferência!');
       
+      // Envia para a Bling silenciosamente no fundo
+      supabase.functions.invoke('sync-bling-proposal', {
+        body: { cliente: nomeCliente, payload }
+      }).catch(err => console.error('Erro ao syncar com Bling:', err));
+
       // Atualiza o histórico
       fetchHistorico();
     } catch (err) {
