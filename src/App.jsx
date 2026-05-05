@@ -580,7 +580,7 @@ export default function App() {
       
       // Envia para a Bling silenciosamente no fundo
       supabase.functions.invoke('sync-bling-proposal', {
-        body: { cliente: nomeCliente, payload }
+        body: { cliente: nomeCliente, consultor: nomeConsultor, payload }
       }).catch(err => console.error('Erro ao syncar com Bling:', err));
 
       // Atualiza o histórico
