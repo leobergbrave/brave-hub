@@ -131,7 +131,9 @@ export default function OrcamentoPage() {
       const descontoTotal = itensCompletos.reduce((acc, i) => acc + i.descontoUnitario * i.quantidade, 0);
 
       const regraFrete = regrasFreteDb.find(r => r.estado === ufParam && r.zona === zonaParam);
-      const frete = calcularFreteComRegra(pesoTotal, regraFrete);
+      const frete = orcamentoSalvo?.payload?.frete !== undefined 
+        ? Number(orcamentoSalvo.payload.frete) 
+        : calcularFreteComRegra(pesoTotal, regraFrete);
       const total = subtotal + frete;
 
       // Payment conditions

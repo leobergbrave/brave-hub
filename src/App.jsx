@@ -4,7 +4,7 @@ import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
   PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
   Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen,
-  Mic, Square, FileText, MapPinned, CreditCard, Percent, Bookmark, Save
+  Mic, Square, FileText, MapPinned, CreditCard, Percent, Bookmark, Save, RotateCcw
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import {
@@ -58,6 +58,9 @@ export default function App() {
   const [editingWeightId, setEditingWeightId] = useState(null);
   const [editItemWeight, setEditItemWeight] = useState('');
   const [uploadingImageId, setUploadingImageId] = useState(null);
+  const [freteEditado, setFreteEditado] = useState(null);
+  const [isEditingFrete, setIsEditingFrete] = useState(false);
+  const [freteInputValue, setFreteInputValue] = useState('');
   const [editingImageId, setEditingImageId] = useState(null);
   const [editImageUrl, setEditImageUrl] = useState('');
 
@@ -230,10 +233,15 @@ export default function App() {
     () => regrasFrete.find((r) => r.estado === estado && r.zona === zona) || null,
     [regrasFrete, estado, zona]
   );
-  const freteFinal = useMemo(
-    () => calcularFreteComRegra(pesoTotal, regraAtual),
-    [pesoTotal, regraAtual]
-  );
+
+  useEffect(() => {
+    setFreteEditado(null);
+  }, [pesoTotal, regraAtual]);
+
+  const freteFinal = useMemo(() => {
+    if (freteEditado !== null) return freteEditado;
+    return calcularFreteComRegra(pesoTotal, regraAtual);
+  }, [pesoTotal, regraAtual, freteEditado]);
   const totalProjeto = subtotalEquip + freteFinal;
   const temItemSemPeso = useMemo(
     () => itens.some((i) => !i.peso_kg),
@@ -546,7 +554,8 @@ export default function App() {
           descontoAvista,
           descontoCartao,
           parcelas: parcelasCartao
-        }
+        },
+        frete: freteFinal
       };
 
       const novoOrcamento = {
@@ -1715,8 +1724,48 @@ export default function App() {
                   <span className="text-sm font-semibold text-white">{formatCurrency(subtotalEquip)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-zinc-400"><Truck className="w-4 h-4" /><span className="text-xs font-medium">Frete Final ({estado} · {zona})</span></div>
-                  <span className="text-sm font-semibold text-orange-accent">{formatCurrency(freteFinal)}</span>
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Truck className="w-4 h-4" />
+                    <span className="text-xs font-medium">Frete Final ({estado} · {zona})</span>
+                    {freteEditado !== null && (
+                      <button onClick={() => setFreteEditado(null)} className="text-[10px] text-zinc-500 hover:text-white" title="Restaurar frete calculado">
+                        <RotateCcw className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  {isEditingFrete ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center bg-dark-900 border border-orange-accent/50 rounded overflow-hidden">
+                        <span className="text-orange-accent/50 text-[10px] pl-1.5">R$</span>
+                        <input 
+                          type="number" 
+                          min="0" step="0.01"
+                          value={freteInputValue} 
+                          onChange={(e) => setFreteInputValue(e.target.value)} 
+                          className="w-20 bg-transparent py-1 px-1.5 text-orange-accent text-xs font-semibold focus:outline-none appearance-none" 
+                          autoFocus
+                          onBlur={() => {
+                            setFreteEditado(Number(freteInputValue) || 0);
+                            setIsEditingFrete(false);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              setFreteEditado(Number(freteInputValue) || 0);
+                              setIsEditingFrete(false);
+                            }
+                            if (e.key === 'Escape') {
+                              setIsEditingFrete(false);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 group/frete cursor-pointer" onClick={() => { setFreteInputValue(freteFinal); setIsEditingFrete(true); }}>
+                      <span className="text-sm font-semibold text-orange-accent">{formatCurrency(freteFinal)}</span>
+                      <Edit2 className="w-3 h-3 text-dark-500 group-hover/frete:text-orange-accent transition-colors" />
+                    </div>
+                  )}
                 </div>
                 <div className="border-t border-dark-700/50 pt-3">
                   <div className="flex items-center justify-between">

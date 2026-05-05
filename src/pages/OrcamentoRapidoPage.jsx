@@ -289,6 +289,7 @@ export default function OrcamentoRapidoPage() {
           parcelas: 12,
           personalizarPorProduto: false,
         },
+        frete,
       };
 
       const { error } = await supabase.from('orcamentos_salvos').insert({
