@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
-import { Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle, Edit2 } from 'lucide-react';
+import { Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle, Edit2, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const STATUS_MAP = {
@@ -14,6 +14,7 @@ export default function OrcamentosTab() {
   const [orcs, setOrcs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('Todos');
+  const [searchTerm, setSearchTerm] = useState('');
   const [detail, setDetail] = useState(null);
   const navigate = useNavigate();
 
@@ -51,7 +52,20 @@ export default function OrcamentosTab() {
     navigator.clipboard.writeText(`${window.location.origin}/orcamento/${slug}`);
   };
 
-  const filtered = filter === 'Todos' ? orcs : orcs.filter(o => (o.payload?.status || 'Pendente') === filter);
+  const filtered = orcs.filter(o => {
+    const statusMatch = filter === 'Todos' || (o.payload?.status || 'Pendente') === filter;
+    
+    let searchMatch = true;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchName = o.cliente?.toLowerCase().includes(term);
+      const dateStr = new Date(o.criado_em).toLocaleDateString('pt-BR');
+      const matchDate = dateStr.includes(term);
+      searchMatch = matchName || matchDate;
+    }
+
+    return statusMatch && searchMatch;
+  });
 
   return (
     <div>
@@ -62,6 +76,19 @@ export default function OrcamentosTab() {
             <button key={f} onClick={() => setFilter(f)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${filter === f ? 'bg-neon/10 text-neon' : 'text-zinc-500 hover:text-white'}`}>{f}</button>
           ))}
         </div>
+      </div>
+
+      <div className="mb-6 relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Search className="h-4 w-4 text-zinc-500" />
+        </div>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Buscar por nome do cliente ou data (ex: 05/05/2026)..."
+          className="block w-full pl-10 pr-3 py-3 border border-dark-600 rounded-xl leading-5 bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:bg-dark-800 focus:border-neon/50 focus:ring-1 focus:ring-neon/50 sm:text-sm transition-all"
+        />
       </div>
 
       {loading ? (

@@ -303,6 +303,11 @@ export default function OrcamentoRapidoPage() {
 
       setLinkGerado(`${window.location.origin}/orcamento/${slug}`);
       setOrcamentoGerado(true);
+
+      // Envia para a Bling silenciosamente no fundo
+      supabase.functions.invoke('sync-bling-proposal', {
+        body: { cliente: nomeCliente, consultor: 'Léo Berg', payload }
+      }).catch(err => console.error('Erro ao syncar com Bling:', err));
     } catch (err) {
       console.error(err);
     } finally {

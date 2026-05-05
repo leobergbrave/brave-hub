@@ -98,14 +98,15 @@ serve(async (req) => {
 
     const nomeCliente = cliente || 'Cliente Brave HUB';
     const nomeConsultor = consultor || 'Léo Berg';
+    const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    // 1. Buscar Vendedor (para preencher o ID obrigatório)
+    // 1. Buscar Vendedor
     let idVendedor = undefined;
     const resVend = await fetchWithBlingAuth('https://api.bling.com.br/v3/vendedores', { method: 'GET' }, supabaseClient);
     if (resVend.ok) {
       const vendData = await resVend.json();
       if (vendData && vendData.data) {
-        const vendedor = vendData.data.find((v: any) => v.contato.nome.toLowerCase() === nomeConsultor.toLowerCase());
+        const vendedor = vendData.data.find((v: any) => normalize(v.contato.nome) === normalize(nomeConsultor));
         if (vendedor) idVendedor = vendedor.id;
       }
     }
@@ -150,51 +151,83 @@ serve(async (req) => {
       await sleep(400);
     }
 
-    if (!idContato) throw new Error('Não foi possível obter ou criar o contato na Bling.');
+    if (!idContato) throw new Error('Falha ao criar contato.');
 
-    // 3. Mapear os itens e criar Proposta Comercial
-    const itensBling = payload.itens.map((item: any) => {
-      // Como a proposta no Bling é geral, vamos enviar o preço base e aplicar o desconto total
+    const descAvista = payload.condicoes?.descontoAvista || 0;
+    const descCartao = payload.condicoes?.descontoCartao || 0;
+
+    // 3. Montar itens para a Proposta À VISTA
+    const itensAvista = payload.itens.map((item: any) => {
+      const precoFinalAvista = item.preco_avista != null ? item.preco_avista : item.preco * (1 - descAvista / 100);
       return {
         codigo: item.codigo_sku || '',
         descricao: item.nome,
+        descricaoDetalhada: item.nome,
+        unidade: 'UN',
         quantidade: item.quantidade,
-        valor: Number(item.preco)
+        valor: Number(precoFinalAvista.toFixed(2)),
+        produto: { descricao: item.nome }
       };
     });
 
-    const proposta: any = {
+    // 4. Montar itens para a Proposta A PRAZO
+    const itensPrazo = payload.itens.map((item: any) => {
+      const precoFinalPrazo = item.preco_prazo != null ? item.preco_prazo : item.preco * (1 - descCartao / 100);
+      return {
+        codigo: item.codigo_sku || '',
+        descricao: item.nome,
+        descricaoDetalhada: item.nome,
+        unidade: 'UN',
+        quantidade: item.quantidade,
+        valor: Number(precoFinalPrazo.toFixed(2)),
+        produto: { descricao: item.nome }
+      };
+    });
+
+    const propostaBase: any = {
       contato: { id: idContato },
-      itens: itensBling,
       transporte: {
-        fretePorConta: 0, // 0 = Contratação do Frete por conta do Remetente (CIF)
+        fretePorConta: 0,
         frete: Number(payload.frete) || 0
       }
     };
-
     if (idVendedor) {
-      proposta.vendedor = { id: idVendedor };
+      propostaBase.vendedor = { id: idVendedor };
     }
 
-    const blingResponse = await fetchWithBlingAuth('https://api.bling.com.br/v3/propostas-comerciais', {
+    const propostaAvista = { ...propostaBase, itens: itensAvista, observacaoInterna: 'Proposta gerada automaticamente: Valores À VISTA' };
+    const propostaPrazo = { ...propostaBase, itens: itensPrazo, observacaoInterna: `Proposta gerada automaticamente: Valores A PRAZO (${payload.condicoes?.parcelas || '12'}x)` };
+
+    // Envia Proposta À Vista
+    const blingResAvista = await fetchWithBlingAuth('https://api.bling.com.br/v3/propostas-comerciais', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(proposta)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(propostaAvista)
     }, supabaseClient);
 
-    const responseText = await blingResponse.text();
-    console.log('Bling Response Status:', blingResponse.status);
-    console.log('Bling Response Body:', responseText);
-
-    if (!blingResponse.ok) {
-      throw new Error(`Erro na Bling: ${responseText}`);
+    if (!blingResAvista.ok) {
+      const err = await blingResAvista.text();
+      throw new Error(`Erro na Bling (Proposta À Vista): ${err}`);
     }
+    const dataAvista = await blingResAvista.json();
 
-    return new Response(JSON.stringify({ success: true, data: JSON.parse(responseText) }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
+    await sleep(400);
+
+    // Envia Proposta A Prazo
+    const blingResPrazo = await fetchWithBlingAuth('https://api.bling.com.br/v3/propostas-comerciais', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(propostaPrazo)
+    }, supabaseClient);
+
+    if (!blingResPrazo.ok) {
+      const err = await blingResPrazo.text();
+      throw new Error(`Erro na Bling (Proposta A Prazo): ${err}`);
+    }
+    const dataPrazo = await blingResPrazo.json();
+
+    return new Response(JSON.stringify({ success: true, dataAvista, dataPrazo }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
   } catch (error: any) {
     console.error('Edge Function Error:', error);
