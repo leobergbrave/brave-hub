@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
   try {
-    const { produtos, nome } = req.body;
+    const { produtos, nome, telefone } = req.body;
 
     if (!produtos) {
       return res.status(400).json({ error: 'Campo "produtos" é obrigatório' });
@@ -35,6 +35,7 @@ export default async function handler(req, res) {
       codigo,
       produtos_texto: typeof produtos === 'string' ? produtos : JSON.stringify(produtos),
       nome_lead: nome || '',
+      telefone_lead: telefone || null,
     });
 
     if (error) throw error;

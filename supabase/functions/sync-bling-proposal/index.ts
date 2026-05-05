@@ -173,7 +173,10 @@ serve(async (req) => {
 
     // 4. Montar itens para a Proposta À VISTA
     const itensAvista = payload.itens.map((item: any) => {
-      const precoFinalAvista = item.preco_avista != null ? item.preco_avista : item.preco * (1 - descAvista / 100);
+      const precoTabela = Number(item.preco) || 0;
+      const precoFinalAvista = item.preco_avista != null ? Number(item.preco_avista) : precoTabela * (1 - descAvista / 100);
+      // Calcular o desconto percentual: quanto % o preço final é menor que o preço de tabela
+      const descontoPercent = precoTabela > 0 ? Number((((precoTabela - precoFinalAvista) / precoTabela) * 100).toFixed(2)) : 0;
       const blingId = blingIdMap.get(item.id);
       return {
         codigo: item.codigo_sku || '',
@@ -181,7 +184,8 @@ serve(async (req) => {
         descricaoDetalhada: item.nome,
         unidade: 'UN',
         quantidade: item.quantidade,
-        valor: Number(precoFinalAvista.toFixed(2)),
+        valor: Number(precoTabela.toFixed(2)),
+        desconto: descontoPercent > 0 ? descontoPercent : 0,
         // Se temos o bling_id, vincula ao produto REAL. Senão, cai como texto livre (fallback).
         ...(blingId ? { produto: { id: blingId } } : { produto: { descricao: item.nome } })
       };
@@ -189,7 +193,9 @@ serve(async (req) => {
 
     // 5. Montar itens para a Proposta A PRAZO
     const itensPrazo = payload.itens.map((item: any) => {
-      const precoFinalPrazo = item.preco_prazo != null ? item.preco_prazo : item.preco * (1 - descCartao / 100);
+      const precoTabela = Number(item.preco) || 0;
+      const precoFinalPrazo = item.preco_prazo != null ? Number(item.preco_prazo) : precoTabela * (1 - descCartao / 100);
+      const descontoPercent = precoTabela > 0 ? Number((((precoTabela - precoFinalPrazo) / precoTabela) * 100).toFixed(2)) : 0;
       const blingId = blingIdMap.get(item.id);
       return {
         codigo: item.codigo_sku || '',
@@ -197,7 +203,8 @@ serve(async (req) => {
         descricaoDetalhada: item.nome,
         unidade: 'UN',
         quantidade: item.quantidade,
-        valor: Number(precoFinalPrazo.toFixed(2)),
+        valor: Number(precoTabela.toFixed(2)),
+        desconto: descontoPercent > 0 ? descontoPercent : 0,
         ...(blingId ? { produto: { id: blingId } } : { produto: { descricao: item.nome } })
       };
     });
