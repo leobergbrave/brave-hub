@@ -265,15 +265,26 @@ export default function ProdutosTab() {
         <div className="flex items-center gap-2 text-zinc-500 py-8 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Carregando...</div>
       ) : (
         <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '80px' }} />
+              <col />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '90px' }} />
+              <col style={{ width: '90px' }} />
+              <col style={{ width: '90px' }} />
+              <col style={{ width: '80px' }} />
+              <col style={{ width: '60px' }} />
+            </colgroup>
             <thead><tr className="border-b border-dark-700/50 text-xs text-zinc-500 uppercase">
-              <th className="text-left px-4 py-3">SKU</th><th className="text-left px-4 py-3">Nome</th><th className="text-left px-4 py-3">Categoria</th><th className="text-left px-4 py-3">Subcategoria</th><th className="text-right px-4 py-3">Preço</th><th className="text-right px-4 py-3">À Vista</th><th className="text-right px-4 py-3">A Prazo</th><th className="text-right px-4 py-3">Peso</th><th className="px-4 py-3 w-20"></th>
+              <th className="text-left px-4 py-3">SKU</th><th className="text-left px-4 py-3">Nome</th><th className="text-left px-4 py-3">Categoria</th><th className="text-left px-4 py-3">Subcategoria</th><th className="text-right px-4 py-3">Preço</th><th className="text-right px-4 py-3">À Vista</th><th className="text-right px-4 py-3">A Prazo</th><th className="text-right px-4 py-3">Peso</th><th className="px-4 py-3"></th>
             </tr></thead>
             <tbody>
               {filtered.map(p => (
                 <tr key={p.id} className="border-b border-dark-700/30 hover:bg-dark-800/80 transition-colors">
-                  <td className="px-4 py-3 text-zinc-400 font-mono text-xs">{p.codigo_sku || '—'}</td>
-                  <td className="px-4 py-3 text-white font-medium">
+                  <td className="px-4 py-3 text-zinc-400 font-mono text-xs truncate">{p.codigo_sku || '—'}</td>
+                  <td className="px-4 py-3 text-white font-medium" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                     <EditableCell value={p.nome} onSave={val => handleInlineUpdate(p.id, 'nome', val)} />
                   </td>
                   <td className="px-4 py-3">

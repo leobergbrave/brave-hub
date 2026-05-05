@@ -5,7 +5,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é o assistente de extração de orçamentos da BRAVE. Ignore saudações. Extraia apenas os equipamentos e quantidades. ATENÇÃO: As quantidades podem estar no final da linha (ex: "Produto: 4,00") e podem conter vírgulas/decimais. Você DEVE extrair esse número e convertê-lo para um número inteiro (ex: 4,00 vira 4). Retorne EXCLUSIVAMENTE um array JSON puro neste formato: [{ "termo": "nome limpo do produto", "quantidade": 1 }]`;
+const SYSTEM_PROMPT = `Você é o assistente de extração de orçamentos da BRAVE. Ignore saudações, cabeçalhos e categorias (ex: "Equipamentos – Cargas Livres"). Extraia SOMENTE os equipamentos e quantidades.
+
+REGRAS DE EXPANSÃO OBRIGATÓRIAS:
+1. PARES: Se o texto diz "(pares)" e lista vários pesos (ex: "Kettlebells (pares): 4, 6, 8, 10 kg"), você DEVE criar UMA LINHA SEPARADA para CADA peso, com quantidade = 2 (par). Exemplo:
+   Entrada: "Kettlebells (pares): 4, 6, 8 kg"
+   Saída: [{"termo":"Kettlebell 4kg","quantidade":2},{"termo":"Kettlebell 6kg","quantidade":2},{"termo":"Kettlebell 8kg","quantidade":2}]
+
+2. FAIXAS / INTERVALOS: Se o texto diz "2 a 10 kg (de 1 em 1 kg)" e indica "(pares)", gere UMA LINHA para CADA peso no intervalo, com quantidade = 2. Se não diz pares, quantidade = 1.
+   Entrada: "Dumbbells (pares): 2 a 10 kg (de 1 em 1 kg)"
+   Saída: [{"termo":"Dumbbell 2kg","quantidade":2},{"termo":"Dumbbell 3kg","quantidade":2},...,{"termo":"Dumbbell 10kg","quantidade":2}]
+
+3. QUANTIDADES ENTRE PARÊNTESES: Se o texto lista peso com quantidade entre parênteses (ex: "Wall Balls: 3kg (3), 4kg (5)"), crie UMA LINHA para CADA peso com a quantidade indicada.
+   Entrada: "Wall Balls: 3kg (3), 4kg (5), 6kg (5)"
+   Saída: [{"termo":"Wall Ball 3kg","quantidade":3},{"termo":"Wall Ball 4kg","quantidade":5},{"termo":"Wall Ball 6kg","quantidade":5}]
+
+4. ANILHAS: "Anilhas: 20kg (10), 15kg (10)" → uma linha por peso, quantidade do parêntese.
+   Saída: [{"termo":"Anilha 20kg","quantidade":10},{"termo":"Anilha 15kg","quantidade":10}]
+
+5. ITENS SIMPLES: "Colchonetes: 20 unidades" → {"termo":"Colchonete","quantidade":20}
+
+6. PESOS COM VÍRGULA DECIMAL: "12,5 kg" deve ficar "12.5kg" no termo. Quantidades como "4,00" viram 4.
+
+7. Use o nome no SINGULAR sempre que possível (Kettlebell, Dumbbell, Anilha, Wall Ball, etc).
+
+Retorne EXCLUSIVAMENTE um array JSON puro neste formato: [{ "termo": "nome limpo do produto com peso", "quantidade": 1 }]`;
 
 // ── Call LLM (OpenAI or Gemini) ──
 async function callLLM(texto: string): Promise<Array<{ termo: string; quantidade: number }>> {

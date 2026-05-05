@@ -156,9 +156,25 @@ serve(async (req) => {
     const descAvista = payload.condicoes?.descontoAvista || 0;
     const descCartao = payload.condicoes?.descontoCartao || 0;
 
-    // 3. Montar itens para a Proposta À VISTA
+    // 3. Buscar bling_ids dos produtos locais
+    const produtoIds = payload.itens.map((item: any) => item.id).filter(Boolean);
+    const { data: localProducts } = await supabaseClient
+      .from('produtos')
+      .select('id, bling_id, codigo_sku')
+      .in('id', produtoIds);
+
+    // Map: local UUID → bling_id
+    const blingIdMap = new Map<string, number>();
+    if (localProducts) {
+      for (const lp of localProducts) {
+        if (lp.bling_id) blingIdMap.set(lp.id, lp.bling_id);
+      }
+    }
+
+    // 4. Montar itens para a Proposta À VISTA
     const itensAvista = payload.itens.map((item: any) => {
       const precoFinalAvista = item.preco_avista != null ? item.preco_avista : item.preco * (1 - descAvista / 100);
+      const blingId = blingIdMap.get(item.id);
       return {
         codigo: item.codigo_sku || '',
         descricao: item.nome,
@@ -166,13 +182,15 @@ serve(async (req) => {
         unidade: 'UN',
         quantidade: item.quantidade,
         valor: Number(precoFinalAvista.toFixed(2)),
-        produto: { descricao: item.nome }
+        // Se temos o bling_id, vincula ao produto REAL. Senão, cai como texto livre (fallback).
+        ...(blingId ? { produto: { id: blingId } } : { produto: { descricao: item.nome } })
       };
     });
 
-    // 4. Montar itens para a Proposta A PRAZO
+    // 5. Montar itens para a Proposta A PRAZO
     const itensPrazo = payload.itens.map((item: any) => {
       const precoFinalPrazo = item.preco_prazo != null ? item.preco_prazo : item.preco * (1 - descCartao / 100);
+      const blingId = blingIdMap.get(item.id);
       return {
         codigo: item.codigo_sku || '',
         descricao: item.nome,
@@ -180,7 +198,7 @@ serve(async (req) => {
         unidade: 'UN',
         quantidade: item.quantidade,
         valor: Number(precoFinalPrazo.toFixed(2)),
-        produto: { descricao: item.nome }
+        ...(blingId ? { produto: { id: blingId } } : { produto: { descricao: item.nome } })
       };
     });
 

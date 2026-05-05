@@ -111,7 +111,7 @@ export default function OrcamentoRapidoPage() {
           // /q/:codigo — fetch from links_rapidos table
           const { data: linkData, error: linkError } = await supabase
             .from('links_rapidos')
-            .select('produtos_texto, nome_lead')
+            .select('produtos_texto, nome_lead, telefone_lead, aberto')
             .eq('codigo', codigo)
             .single();
 
@@ -119,6 +119,11 @@ export default function OrcamentoRapidoPage() {
             setErro('Link não encontrado ou expirado.');
             setLoading(false);
             return;
+          }
+
+          // Marca o link como aberto para cancelar o gatilho de abandono de 15 minutos
+          if (!linkData.aberto) {
+            supabase.from('links_rapidos').update({ aberto: true }).eq('codigo', codigo).then();
           }
 
           termos = linkData.produtos_texto.split(',').map(t => t.trim()).filter(Boolean);
@@ -192,6 +197,14 @@ export default function OrcamentoRapidoPage() {
 
       setCepInfo(data);
       setEstado(data.uf);
+
+      // Dispara o gatilho de "CEP Digitado" para o BotConversa (via Edge Function para segurança)
+      // A Edge Function vai verificar se existe o telefone do lead vinculado a este código
+      if (codigo) {
+        supabase.functions.invoke('botconversa-triggers', {
+          body: { evento: 'cep_calculado', codigo_link: codigo, cep_info: data }
+        }).catch(err => console.error('Erro ao disparar gatilho do CEP:', err));
+      }
 
       const capitais = {
         AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
