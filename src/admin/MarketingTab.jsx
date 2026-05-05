@@ -79,12 +79,17 @@ export default function MarketingTab() {
       try {
         const mensagemFormatada = d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente);
         
+        let cleanPhone = (d.orcamento.payload.telefoneCliente || '').replace(/\D/g, '');
+        if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+          cleanPhone = '55' + cleanPhone;
+        }
+
         await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             cliente: d.orcamento.cliente,
-            telefone: d.orcamento.payload.telefoneCliente,
+            telefone: cleanPhone,
             consultor: d.orcamento.consultor,
             campanha: d.template.nome,
             mensagem_formatada: mensagemFormatada,
@@ -122,12 +127,17 @@ export default function MarketingTab() {
     try {
       const mensagemFormatada = template.mensagem.replace(/{cliente}/g, "BOX TESTE BRAVE");
       
+      let cleanPhone = telefone.replace(/\D/g, '');
+      if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+        cleanPhone = '55' + cleanPhone;
+      }
+
       await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cliente: "BOX TESTE BRAVE",
-          telefone: telefone.replace(/\D/g, ''),
+          telefone: cleanPhone,
           consultor: "Consultor de Teste",
           campanha: `[TESTE] ${template.nome}`,
           mensagem_formatada: mensagemFormatada,
