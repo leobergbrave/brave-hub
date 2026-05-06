@@ -592,7 +592,7 @@ export default function App() {
       const btnGerarLink = document.getElementById('btn-gerar-link');
       if (btnGerarLink) btnGerarLink.disabled = false;
     }
-  }, [itens, estado, zona, nomeCliente, nomeConsultor, showToastMessage]);
+  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, showToastMessage, fetchHistorico]);
 
   // ── Template Handlers ──
   const handleCarregarModelo = useCallback((modelo) => {
@@ -697,7 +697,12 @@ export default function App() {
           adicionarProduto(prodCompleto, res.quantidade || 1);
           adicionados++;
         } else if (res.opcoes && res.opcoes.length > 1) {
-          // Mais de uma opção, manda pra resolução
+          // Mais de uma opção, manda pra resolução e ordena pelo score de aprendizado
+          res.opcoes.sort((a, b) => {
+            const scoreA = produtos.find(p => p.id === a.id)?.ia_score || 0;
+            const scoreB = produtos.find(p => p.id === b.id)?.ia_score || 0;
+            return scoreB - scoreA;
+          });
           pendentes.push(res);
         }
       });
@@ -728,6 +733,12 @@ export default function App() {
     const prodCompleto = produtos.find(p => p.id === opcaoEscolhida.id) || opcaoEscolhida;
     adicionarProduto(prodCompleto, pendente.quantidade || 1);
     
+    // Increment IA Score in DB
+    const currentScore = prodCompleto.ia_score || 0;
+    supabase.from('produtos').update({ ia_score: currentScore + 1 }).eq('id', opcaoEscolhida.id).then(() => {
+      if (prodCompleto) prodCompleto.ia_score = currentScore + 1;
+    });
+
     // Remove from pendentes
     const novosPendentes = [...iaPendentes];
     novosPendentes.splice(indexPendente, 1);
@@ -911,35 +922,41 @@ export default function App() {
                     <span className="text-xs bg-dark-700 px-2 py-1 rounded text-dark-400 font-mono">Qtd: {pendente.quantidade}</span>
                   </div>
                   <div className="space-y-2">
-                    {pendente.opcoes.map((opcao) => (
+                    {pendente.opcoes.map((opcao, idxOpcao) => {
+                      const score = produtos.find(p => p.id === opcao.id)?.ia_score || 0;
+                      const isTop = idxOpcao === 0 && score > 0;
+                      return (
                       <button
                         key={opcao.id}
                         onClick={() => handleResolucaoEscolha(index, opcao)}
-                        className="w-full text-left flex items-center justify-between p-3 rounded-lg bg-dark-800 border border-dark-600 hover:border-neon/50 hover:bg-neon/5 transition-all group"
+                        className={`w-full text-left flex items-center justify-between p-3 rounded-lg bg-dark-800 border ${isTop ? 'border-amber-500/50 bg-amber-500/5' : 'border-dark-600'} hover:border-neon/50 hover:bg-neon/5 transition-all group`}
                       >
                         <div className="flex items-center gap-3">
                           {(() => {
                             if (!opcao.url_imagem) {
                               return (
-                                <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
+                                <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center shrink-0">
                                   <Dumbbell className="w-4 h-4 text-dark-500" />
                                 </div>
                               );
                             }
                             const media = parseMediaUrl(opcao.url_imagem);
-                            if (media.type === 'image') return <img src={media.url} className="w-8 h-8 rounded object-cover" />;
-                            if (media.type === 'folder') return <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center"><FolderOpen className="w-4 h-4 text-blue-400" /></div>;
+                            if (media.type === 'image') return <img src={media.url} className="w-8 h-8 rounded object-cover shrink-0" />;
+                            if (media.type === 'folder') return <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center shrink-0"><FolderOpen className="w-4 h-4 text-blue-400" /></div>;
                             return (
-                              <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center">
+                              <div className="w-8 h-8 rounded bg-dark-700 flex items-center justify-center shrink-0">
                                 <Dumbbell className="w-4 h-4 text-dark-500" />
                               </div>
                             );
                           })()}
-                          <span className="text-sm text-zinc-300 group-hover:text-white transition-colors">{opcao.nome}</span>
+                          <div className="flex flex-col">
+                            <span className={`text-sm ${isTop ? 'text-amber-400 font-bold' : 'text-zinc-300'} group-hover:text-white transition-colors`}>{opcao.nome}</span>
+                            {isTop && <span className="text-[10px] text-amber-500 font-medium">✨ Escolha comum</span>}
+                          </div>
                         </div>
                         <span className="text-sm font-medium text-neon">{formatCurrency(opcao.preco)}</span>
                       </button>
-                    ))}
+                    )})}
                   </div>
 
                   <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 pt-4 border-t border-dark-700/50">
