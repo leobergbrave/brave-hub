@@ -17,12 +17,20 @@ const LOGO_URL = 'https://jisbvqrnnujqgbsfondy.supabase.co/storage/v1/object/pub
 
 const PRODUCT_ALIASES = {
   remo: 'Remo Indoor Profissional',
+  rower: 'Remo Indoor Profissional',
   esteira: 'Esteira Curva Brave 2.0',
+  esteiracurva: 'Esteira Curva Brave 2.0',
+  estcv: 'Esteira Curva Brave 2.0',
   skierg: 'SkiErg com Plataforma',
+  ski: 'SkiErg com Plataforma',
   bikeerg: 'Bike Erg Brave',
   bike: 'Bike Erg Brave',
+  bikerg: 'Bike Erg Brave',
   stormbike: 'STORM Bike Brave',
   storm: 'STORM Bike Brave',
+  stmbike: 'STORM Bike Brave',
+  escada: 'Escada Ergométrica - Painel de LED + Botões',
+  stair: 'Escada Ergométrica - Painel de LED + Botões',
 };
 
 function fmt(v) {
@@ -81,6 +89,11 @@ export default function OrcamentoRapidoPage() {
 
       if (nomeAlias) {
         bestProd = allProds.find(p => p.nome.toLowerCase().includes(nomeAlias.toLowerCase()));
+      }
+
+      // Check by exact SKU
+      if (!bestProd) {
+        bestProd = allProds.find(p => p.codigo_sku && p.codigo_sku.toLowerCase() === termo.toLowerCase().trim());
       }
 
       if (!bestProd) {

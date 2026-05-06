@@ -573,7 +573,7 @@ export default function App() {
 
       if (error) throw error;
 
-      const link = `${window.location.origin}/orcamento/${slug}`;
+      const link = `${window.location.origin}/proposta/${slug}`;
       setLinkGerado(link);
       navigator.clipboard.writeText(link).catch(() => {});
       showToastMessage('Link gerado e copiado para a área de transferência!');
@@ -1909,7 +1909,7 @@ export default function App() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => {
-                              const link = `${window.location.origin}/orcamento/${orc.slug}`;
+                              const link = `${window.location.origin}/proposta/${orc.slug}`;
                               navigator.clipboard.writeText(link);
                               showToastMessage('Link copiado!');
                             }}
@@ -1919,7 +1919,7 @@ export default function App() {
                             <Link2 className="w-3.5 h-3.5" />
                           </button>
                           <a
-                            href={`/orcamento/${orc.slug}`}
+                            href={`/proposta/${orc.slug}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-3 py-1.5 text-xs font-semibold text-neon hover:text-dark-950 bg-neon/10 hover:bg-neon rounded-lg transition-all"
