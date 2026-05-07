@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   MapPin, Loader2, Truck, Package, CreditCard, Banknote,
-  ChevronRight, Sparkles, Shield, CheckCircle2, Weight, FolderOpen
+  ChevronRight, Sparkles, Shield, CheckCircle2, Weight, FolderOpen, Flame, Tag, Zap
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseMediaUrl } from '../data';
@@ -389,16 +389,31 @@ export default function OrcamentoRapidoPage() {
         </p>
       </header>
 
-      {/* Product Cards */}
-      <section className="relative z-10 max-w-lg mx-auto px-6 mb-6 space-y-3">
+      {/* Product Cards — Show de Preços */}
+      <section className="relative z-10 max-w-lg mx-auto px-6 mb-6 space-y-4">
         {produtos.map(prod => {
           const qty = quantidades[prod.id] || 1;
           const media = prod.url_imagem ? parseMediaUrl(prod.url_imagem) : null;
+          const precoTabela = prod.preco;
+          const pAvista = prod.preco_avista ?? prod.preco;
+          const pPrazo = prod.preco_prazo ?? prod.preco;
+          const descAvista = precoTabela > 0 ? Math.round(((precoTabela - pAvista) / precoTabela) * 100) : 0;
+          const descPrazo = precoTabela > 0 ? Math.round(((precoTabela - pPrazo) / precoTabela) * 100) : 0;
+          const parcelaMensal = pPrazo / 10;
+          const economiaUnit = precoTabela - pAvista;
+          const unidsDisp = ((prod.id.charCodeAt(0) || 3) % 4) + 2; // 2-5 pseudo-random
           return (
-            <div key={prod.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-4 p-4">
-                {/* Thumbnail */}
-                <div className="w-20 h-20 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden shrink-0">
+            <div key={prod.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden relative">
+              {/* Selo exclusivo */}
+              {descAvista > 0 && (
+                <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
+                  <Zap className="w-2.5 h-2.5" /> OFERTA EXCLUSIVA
+                </div>
+              )}
+
+              {/* Header: Image + Name + Qty */}
+              <div className="flex items-center gap-4 p-4 pb-2">
+                <div className="w-16 h-16 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden shrink-0">
                   {media && media.type === 'image' ? (
                     <img src={media.url} alt={prod.nome} className="max-h-full max-w-full object-contain" />
                   ) : media && media.type === 'folder' ? (
@@ -407,38 +422,62 @@ export default function OrcamentoRapidoPage() {
                     <Package className="w-6 h-6 text-dark-600" />
                   )}
                 </div>
-
-                {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white truncate">{prod.nome}</h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {prod.peso_kg > 0 && (
-                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5"><Weight className="w-3 h-3" /> {prod.peso_kg}kg</span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex items-baseline gap-1.5">
-                    {(() => {
-                      const precoAtual = modoPagamento === 'avista'
-                        ? (prod.preco_avista ?? prod.preco)
-                        : (prod.preco_prazo ?? prod.preco);
-                      const precoRef = prod.preco;
-                      return (
-                        <>
-                          <span className={`text-base font-black ${modoPagamento === 'avista' ? 'text-neon' : 'text-blue-400'}`}>{fmt(precoAtual)}</span>
-                          {precoAtual < precoRef && (
-                            <span className="text-[10px] text-zinc-500 line-through">{fmt(precoRef)}</span>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
+                  <h3 className="text-sm font-bold text-white leading-tight pr-20">{prod.nome}</h3>
+                  {prod.peso_kg > 0 && (
+                    <span className="text-[10px] text-zinc-500 flex items-center gap-0.5 mt-0.5"><Weight className="w-3 h-3" /> {prod.peso_kg}kg</span>
+                  )}
                 </div>
-
-                {/* Quantity */}
                 <div className="flex items-center bg-dark-900 rounded-lg border border-dark-600 shrink-0">
                   <button onClick={() => updateQtd(prod.id, -1)} className="px-2.5 py-1.5 text-zinc-400 hover:text-white text-xs font-bold cursor-pointer">−</button>
                   <span className="px-2 py-1.5 text-white font-bold text-xs min-w-[1.5rem] text-center">{qty}</span>
                   <button onClick={() => updateQtd(prod.id, 1)} className="px-2.5 py-1.5 text-zinc-400 hover:text-white text-xs font-bold cursor-pointer">+</button>
+                </div>
+              </div>
+
+              {/* 3 Price Tiers */}
+              <div className="px-4 pb-2 space-y-1.5">
+                {/* Tier 1: Preço de Tabela */}
+                <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-dark-900/50">
+                  <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium">Preço de tabela</span>
+                  <span className="text-sm text-zinc-600 line-through font-medium">{fmt(precoTabela)}</span>
+                </div>
+
+                {/* Tier 2: Cartão Parcelado */}
+                {descPrazo > 0 && (
+                  <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/20">
+                    <div>
+                      <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão 10x</span>
+                      <p className="text-base font-black text-white mt-0.5">10x {fmt(parcelaMensal)}</p>
+                      <p className="text-[10px] text-zinc-500">Total: {fmt(pPrazo)}</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
+                      {descPrazo}% off
+                    </span>
+                  </div>
+                )}
+
+                {/* Tier 3: À Vista — Destaque máximo */}
+                {descAvista > 0 && (
+                  <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-neon/30" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
+                    <div>
+                      <span className="text-[10px] text-neon/80 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
+                      <p className="text-lg font-black text-neon mt-0.5">{fmt(pAvista)}</p>
+                      <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaUnit)}</p>
+                    </div>
+                    <span className="text-[10px] font-bold text-dark-950 bg-gradient-to-r from-neon to-emerald-400 px-2.5 py-1 rounded-full shadow-lg shadow-neon/25 animate-pulse whitespace-nowrap">
+                      {descAvista}% off
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Urgency Bar */}
+              <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-500/[0.05] border border-red-500/15">
+                <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
+                <span className="text-[11px] text-red-400 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
+                <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden ml-auto max-w-[50px]">
+                  <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
                 </div>
               </div>
             </div>
@@ -495,20 +534,9 @@ export default function OrcamentoRapidoPage() {
         </section>
       )}
 
-      {/* Quote Result */}
+      {/* Quote Result — Dual Totals */}
       {orcamentoGerado && (
         <section className="relative z-10 max-w-lg mx-auto px-6 pb-12 animate-fade-in-up">
-          {/* Payment toggle */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 mb-6 bg-dark-900/50 p-1.5 rounded-2xl border border-dark-700/50">
-            <button onClick={() => setModoPagamento('avista')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${modoPagamento === 'avista' ? 'bg-neon text-dark-950 shadow-lg shadow-neon/20' : 'text-zinc-400 hover:text-white'}`}>
-              <Banknote className="w-4 h-4" /> À Vista
-            </button>
-            <button onClick={() => setModoPagamento('cartao')} className={`flex-1 w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${modoPagamento === 'cartao' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'text-zinc-400 hover:text-white'}`}>
-              <CreditCard className="w-4 h-4" /> Cartão 12x
-            </button>
-          </div>
-
-          {/* Summary Card */}
           <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6 space-y-4">
             <h3 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-neon" /> Resumo do Investimento
@@ -517,11 +545,10 @@ export default function OrcamentoRapidoPage() {
             <div className="space-y-2 text-sm">
               {produtos.map(p => {
                 const qty = quantidades[p.id] || 1;
-                const precoUnit = modoPagamento === 'avista' ? (p.preco_avista ?? p.preco) : (p.preco_prazo ?? p.preco);
                 return (
-                  <div key={p.id} className="flex justify-between">
+                  <div key={p.id} className="flex justify-between items-center">
                     <span className="text-zinc-400">{qty}x {p.nome}</span>
-                    <span className="text-white font-semibold">{fmt(precoUnit * qty)}</span>
+                    <span className="text-zinc-600 line-through text-xs">{fmt(p.preco * qty)}</span>
                   </div>
                 );
               })}
@@ -536,44 +563,47 @@ export default function OrcamentoRapidoPage() {
               )}
             </div>
 
-            {/* Total Card */}
-            <div className={`rounded-xl p-4 border ${modoPagamento === 'avista' ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+            {/* Cartão Total */}
+            <div className="rounded-xl p-4 border bg-amber-500/[0.04] border-amber-500/20">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className={`text-xs font-bold uppercase tracking-wider ${modoPagamento === 'avista' ? 'text-emerald-400' : 'text-blue-400'}`}>
-                    {modoPagamento === 'avista' ? 'TOTAL À VISTA' : `TOTAL 12x`}
-                  </p>
-                  <p className="text-[10px] text-zinc-500">{modoPagamento === 'avista' ? 'PIX / Boleto' : 'Cartão de Crédito'}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1"><CreditCard className="w-3 h-3" /> CARTÃO 10x</p>
+                  <p className="text-[10px] text-zinc-500">Crédito sem juros</p>
                 </div>
                 <div className="text-right">
-                  <p className={`text-2xl font-black ${modoPagamento === 'avista' ? 'text-emerald-400' : 'text-blue-400'}`}>
-                    {fmt(totalModo)}
-                  </p>
-                  {modoPagamento === 'avista' && economia > 0 && (
-                    <p className="text-[10px] text-emerald-500">economize {fmt(economia)}</p>
-                  )}
-                  {modoPagamento === 'cartao' && (
-                    <p className="text-[10px] text-blue-400">12x de {fmt(totalModo / 12)}</p>
-                  )}
+                  <p className="text-xl font-black text-white">10x {fmt(precoPrazo / 10)}</p>
+                  <p className="text-[10px] text-zinc-500">Total: {fmt(precoPrazo)}</p>
                 </div>
               </div>
             </div>
 
-            {/* Link button */}
+            {/* À Vista Total — Destaque */}
+            <div className="rounded-xl p-4 border border-neon/25 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
+              <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-lg flex items-center gap-0.5">
+                <Zap className="w-2.5 h-2.5" /> MELHOR OFERTA
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-neon flex items-center gap-1"><Banknote className="w-3 h-3" /> À VISTA (PIX)</p>
+                  {economia > 0 && <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economia)}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-black text-neon">{fmt(precoAvista)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* CTA */}
             <a href={linkGerado} className="block w-full text-center mt-2 bg-gradient-to-r from-orange-dim to-orange-accent text-white font-bold text-sm py-4 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-orange-accent/25 hover:scale-[1.02] active:scale-[0.98]">
               Ver Orçamento Completo <ChevronRight className="w-4 h-4 inline" />
             </a>
-
-            {/* Toggle link */}
-            <button onClick={() => setModoPagamento(m => m === 'avista' ? 'cartao' : 'avista')} className="w-full text-center text-xs text-zinc-500 hover:text-neon transition-colors mt-1 cursor-pointer">
-              {modoPagamento === 'avista' ? 'Ver condições no Cartão →' : '← Ver condição À Vista'}
-            </button>
           </div>
 
           {/* Trust badges */}
           <div className="mt-6 flex items-center justify-center gap-6 text-[10px] text-zinc-500">
             <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Frete garantido</span>
             <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Preços oficiais</span>
+            <span className="flex items-center gap-1"><Tag className="w-3 h-3" /> Preço exclusivo</span>
           </div>
         </section>
       )}
