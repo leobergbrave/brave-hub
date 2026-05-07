@@ -136,7 +136,7 @@ export default function OrcamentoRapidoPage() {
 
           // Marca o link como aberto para cancelar o gatilho de abandono de 15 minutos
           if (!linkData.aberto) {
-            supabase.from('links_rapidos').update({ aberto: true }).eq('codigo', codigo).then();
+            await supabase.from('links_rapidos').update({ aberto: true, alerta_abandono_enviado: true }).eq('codigo', codigo);
           }
 
           termos = linkData.produtos_texto.split(',').map(t => t.trim()).filter(Boolean);

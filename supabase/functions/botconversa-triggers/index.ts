@@ -58,7 +58,13 @@ serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ success: true, message: 'Webhook de CEP enviado ao BotConversa' }), {
+      // Marca como aberto e cancela o gatilho de abandono definitivamente
+      await supabaseClient
+        .from('links_rapidos')
+        .update({ aberto: true, alerta_abandono_enviado: true })
+        .eq('codigo', codigo_link);
+
+      return new Response(JSON.stringify({ success: true, message: 'Webhook de CEP enviado e abandono cancelado' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -87,6 +93,18 @@ serve(async (req) => {
       let processados = 0;
 
       for (const lead of abandonos) {
+        // Double-check: re-verifica se o lead continua sem abrir (evita race condition)
+        const { data: recheck } = await supabaseClient
+          .from('links_rapidos')
+          .select('aberto, alerta_abandono_enviado')
+          .eq('id', lead.id)
+          .single();
+
+        if (recheck?.aberto || recheck?.alerta_abandono_enviado) {
+          // Lead já abriu ou já recebeu alerta — pula
+          continue;
+        }
+
         // Trava de segurança imediata: marca como enviado ANTES de fazer a requisição externa
         const { error: updateError } = await supabaseClient
           .from('links_rapidos')
