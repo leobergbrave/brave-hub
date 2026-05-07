@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   const encodedClient = encodeURIComponent(nomeCurto);
   
   const baseUrl = `https://${req.headers.host}`;
-  const ogImageUrl = `${baseUrl}/api/og?client=${encodedClient}`;
+  const ogImageUrl = `${baseUrl}/logo-orcamento.png`;
   const redirectUrl = `${baseUrl}/orcamento/${slug}`;
 
   const html = `
