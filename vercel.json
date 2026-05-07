@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/og.js": {
+      "runtime": "edge"
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/proposta/:slug", "destination": "/api/share?slug=:slug" },
