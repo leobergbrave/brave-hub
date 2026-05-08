@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Shield, CalendarDays, Clock, UserRound, Package, Weight,
-  Truck, CheckCircle2, MessageCircle, Sparkles, ChevronRight,
-  Star, Award, BadgeCheck, Loader2, X, FolderOpen, CreditCard, Banknote,
+  Truck, MessageCircle, ChevronRight,
+  Star, Award, Loader2, X, FolderOpen, CreditCard, Banknote,
   Flame, Zap
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
@@ -297,9 +297,11 @@ export default function OrcamentoPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-bold text-white leading-tight pr-20">{item.nome}</h3>
-                    {item.peso > 0 && (
-                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5 mt-0.5"><Weight className="w-3 h-3" /> {item.peso}kg · Qtd: {item.quantidade}</span>
-                    )}
+                    <div className="mt-1.5">
+                      <span className="inline-flex items-center gap-1 bg-dark-700 border border-dark-600 rounded-md px-2 py-0.5 text-[11px] font-bold text-white">
+                        Qtd: {item.quantidade}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
