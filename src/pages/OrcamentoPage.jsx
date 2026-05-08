@@ -264,8 +264,11 @@ export default function OrcamentoPage() {
             const pPrazo = item.preco_prazo ?? item.preco * (1 - orcamento.descCartao / 100);
             const descAvista = pTabela > 0 ? Math.round(((pTabela - pAvista) / pTabela) * 100) : 0;
             const descPrazo = pTabela > 0 ? Math.round(((pTabela - pPrazo) / pTabela) * 100) : 0;
-            const parcelaMensal = pPrazo / orcamento.parcelas;
-            const economiaUnit = pTabela - pAvista;
+            const totalPrazo = pPrazo * item.quantidade;
+            const totalAvista = pAvista * item.quantidade;
+            const totalTabela = pTabela * item.quantidade;
+            const parcelaMensal = totalPrazo / orcamento.parcelas;
+            const economiaTotal = totalTabela - totalAvista;
             const unidsDisp = ((item.id.charCodeAt(0) || 3) % 4) + 2;
             const media = item.url_imagem ? parseMediaUrl(item.url_imagem) : null;
 
@@ -305,7 +308,7 @@ export default function OrcamentoPage() {
                   {/* Tier 1: Preço de tabela */}
                   <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-dark-900/50">
                     <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium">Preço de tabela</span>
-                    <span className="text-sm text-zinc-600 line-through font-medium">{fmt(pTabela)}</span>
+                    <span className="text-sm text-zinc-600 line-through font-medium">{fmt(totalTabela)}</span>
                   </div>
 
                   {/* Tier 2: Cartão parcelado */}
@@ -314,7 +317,7 @@ export default function OrcamentoPage() {
                       <div>
                         <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão {orcamento.parcelas}x</span>
                         <p className="text-base font-black text-white mt-0.5">{orcamento.parcelas}x {fmt(parcelaMensal)}</p>
-                        <p className="text-[10px] text-zinc-500">Total: {fmt(pPrazo * item.quantidade)}</p>
+                        <p className="text-[10px] text-zinc-500">Total: {fmt(totalPrazo)}</p>
                       </div>
                       <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
                         {descPrazo}% off
@@ -327,8 +330,8 @@ export default function OrcamentoPage() {
                     <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-neon/30" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
                       <div>
                         <span className="text-[10px] text-neon/80 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
-                        <p className="text-lg font-black text-neon mt-0.5">{fmt(pAvista * item.quantidade)}</p>
-                        <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaUnit * item.quantidade)}</p>
+                        <p className="text-lg font-black text-neon mt-0.5">{fmt(totalAvista)}</p>
+                        <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaTotal)}</p>
                       </div>
                       <span className="text-[10px] font-bold text-dark-950 bg-gradient-to-r from-neon to-emerald-400 px-2.5 py-1 rounded-full shadow-lg shadow-neon/25 animate-pulse whitespace-nowrap">
                         {descAvista}% off
