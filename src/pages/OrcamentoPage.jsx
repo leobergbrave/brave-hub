@@ -274,12 +274,6 @@ export default function OrcamentoPage() {
 
             return (
               <div key={item.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden relative animate-fade-in-up" style={{ animationDelay: `${idx * 0.1}s` }}>
-                {/* Selo exclusivo */}
-                {descAvista > 0 && (
-                  <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
-                    <Zap className="w-2.5 h-2.5" /> OFERTA EXCLUSIVA
-                  </div>
-                )}
 
                 {/* Header: imagem + nome + qtd */}
                 <div className="flex items-center gap-4 p-4 pb-2">
