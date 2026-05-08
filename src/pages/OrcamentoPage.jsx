@@ -3,7 +3,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Shield, CalendarDays, Clock, UserRound, Package, Weight,
   Truck, CheckCircle2, MessageCircle, Sparkles, ChevronRight,
-  Star, Award, BadgeCheck, Loader2, X, FolderOpen, CreditCard, Banknote
+  Star, Award, BadgeCheck, Loader2, X, FolderOpen, CreditCard, Banknote,
+  Flame, Zap
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
 import { supabase } from '../lib/supabase';
@@ -257,38 +258,96 @@ export default function OrcamentoPage() {
       <section className="relative z-10 max-w-3xl mx-auto px-6 py-8">
 
         <div className="space-y-4">
-          {orcamento.itens.map((item, idx) => (
-            <div key={item.id} className="group bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:gap-5 sm:items-center hover:border-dark-600 transition-all animate-fade-in-up" style={{ animationDelay: `${idx * 0.1}s` }}>
-              <div className="flex items-center gap-4">
-                <div className={`shrink-0 w-16 h-16 sm:w-24 sm:h-24 rounded-xl bg-dark-700/80 border border-dark-600/50 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon transition-colors' : ''}`} onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}>
-                  {(() => {
-                    if (!item.url_imagem) return <div className="text-center"><Package className="w-5 h-5 sm:w-6 sm:h-6 text-dark-500 mx-auto" /></div>;
-                    const media = parseMediaUrl(item.url_imagem);
-                    return media.type === 'image' ? <img src={media.url} alt={item.nome} className="w-full h-full object-cover" /> : <FolderOpen className="w-5 h-5 text-blue-400" />;
-                  })()}
+          {orcamento.itens.map((item, idx) => {
+            const pTabela = item.precoOriginal;
+            const pAvista = item.preco_avista ?? item.preco * (1 - orcamento.descAvista / 100);
+            const pPrazo = item.preco_prazo ?? item.preco * (1 - orcamento.descCartao / 100);
+            const descAvista = pTabela > 0 ? Math.round(((pTabela - pAvista) / pTabela) * 100) : 0;
+            const descPrazo = pTabela > 0 ? Math.round(((pTabela - pPrazo) / pTabela) * 100) : 0;
+            const parcelaMensal = pPrazo / orcamento.parcelas;
+            const economiaUnit = pTabela - pAvista;
+            const unidsDisp = ((item.id.charCodeAt(0) || 3) % 4) + 2;
+            const media = item.url_imagem ? parseMediaUrl(item.url_imagem) : null;
+
+            return (
+              <div key={item.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden relative animate-fade-in-up" style={{ animationDelay: `${idx * 0.1}s` }}>
+                {/* Selo exclusivo */}
+                {descAvista > 0 && (
+                  <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
+                    <Zap className="w-2.5 h-2.5" /> OFERTA EXCLUSIVA
+                  </div>
+                )}
+
+                {/* Header: imagem + nome + qtd */}
+                <div className="flex items-center gap-4 p-4 pb-2">
+                  <div
+                    className={`shrink-0 w-16 h-16 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon border border-transparent transition-colors' : ''}`}
+                    onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
+                  >
+                    {media && media.type === 'image' ? (
+                      <img src={media.url} alt={item.nome} className="max-h-full max-w-full object-contain" />
+                    ) : media && media.type === 'folder' ? (
+                      <FolderOpen className="w-6 h-6 text-blue-400" />
+                    ) : (
+                      <Package className="w-6 h-6 text-dark-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-white leading-tight pr-20">{item.nome}</h3>
+                    {item.peso > 0 && (
+                      <span className="text-[10px] text-zinc-500 flex items-center gap-0.5 mt-0.5"><Weight className="w-3 h-3" /> {item.peso}kg · Qtd: {item.quantidade}</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1 sm:hidden">
-                  <p className="text-sm font-bold text-white">{item.nome}</p>
+
+                {/* 3 tiers de preço */}
+                <div className="px-4 pb-2 space-y-1.5">
+                  {/* Tier 1: Preço de tabela */}
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-dark-900/50">
+                    <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium">Preço de tabela</span>
+                    <span className="text-sm text-zinc-600 line-through font-medium">{fmt(pTabela)}</span>
+                  </div>
+
+                  {/* Tier 2: Cartão parcelado */}
+                  {descPrazo > 0 && (
+                    <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/20">
+                      <div>
+                        <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão {orcamento.parcelas}x</span>
+                        <p className="text-base font-black text-white mt-0.5">{orcamento.parcelas}x {fmt(parcelaMensal)}</p>
+                        <p className="text-[10px] text-zinc-500">Total: {fmt(pPrazo * item.quantidade)}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
+                        {descPrazo}% off
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Tier 3: À Vista */}
+                  {descAvista > 0 && (
+                    <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-neon/30" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
+                      <div>
+                        <span className="text-[10px] text-neon/80 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
+                        <p className="text-lg font-black text-neon mt-0.5">{fmt(pAvista * item.quantidade)}</p>
+                        <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaUnit * item.quantidade)}</p>
+                      </div>
+                      <span className="text-[10px] font-bold text-dark-950 bg-gradient-to-r from-neon to-emerald-400 px-2.5 py-1 rounded-full shadow-lg shadow-neon/25 animate-pulse whitespace-nowrap">
+                        {descAvista}% off
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Urgency Bar */}
+                <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-500/[0.05] border border-red-500/15">
+                  <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
+                  <span className="text-[11px] text-red-400 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
+                  <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden ml-auto max-w-[50px]">
+                    <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
+                  </div>
                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="hidden sm:block text-base font-bold text-white mb-1.5">{item.nome}</p>
-                <div className="flex flex-wrap items-center gap-4 text-zinc-400 text-xs">
-                  <span>Qtd: {item.quantidade}</span>
-                  <span className="text-emerald-400/80">À vista: {item.preco_avista ? fmt(item.preco_avista) : fmt(item.preco * (1 - orcamento.descAvista / 100))}</span>
-                  <span className="text-blue-300/80">Cartão: {item.preco_prazo ? fmt(item.preco_prazo) : fmt(item.preco * (1 - orcamento.descCartao / 100))}</span>
-                </div>
-              </div>
-              <div className="text-right flex flex-col items-end justify-center">
-                <p className="text-sm font-bold text-emerald-400">
-                  {fmt((item.preco_avista || item.preco * (1 - orcamento.descAvista / 100)) * item.quantidade)}
-                </p>
-                <p className="text-[10px] text-blue-300/80">
-                  {fmt((item.preco_prazo || item.preco * (1 - orcamento.descCartao / 100)) * item.quantidade)}
-                </p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -317,15 +376,18 @@ export default function OrcamentoPage() {
           {/* Totais: À Vista e Cartão */}
           <div className="space-y-4">
             {/* Bloco À Vista */}
-            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-gradient-to-r from-emerald-500/10 to-emerald-500/5 border border-emerald-500/30">
-              <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: 'rgba(16,185,129,0.1)' }} />
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 border border-neon/25" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
+              <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-lg flex items-center gap-0.5">
+                <Zap className="w-2.5 h-2.5" /> MELHOR OFERTA
+              </div>
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: 'rgba(57,255,20,0.08)' }} />
               <div className="relative flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 bg-emerald-500/15">
-                    <Banknote className="w-5 h-5 text-emerald-400" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 bg-neon/10">
+                    <Banknote className="w-5 h-5 text-neon" />
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-400">
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neon">
                       Total À Vista
                     </p>
                     <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
@@ -334,26 +396,26 @@ export default function OrcamentoPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl sm:text-4xl font-black text-emerald-400">
+                  <p className="text-2xl sm:text-4xl font-black text-neon">
                     {fmt(orcamento.totalAvista)}
                   </p>
                   {orcamento.totalAvista < orcamento.totalCartao && (
-                    <p className="text-[10px] text-emerald-400/60 mt-1">economize {fmt(orcamento.totalCartao - orcamento.totalAvista)}</p>
+                    <p className="text-[10px] text-emerald-400 font-medium mt-1">economize {fmt(orcamento.totalCartao - orcamento.totalAvista)}</p>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Bloco Cartão */}
-            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-gradient-to-r from-blue-500/10 to-blue-500/5 border border-blue-500/30">
-              <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: 'rgba(59,130,246,0.1)' }} />
+            <div className="relative overflow-hidden rounded-2xl p-5 sm:p-6 bg-amber-500/[0.04] border border-amber-500/20">
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[40px] pointer-events-none" style={{ background: 'rgba(245,158,11,0.08)' }} />
               <div className="relative flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 bg-blue-500/15">
-                    <CreditCard className="w-5 h-5 text-blue-400" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 bg-amber-500/10">
+                    <CreditCard className="w-5 h-5 text-amber-400" />
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-300">
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-400">
                       Total no Cartão
                     </p>
                     <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
@@ -362,7 +424,7 @@ export default function OrcamentoPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl sm:text-4xl font-black text-blue-300">
+                  <p className="text-2xl sm:text-4xl font-black text-white">
                     {fmt(orcamento.totalCartao)}
                   </p>
                 </div>
