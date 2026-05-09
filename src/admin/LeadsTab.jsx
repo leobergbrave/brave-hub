@@ -80,8 +80,46 @@ function FunnelBar({ leads }) {
   );
 }
 
+/* ─── Parser de texto do RD Station ─── */
+function parsarTextoRD(texto) {
+  const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+  const resultado = { nome: '', telefone: '', momento_compra: '', produtos_interesse: [] };
+
+  for (const linha of linhas) {
+    const lower = linha.toLowerCase();
+
+    // Nome
+    if (lower.startsWith('nome:') || lower.startsWith('name:')) {
+      resultado.nome = linha.split(':').slice(1).join(':').trim();
+    }
+    // Telefone
+    else if (lower.startsWith('telefone:') || lower.startsWith('fone:') || lower.startsWith('phone:') || lower.startsWith('celular:')) {
+      resultado.telefone = linha.split(':').slice(1).join(':').trim().replace(/\D/g, '');
+    }
+    // Momento (linha que contém alguma das opções)
+    else if (lower.includes('momento') || lower.includes('comprar') || lower.includes('comparando') || lower.includes('entender')) {
+      const val = linha.split('?').slice(-1)[0].trim() || linha.split(':').slice(-1)[0].trim();
+      const match = MOMENTOS.find(m => val.toLowerCase().includes(m.value.toLowerCase().slice(0, 10)));
+      if (match) resultado.momento_compra = match.value;
+    }
+    // Equipamentos (linha que contém "equipamento" ou "ergometro" ou aliases)
+    else if (lower.includes('equipamento') || lower.includes('ergometro') || lower.includes('ergômetro')) {
+      const parte = linha.split(':').slice(1).join(':').trim() || linha.split('|').slice(-1)[0].trim();
+      const itens = parte.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      resultado.produtos_interesse = itens
+        .map(item => {
+          const eq = EQUIPAMENTOS.find(e => item.includes(e.label.toLowerCase()) || e.label.toLowerCase().includes(item));
+          return eq?.alias || null;
+        })
+        .filter(Boolean);
+    }
+  }
+  return resultado;
+}
+
 /* ─── Formulário de cadastro ─── */
 function CadastroModal({ onClose, onSaved }) {
+  const [textoRD, setTextoRD] = useState('');
   const [form, setForm] = useState({
     nome: '', telefone: '', email: '',
     momento_compra: MOMENTOS[0].value,
@@ -91,6 +129,19 @@ function CadastroModal({ onClose, onSaved }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState(null);
+
+  const handleColar = (texto) => {
+    setTextoRD(texto);
+    if (!texto.trim()) return;
+    const parsed = parsarTextoRD(texto);
+    setForm(prev => ({
+      ...prev,
+      nome: parsed.nome || prev.nome,
+      telefone: parsed.telefone || prev.telefone,
+      momento_compra: parsed.momento_compra || prev.momento_compra,
+      produtos_interesse: parsed.produtos_interesse.length > 0 ? parsed.produtos_interesse : prev.produtos_interesse,
+    }));
+  };
 
   const toggleProduto = (alias) => {
     setForm(prev => ({
@@ -164,6 +215,23 @@ function CadastroModal({ onClose, onSaved }) {
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
+          {/* Colar dados do RD Station */}
+          <div className="bg-dark-800/80 border border-dashed border-neon/30 rounded-xl p-4">
+            <label className="block text-xs font-semibold text-neon mb-1.5">
+              Colar dados do RD Station <span className="text-zinc-500 font-normal">(opcional — preenche o formulário automaticamente)</span>
+            </label>
+            <textarea
+              value={textoRD}
+              onChange={e => handleColar(e.target.value)}
+              rows={4}
+              placeholder={"Cole aqui o texto copiado do RD Station CRM.\nEx:\nNome: João Silva\nTelefone: 11999999999\nEquipamento | Ergometro: Bike Erg, Remo\nEm que momento você está: Quero comprar agora"}
+              className="w-full bg-dark-900 border border-dark-600 text-zinc-300 text-xs font-mono rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:border-neon/50 transition-all placeholder:text-dark-600"
+            />
+            {textoRD.trim() && (
+              <p className="text-[10px] text-neon/70 mt-1.5">✓ Dados detectados — revise os campos abaixo antes de salvar.</p>
+            )}
+          </div>
+
           {/* Nome + Telefone */}
           <div className="grid grid-cols-2 gap-4">
             <div>
