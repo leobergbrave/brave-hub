@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import {
   Loader2, Plus, Phone, User, Search, ChevronDown,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
-  CheckCircle2, MessageCircle, TrendingUp, X
+  CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine
 } from 'lucide-react';
 
 /* ─── Constantes ─── */
@@ -119,7 +119,10 @@ function parsarTextoRD(texto) {
 
 /* ─── Formulário de cadastro ─── */
 function CadastroModal({ onClose, onSaved }) {
+  const [abaInput, setAbaInput] = useState('imagem'); // 'texto' | 'imagem'
   const [textoRD, setTextoRD] = useState('');
+  const [imagemRD, setImagemRD] = useState(null); // { preview, base64, mimeType }
+  const [extraindo, setExtraindo] = useState(false);
   const [form, setForm] = useState({
     nome: '', telefone: '', email: '',
     momento_compra: MOMENTOS[0].value,
@@ -130,18 +133,64 @@ function CadastroModal({ onClose, onSaved }) {
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState(null);
 
+  const aplicarDados = (dados) => {
+    setForm(prev => ({
+      ...prev,
+      nome: dados.nome || prev.nome,
+      telefone: dados.telefone || prev.telefone,
+      momento_compra: dados.momento_compra || prev.momento_compra,
+      produtos_interesse: dados.produtos_interesse?.length > 0 ? dados.produtos_interesse : prev.produtos_interesse,
+    }));
+  };
+
   const handleColar = (texto) => {
     setTextoRD(texto);
     if (!texto.trim()) return;
-    const parsed = parsarTextoRD(texto);
-    setForm(prev => ({
-      ...prev,
-      nome: parsed.nome || prev.nome,
-      telefone: parsed.telefone || prev.telefone,
-      momento_compra: parsed.momento_compra || prev.momento_compra,
-      produtos_interesse: parsed.produtos_interesse.length > 0 ? parsed.produtos_interesse : prev.produtos_interesse,
-    }));
+    aplicarDados(parsarTextoRD(texto));
   };
+
+  const extrairDadosImagem = async (base64, mimeType) => {
+    setExtraindo(true);
+    setErro('');
+    try {
+      const { data, error } = await supabase.functions.invoke('extrair-lead-imagem', {
+        body: { imageBase64: base64, mimeType },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      aplicarDados(data);
+    } catch (err) {
+      setErro('Erro ao extrair dados da imagem: ' + err.message);
+    } finally {
+      setExtraindo(false);
+    }
+  };
+
+  const processarImagem = (file) => {
+    if (!file?.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      const base64 = dataUrl.split(',')[1];
+      setImagemRD({ preview: dataUrl, base64, mimeType: file.type });
+      extrairDadosImagem(base64, file.type);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Captura Ctrl+V com imagem em qualquer lugar do modal
+  useEffect(() => {
+    const handlePaste = (e) => {
+      if (abaInput !== 'imagem') return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItem = items.find(i => i.type.startsWith('image/'));
+      if (!imgItem) return;
+      e.preventDefault();
+      processarImagem(imgItem.getAsFile());
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [abaInput]);
 
   const toggleProduto = (alias) => {
     setForm(prev => ({
@@ -215,21 +264,67 @@ function CadastroModal({ onClose, onSaved }) {
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
-          {/* Colar dados do RD Station */}
-          <div className="bg-dark-800/80 border border-dashed border-neon/30 rounded-xl p-4">
-            <label className="block text-xs font-semibold text-neon mb-1.5">
-              Colar dados do RD Station <span className="text-zinc-500 font-normal">(opcional — preenche o formulário automaticamente)</span>
-            </label>
-            <textarea
-              value={textoRD}
-              onChange={e => handleColar(e.target.value)}
-              rows={4}
-              placeholder={"Cole aqui o texto copiado do RD Station CRM.\nEx:\nNome: João Silva\nTelefone: 11999999999\nEquipamento | Ergometro: Bike Erg, Remo\nEm que momento você está: Quero comprar agora"}
-              className="w-full bg-dark-900 border border-dark-600 text-zinc-300 text-xs font-mono rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:border-neon/50 transition-all placeholder:text-dark-600"
-            />
-            {textoRD.trim() && (
-              <p className="text-[10px] text-neon/70 mt-1.5">✓ Dados detectados — revise os campos abaixo antes de salvar.</p>
-            )}
+          {/* Importar dados do RD Station */}
+          <div className="bg-dark-800/80 border border-dashed border-neon/30 rounded-xl overflow-hidden">
+            {/* Abas */}
+            <div className="flex border-b border-dark-700/60">
+              <button
+                onClick={() => setAbaInput('imagem')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer ${abaInput === 'imagem' ? 'text-neon border-b-2 border-neon bg-neon/5' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                <ScanLine className="w-3.5 h-3.5" /> Print da tela
+              </button>
+              <button
+                onClick={() => setAbaInput('texto')}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer ${abaInput === 'texto' ? 'text-neon border-b-2 border-neon bg-neon/5' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                <MessageCircle className="w-3.5 h-3.5" /> Texto
+              </button>
+              <span className="ml-auto flex items-center pr-4 text-[10px] text-zinc-600 italic">opcional — preenche automaticamente</span>
+            </div>
+
+            <div className="p-4">
+              {abaInput === 'imagem' ? (
+                <div
+                  className={`relative border-2 border-dashed rounded-xl transition-all ${imagemRD ? 'border-neon/40' : 'border-dark-600 hover:border-neon/30'}`}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); processarImagem(e.dataTransfer.files[0]); }}
+                >
+                  {extraindo ? (
+                    <div className="flex flex-col items-center justify-center gap-2 py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-neon" />
+                      <span className="text-sm text-neon font-medium">Extraindo dados com IA...</span>
+                      <span className="text-[10px] text-zinc-500">Gemini Vision analisando o print</span>
+                    </div>
+                  ) : imagemRD ? (
+                    <div className="p-3 text-center">
+                      <img src={imagemRD.preview} alt="Print RD Station" className="max-h-36 mx-auto rounded-lg mb-2 object-contain border border-dark-600" />
+                      <p className="text-[10px] text-neon/80 font-semibold">✓ Dados extraídos — revise os campos abaixo</p>
+                      <button onClick={() => setImagemRD(null)} className="text-[10px] text-zinc-600 hover:text-zinc-400 mt-1 transition-colors cursor-pointer">Remover imagem</button>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center">
+                      <Image className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                      <p className="text-sm text-zinc-400 font-medium">Cole o print aqui <kbd className="text-[10px] bg-dark-700 border border-dark-600 rounded px-1.5 py-0.5 text-zinc-500">Ctrl+V</kbd></p>
+                      <p className="text-[10px] text-zinc-600 mt-1">ou arraste a imagem da tela do RD Station</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <textarea
+                    value={textoRD}
+                    onChange={e => handleColar(e.target.value)}
+                    rows={4}
+                    placeholder={"Cole o texto copiado do RD Station CRM.\nEx:\nNome: João Silva\nTelefone: 11999999999\nEquipamento | Ergometro: Bike Erg, Remo\nEm que momento você está: Quero comprar agora"}
+                    className="w-full bg-dark-900 border border-dark-600 text-zinc-300 text-xs font-mono rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:border-neon/50 transition-all placeholder:text-dark-600"
+                  />
+                  {textoRD.trim() && (
+                    <p className="text-[10px] text-neon/70 mt-1.5">✓ Dados detectados — revise os campos abaixo antes de salvar.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Nome + Telefone */}
