@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dumbbell, Package, Truck, Tag, Receipt, BarChart3, Megaphone } from 'lucide-react';
+import { Package, Truck, Tag, Receipt, BarChart3, Megaphone } from 'lucide-react';
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
 import DescontosTab from '../admin/DescontosTab';
@@ -7,10 +7,12 @@ import OrcamentosTab from '../admin/OrcamentosTab';
 import DashboardTab from '../admin/DashboardTab';
 import MarketingTab from '../admin/MarketingTab';
 import CategoriasTab from '../admin/CategoriasTab';
-import { Layers } from 'lucide-react';
+import { Layers, Users } from 'lucide-react';
+import LeadsTab from '../admin/LeadsTab';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+  { id: 'leads', label: 'Leads', icon: Users },
   { id: 'produtos', label: 'Produtos', icon: Package },
   { id: 'categorias', label: 'Categorias', icon: Layers },
   { id: 'descontos', label: 'Descontos', icon: Tag },
@@ -25,6 +27,7 @@ export default function AdminPage() {
   const renderTab = () => {
     switch (tab) {
       case 'dashboard': return <DashboardTab />;
+      case 'leads': return <LeadsTab />;
       case 'produtos': return <ProdutosTab />;
       case 'categorias': return <CategoriasTab />;
       case 'descontos': return <DescontosTab />;
