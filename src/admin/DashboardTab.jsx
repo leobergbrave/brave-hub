@@ -1,18 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Package, BarChart3, Receipt, Tag, TrendingUp, Users, Send, CheckCircle2, Clock, Zap, Target } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Send, CheckCircle2, Clock, Zap, Target, Loader2, Flame, Thermometer, Snowflake } from 'lucide-react';
 import { formatCurrency } from '../data';
 
 export default function DashboardTab() {
-  const [stats, setStats] = useState({ 
-    produtos: 0, 
-    pendentes: 0, 
-    aprovados: 0, 
+  const [stats, setStats] = useState({
+    produtos: 0,
+    pendentes: 0,
+    aprovados: 0,
     valorAprovado: 0,
     ticketMedio: 0,
     conversao: 0,
     totalGerados: 0,
     potencialVendas: 0
+  });
+  const [leadsStats, setLeadsStats] = useState({
+    total: 0, quente: 0, morno: 0, frio: 0,
+    novo: 0, fluxo_disparado: 0, link_aberto: 0,
+    orcamento_gerado: 0, negociando: 0, convertido: 0, perdido: 0,
+    taxaConversao: 0,
   });
   const [pendingDisparos, setPendingDisparos] = useState([]);
   const [recentWins, setRecentWins] = useState([]);
@@ -26,11 +32,13 @@ export default function DashboardTab() {
       const [
         { count: pCount },
         { data: orcs },
-        { data: tData }
+        { data: tData },
+        { data: leadsData }
       ] = await Promise.all([
         supabase.from('produtos').select('*', { count: 'exact', head: true }),
         supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false }),
-        supabase.from('marketing_templates').select('*')
+        supabase.from('marketing_templates').select('*'),
+        supabase.from('leads').select('*').order('criado_em', { ascending: false }),
       ]);
 
       const orcamentos = orcs || [];
@@ -58,7 +66,26 @@ export default function DashboardTab() {
         conversao: totalGerados > 0 ? ((aprovados.length / totalGerados) * 100).toFixed(1) : 0
       });
 
-      setRecentWins(aprovados.slice(0, 5)); // Last 5 wins
+      setRecentWins(aprovados.slice(0, 5));
+
+      // Leads stats
+      const leads = leadsData || [];
+      const countStatus = (s) => leads.filter(l => l.status === s).length;
+      const convertidos = countStatus('convertido');
+      setLeadsStats({
+        total: leads.length,
+        quente: leads.filter(l => l.momento_compra === 'quente').length,
+        morno:  leads.filter(l => l.momento_compra === 'morno').length,
+        frio:   leads.filter(l => l.momento_compra === 'frio').length,
+        novo:             countStatus('novo'),
+        fluxo_disparado:  countStatus('fluxo_disparado'),
+        link_aberto:      countStatus('link_aberto'),
+        orcamento_gerado: countStatus('orcamento_gerado'),
+        negociando:       countStatus('negociando'),
+        convertido:       convertidos,
+        perdido:          countStatus('perdido'),
+        taxaConversao: leads.length > 0 ? ((convertidos / leads.length) * 100).toFixed(1) : 0,
+      });
 
       // Calculate Disparos
       const activeTemplates = (tData || []).filter(t => t.ativo).sort((a, b) => b.dias_delay - a.dias_delay);
@@ -252,32 +279,86 @@ export default function DashboardTab() {
           </div>
         </div>
 
-        {/* Right Column - Recent Wins */}
-        <div className="bg-dark-800/40 border border-dark-700/50 rounded-3xl p-6">
-          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Últimos Fechamentos
-          </h2>
-          {recentWins.length === 0 ? (
-            <div className="text-center py-10 text-zinc-500 text-sm">
-              Nenhum projeto fechado ainda.<br/>Hora de aquecer as vendas!
+        {/* Right Column */}
+        <div className="space-y-6">
+
+          {/* Últimos Fechamentos */}
+          <div className="bg-dark-800/40 border border-dark-700/50 rounded-3xl p-6">
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Últimos Fechamentos
+            </h2>
+            {recentWins.length === 0 ? (
+              <div className="text-center py-10 text-zinc-500 text-sm">
+                Nenhum projeto fechado ainda.<br/>Hora de aquecer as vendas!
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentWins.map(w => {
+                  const total = w.payload?.itens?.reduce((acc, i) => acc + (i.preco * i.quantidade), 0) || 0;
+                  return (
+                    <div key={w.id} className="flex flex-col p-4 bg-dark-900/50 rounded-2xl border border-dark-700/30 hover:border-emerald-500/30 transition-colors">
+                      <span className="text-emerald-400 font-black mb-1">{formatCurrency(total)}</span>
+                      <span className="text-sm font-bold text-white">{w.cliente}</span>
+                      <span className="text-xs text-zinc-500 flex justify-between mt-2">
+                        <span>{w.consultor}</span>
+                        <span>{new Date(w.criado_em).toLocaleDateString('pt-BR')}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Leads por Momento */}
+          <div className="bg-dark-800/40 border border-dark-700/50 rounded-3xl p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-400" /> Leads ({leadsStats.total})
+            </h2>
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
+                <Flame className="w-4 h-4 text-red-400 mx-auto mb-1" />
+                <p className="text-xl font-black text-red-400">{leadsStats.quente}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Quente</p>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+                <Thermometer className="w-4 h-4 text-amber-400 mx-auto mb-1" />
+                <p className="text-xl font-black text-amber-400">{leadsStats.morno}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Morno</p>
+              </div>
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
+                <Snowflake className="w-4 h-4 text-blue-400 mx-auto mb-1" />
+                <p className="text-xl font-black text-blue-400">{leadsStats.frio}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Frio</p>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {recentWins.map(w => {
-                const total = w.payload?.itens?.reduce((acc, i) => acc + (i.preco * i.quantidade), 0) || 0;
-                return (
-                  <div key={w.id} className="flex flex-col p-4 bg-dark-900/50 rounded-2xl border border-dark-700/30 hover:border-emerald-500/30 transition-colors">
-                    <span className="text-emerald-400 font-black mb-1">{formatCurrency(total)}</span>
-                    <span className="text-sm font-bold text-white">{w.cliente}</span>
-                    <span className="text-xs text-zinc-500 flex justify-between mt-2">
-                      <span>{w.consultor}</span>
-                      <span>{new Date(w.criado_em).toLocaleDateString('pt-BR')}</span>
-                    </span>
+            <div className="space-y-2">
+              {[
+                { label: 'Novo', value: leadsStats.novo, color: 'bg-zinc-500' },
+                { label: 'Fluxo Disparado', value: leadsStats.fluxo_disparado, color: 'bg-blue-500' },
+                { label: 'Link Aberto', value: leadsStats.link_aberto, color: 'bg-purple-500' },
+                { label: 'Orçamento Gerado', value: leadsStats.orcamento_gerado, color: 'bg-amber-500' },
+                { label: 'Negociando', value: leadsStats.negociando, color: 'bg-orange-500' },
+                { label: 'Convertido', value: leadsStats.convertido, color: 'bg-neon' },
+              ].map(s => (
+                <div key={s.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-zinc-400">{s.label}</span>
+                    <span className="text-white font-bold">{s.value}</span>
                   </div>
-                );
-              })}
+                  <div className="h-1.5 bg-dark-900 rounded-full overflow-hidden">
+                    <div className={`h-full ${s.color} rounded-full transition-all duration-700`}
+                      style={{ width: `${leadsStats.total > 0 ? (s.value / leadsStats.total) * 100 : 0}%` }} />
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+            <div className="mt-4 pt-4 border-t border-dark-700/40 flex justify-between text-xs">
+              <span className="text-zinc-500">Taxa de conversão</span>
+              <span className="text-neon font-black">{leadsStats.taxaConversao}%</span>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
