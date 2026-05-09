@@ -9,9 +9,19 @@ import {
 /* ─── Constantes ─── */
 
 const MOMENTOS = [
-  { value: 'quente', label: 'Quente 🔥', icon: Flame, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' },
-  { value: 'morno', label: 'Morno ☀️', icon: Thermometer, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-  { value: 'frio', label: 'Frio ❄️', icon: Snowflake, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  { value: 'Quero comprar agora',                   label: 'Quero comprar agora',              icon: Flame,        color: 'text-red-400',    bg: 'bg-red-500/10',    border: 'border-red-500/30' },
+  { value: 'Quero comprar em breve (até 30 dias)',  label: 'Comprar em breve (≤30 dias)',       icon: Thermometer,  color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/30' },
+  { value: 'Estou comparando opções',               label: 'Comparando opções',                icon: Snowflake,    color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/30' },
+  { value: 'Só quero entender melhor o produto',    label: 'Só quero entender o produto',      icon: Snowflake,    color: 'text-zinc-400',   bg: 'bg-zinc-500/10',   border: 'border-zinc-500/30' },
+];
+
+const EQUIPAMENTOS = [
+  { label: 'Bike Erg',      alias: 'bikeerg' },
+  { label: 'Remo',          alias: 'remo'    },
+  { label: 'Ski',           alias: 'skierg'  },
+  { label: 'Storm Bike',    alias: 'storm'   },
+  { label: 'Esteira Curva', alias: 'estcv'   },
+  { label: 'Escada',        alias: 'escada'  },
 ];
 
 const STATUS_PIPELINE = [
@@ -34,7 +44,7 @@ function StatusBadge({ status }) {
 }
 
 function MomentoBadge({ momento }) {
-  const m = MOMENTOS.find(x => x.value === momento) || MOMENTOS[1];
+  const m = MOMENTOS.find(x => x.value === momento) || { label: momento || 'Não informado', color: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/20' };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${m.color} ${m.bg} border ${m.border}`}>
       {m.label}
@@ -71,10 +81,10 @@ function FunnelBar({ leads }) {
 }
 
 /* ─── Formulário de cadastro ─── */
-function CadastroModal({ produtos, onClose, onSaved }) {
+function CadastroModal({ onClose, onSaved }) {
   const [form, setForm] = useState({
     nome: '', telefone: '', email: '',
-    momento_compra: 'quente',
+    momento_compra: MOMENTOS[0].value,
     produtos_interesse: [],
     observacoes: '',
   });
@@ -193,12 +203,12 @@ function CadastroModal({ produtos, onClose, onSaved }) {
           {/* Momento de compra */}
           <div>
             <label className="block text-xs font-semibold text-zinc-400 mb-2">Momento de Compra *</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {MOMENTOS.map(m => (
                 <button
                   key={m.value}
                   onClick={() => setForm(p => ({ ...p, momento_compra: m.value }))}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer text-left ${
                     form.momento_compra === m.value
                       ? `${m.color} ${m.bg} ${m.border}`
                       : 'text-zinc-500 bg-dark-800 border-dark-600 hover:border-dark-500'
@@ -210,23 +220,23 @@ function CadastroModal({ produtos, onClose, onSaved }) {
             </div>
           </div>
 
-          {/* Produtos de interesse */}
+          {/* Equipamentos de interesse */}
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-2">Produtos de Interesse *</label>
+            <label className="block text-xs font-semibold text-zinc-400 mb-2">Equipamentos de Interesse *</label>
             <div className="flex flex-wrap gap-2">
-              {produtos.map(p => {
-                const selecionado = form.produtos_interesse.includes(p.codigo_sku || p.nome);
+              {EQUIPAMENTOS.map(eq => {
+                const selecionado = form.produtos_interesse.includes(eq.alias);
                 return (
                   <button
-                    key={p.id}
-                    onClick={() => toggleProduto(p.codigo_sku || p.nome)}
+                    key={eq.alias}
+                    onClick={() => toggleProduto(eq.alias)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                       selecionado
                         ? 'bg-neon/10 text-neon border-neon/30'
                         : 'bg-dark-800 text-zinc-400 border-dark-600 hover:border-dark-500 hover:text-zinc-300'
                     }`}
                   >
-                    {selecionado && '✓ '}{p.nome}
+                    {selecionado && '✓ '}{eq.label}
                   </button>
                 );
               })}
@@ -274,7 +284,6 @@ function CadastroModal({ produtos, onClose, onSaved }) {
 /* ─── Tab principal ─── */
 export default function LeadsTab() {
   const [leads, setLeads] = useState([]);
-  const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -283,12 +292,8 @@ export default function LeadsTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: leadsData }, { data: prodsData }] = await Promise.all([
-      supabase.from('leads').select('*').order('criado_em', { ascending: false }),
-      supabase.from('produtos').select('id, nome, codigo_sku').order('nome'),
-    ]);
+    const { data: leadsData } = await supabase.from('leads').select('*').order('criado_em', { ascending: false });
     setLeads(leadsData || []);
-    setProdutos(prodsData || []);
     setLoading(false);
   }, []);
 
@@ -467,7 +472,6 @@ export default function LeadsTab() {
       {/* Modal de cadastro */}
       {showModal && (
         <CadastroModal
-          produtos={produtos}
           onClose={() => setShowModal(false)}
           onSaved={load}
         />

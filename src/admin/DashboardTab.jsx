@@ -15,7 +15,7 @@ export default function DashboardTab() {
     potencialVendas: 0
   });
   const [leadsStats, setLeadsStats] = useState({
-    total: 0, quente: 0, morno: 0, frio: 0,
+    total: 0, agora: 0, breve: 0, comparando: 0, entender: 0,
     novo: 0, fluxo_disparado: 0, link_aberto: 0,
     orcamento_gerado: 0, negociando: 0, convertido: 0, perdido: 0,
     taxaConversao: 0,
@@ -72,11 +72,13 @@ export default function DashboardTab() {
       const leads = leadsData || [];
       const countStatus = (s) => leads.filter(l => l.status === s).length;
       const convertidos = countStatus('convertido');
+      const countMomento = (v) => leads.filter(l => l.momento_compra === v).length;
       setLeadsStats({
         total: leads.length,
-        quente: leads.filter(l => l.momento_compra === 'quente').length,
-        morno:  leads.filter(l => l.momento_compra === 'morno').length,
-        frio:   leads.filter(l => l.momento_compra === 'frio').length,
+        agora:  countMomento('Quero comprar agora'),
+        breve:  countMomento('Quero comprar em breve (até 30 dias)'),
+        comparando: countMomento('Estou comparando opções'),
+        entender:   countMomento('Só quero entender melhor o produto'),
         novo:             countStatus('novo'),
         fluxo_disparado:  countStatus('fluxo_disparado'),
         link_aberto:      countStatus('link_aberto'),
@@ -315,21 +317,26 @@ export default function DashboardTab() {
             <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Users className="w-5 h-5 text-blue-400" /> Leads ({leadsStats.total})
             </h2>
-            <div className="grid grid-cols-3 gap-2 mb-5">
+            <div className="grid grid-cols-2 gap-2 mb-5">
               <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
                 <Flame className="w-4 h-4 text-red-400 mx-auto mb-1" />
-                <p className="text-xl font-black text-red-400">{leadsStats.quente}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Quente</p>
+                <p className="text-xl font-black text-red-400">{leadsStats.agora}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">Comprar agora</p>
               </div>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
                 <Thermometer className="w-4 h-4 text-amber-400 mx-auto mb-1" />
-                <p className="text-xl font-black text-amber-400">{leadsStats.morno}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Morno</p>
+                <p className="text-xl font-black text-amber-400">{leadsStats.breve}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">Em breve (≤30d)</p>
               </div>
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
                 <Snowflake className="w-4 h-4 text-blue-400 mx-auto mb-1" />
-                <p className="text-xl font-black text-blue-400">{leadsStats.frio}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Frio</p>
+                <p className="text-xl font-black text-blue-400">{leadsStats.comparando}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">Comparando opções</p>
+              </div>
+              <div className="bg-zinc-500/10 border border-zinc-500/20 rounded-xl p-3 text-center">
+                <Snowflake className="w-4 h-4 text-zinc-400 mx-auto mb-1" />
+                <p className="text-xl font-black text-zinc-400">{leadsStats.entender}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight">Só quer entender</p>
               </div>
             </div>
             <div className="space-y-2">
