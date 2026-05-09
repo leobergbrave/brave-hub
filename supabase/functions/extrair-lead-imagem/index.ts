@@ -1,11 +1,9 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -44,7 +42,7 @@ Regras:
 - Se não encontrar algum campo, deixe como string vazia ou array vazio`;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,7 +50,7 @@ Regras:
           contents: [{
             parts: [
               { text: prompt },
-              { inline_data: { mime_type: mimeType || 'image/png', data: imageBase64 } },
+              { inlineData: { mimeType: mimeType || 'image/png', data: imageBase64 } },
             ],
           }],
           generationConfig: { temperature: 0 },
