@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import {
   Loader2, Plus, Phone, User, Search, ChevronDown,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
-  CheckCircle2, XCircle, Clock, MessageCircle, TrendingUp, X
+  CheckCircle2, MessageCircle, TrendingUp, X
 } from 'lucide-react';
 
 /* ─── Constantes ─── */
@@ -285,7 +285,7 @@ export default function LeadsTab() {
     setLoading(true);
     const [{ data: leadsData }, { data: prodsData }] = await Promise.all([
       supabase.from('leads').select('*').order('criado_em', { ascending: false }),
-      supabase.from('produtos').select('id, nome, codigo_sku').eq('ativo', true).order('nome'),
+      supabase.from('produtos').select('id, nome, codigo_sku').order('nome'),
     ]);
     setLeads(leadsData || []);
     setProdutos(prodsData || []);
