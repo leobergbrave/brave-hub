@@ -138,6 +138,7 @@ function CadastroModal({ onClose, onSaved }) {
       ...prev,
       nome: dados.nome || prev.nome,
       telefone: dados.telefone || prev.telefone,
+      email: dados.email || prev.email,
       momento_compra: dados.momento_compra || prev.momento_compra,
       produtos_interesse: dados.produtos_interesse?.length > 0 ? dados.produtos_interesse : prev.produtos_interesse,
     }));
