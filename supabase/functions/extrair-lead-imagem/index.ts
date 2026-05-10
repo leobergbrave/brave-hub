@@ -16,8 +16,9 @@ Deno.serve(async (req: Request) => {
     const prompt = `Analise esta screenshot do RD Station CRM. Extraia estas informações e retorne APENAS um JSON válido, sem markdown, sem explicações:
 
 {
-  "nome": "nome completo do lead (campo Nome da Negociação)",
+  "nome": "APENAS o primeiro nome do lead (ex: se for 'João Silva', retorne 'João')",
   "telefone": "número de telefone sem formatação, apenas dígitos incluindo código do país (ex: 5511999999999)",
+  "email": "endereço de e-mail do contato, se visível na tela (senão string vazia)",
   "momento_compra": "um dos 4 valores exatos abaixo",
   "produtos_interesse": ["array de aliases conforme mapeamento"]
 }
@@ -37,7 +38,9 @@ Mapeamento equipamentos → aliases (campo "Equipamento | Ergometro"):
 - Escada → escada
 
 Regras:
-- Telefone: use o primeiro número da seção Contatos, remova todo símbolo (espaço, +, -, parênteses)
+- nome: retorne SOMENTE o primeiro nome, nunca o sobrenome
+- telefone: use o primeiro número da seção Contatos, remova todo símbolo (espaço, +, -, parênteses)
+- email: procure na seção Contatos (ícone de envelope), retorne o endereço completo se visível
 - Se o texto do equipamento estiver cortado (ex: "Est..."), inclua Esteira Curva (estcv)
 - Se não encontrar algum campo, deixe como string vazia ou array vazio`;
 
