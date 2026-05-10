@@ -1010,7 +1010,7 @@ export default function App() {
 
       {/* Header */}
       <header className="relative z-10 border-b border-dark-700/60">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <img src="/logo.png" alt="Brave Hub Logo" className="h-10 object-contain" />
             <p className="text-[11px] font-medium text-dark-500 tracking-widest uppercase mt-1">Gerador de Orçamentos</p>
@@ -1023,14 +1023,14 @@ export default function App() {
       </header>
 
       {/* Main */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-28 lg:pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
 
           {/* ═══ COLUNA ESQUERDA ═══ */}
-          <div className="lg:col-span-5 space-y-6 animate-fade-in-up">
+          <div className="lg:col-span-5 flex flex-col gap-6 animate-fade-in-up">
 
             {/* Card: IA */}
-            <section className="relative bg-dark-800/60 backdrop-blur-sm border border-purple-500/30 rounded-2xl p-6 overflow-hidden">
+            <section className="relative bg-dark-800/60 backdrop-blur-sm border border-purple-500/30 rounded-2xl p-4 sm:p-6 overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-[60px] pointer-events-none" />
               <div className="relative flex items-center gap-2 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
@@ -1201,7 +1201,7 @@ export default function App() {
             </section>
 
             {/* Card: Orçamentos Modelo */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-amber-500/20 rounded-2xl p-6">
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-amber-500/20 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
                   <Bookmark className="w-4 h-4 text-amber-400" />
@@ -1252,7 +1252,7 @@ export default function App() {
             </section>
 
             {/* Card: Adicionar Produto */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+            <section className="order-first lg:order-none bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-neon/10 flex items-center justify-center">
                   <Plus className="w-4 h-4 text-neon" />
@@ -1269,38 +1269,30 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="relative">
-                    {/* Selected Product Display / Search Input */}
+                    {/* Selected product tag */}
+                    {produtoId && (
+                      <div className="flex items-center gap-2 mb-2 bg-neon/10 border border-neon/20 rounded-lg px-3 py-1.5">
+                        <span className="text-xs text-neon font-semibold truncate flex-1">{produtos.find(p => p.id === produtoId)?.nome}</span>
+                        <span className="text-xs text-neon/70 shrink-0">{formatCurrency(produtos.find(p => p.id === produtoId)?.preco || 0)}</span>
+                        <button onClick={() => { setProdutoId(null); setBuscaProduto(''); }} className="shrink-0 text-neon/50 hover:text-red-400 transition-colors cursor-pointer"><X className="w-3 h-3" /></button>
+                      </div>
+                    )}
+                    {/* Always-visible search input */}
                     <div className="relative">
-                      {produtoId && !dropdownAberto ? (
-                        <div 
-                          onClick={() => {
-                            setDropdownAberto(true);
-                            setBuscaProduto('');
-                          }}
-                          className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 cursor-pointer flex justify-between items-center"
-                        >
-                          <span className="truncate pr-4">{produtos.find(p => p.id === produtoId)?.nome}</span>
-                          <span className="text-neon shrink-0">{formatCurrency(produtos.find(p => p.id === produtoId)?.preco || 0)}</span>
-                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                        </div>
-                      ) : (
-                        <>
-                          <input
-                            type="text"
-                            placeholder="Digite para buscar..."
-                            value={buscaProduto}
-                            onChange={(e) => {
-                              setBuscaProduto(e.target.value);
-                              setDropdownAberto(true);
-                            }}
-                            onFocus={() => setDropdownAberto(true)}
-                            onBlur={() => setTimeout(() => setDropdownAberto(false), 200)}
-                            className="w-full bg-dark-900 border border-neon/50 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-neon/20 transition-all placeholder:text-dark-500"
-                            autoFocus={dropdownAberto}
-                          />
-                          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neon/50" />
-                        </>
-                      )}
+                      <input
+                        type="text"
+                        placeholder={produtoId ? "Trocar produto..." : "Buscar produto por nome..."}
+                        value={buscaProduto}
+                        onChange={(e) => {
+                          setBuscaProduto(e.target.value);
+                          setDropdownAberto(true);
+                          if (e.target.value) setProdutoId(null);
+                        }}
+                        onFocus={() => setDropdownAberto(true)}
+                        onBlur={() => setTimeout(() => setDropdownAberto(false), 200)}
+                        className="w-full bg-dark-900 border border-dark-600 focus:border-neon/50 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-1 focus:ring-neon/20 transition-all placeholder:text-dark-500"
+                      />
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
                     </div>
 
                     {/* Dropdown Options */}
@@ -1346,7 +1338,7 @@ export default function App() {
             </section>
 
             {/* Card: Dados */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
                   <UserRound className="w-4 h-4 text-blue-400" />
@@ -1383,7 +1375,7 @@ export default function App() {
             </section>
 
             {/* Card: Destino */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-orange-accent/10 flex items-center justify-center">
                   <MapPin className="w-4 h-4 text-orange-accent" />
@@ -1458,7 +1450,7 @@ export default function App() {
             </section>
 
             {/* Card: Condições de Pagamento */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <CreditCard className="w-4 h-4 text-emerald-400" />
@@ -1542,7 +1534,7 @@ export default function App() {
             <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden flex flex-col h-full">
 
               {/* Header Orçamento */}
-              <div className="px-6 py-4 border-b border-dark-700/50 flex items-center justify-between">
+              <div className="px-4 sm:px-6 py-4 border-b border-dark-700/50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="w-5 h-5 text-neon" />
                   <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Orçamento</h2>
@@ -1562,7 +1554,7 @@ export default function App() {
               </div>
 
               {/* Lista de itens */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 min-h-[200px]">
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 min-h-[200px]">
                 {itens.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                     <div className="w-16 h-16 rounded-2xl bg-dark-700/50 flex items-center justify-center mb-4">
@@ -1736,7 +1728,7 @@ export default function App() {
               )}
 
               {/* Painel de Resumo */}
-              <div className="border-t border-dark-700/50 bg-dark-900/40 px-6 py-5 space-y-3">
+              <div className="border-t border-dark-700/50 bg-dark-900/40 px-4 sm:px-6 py-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-zinc-400"><Weight className="w-4 h-4" /><span className="text-xs font-medium">Peso Total</span></div>
                   <div className="flex items-center gap-2">
@@ -1867,7 +1859,7 @@ export default function App() {
         </div>
 
         {/* ═══ HISTÓRICO DE ORÇAMENTOS ═══ */}
-        <section className="mt-8 bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+        <section className="mt-6 sm:mt-8 bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -1938,6 +1930,21 @@ export default function App() {
             </div>
           )}
         </section>
+
+        {/* ═══ BARRA INFERIOR MOBILE ═══ */}
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-sm border-t border-dark-700/50 px-4 py-3 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total do Projeto</p>
+            <p className="text-lg font-black text-neon leading-tight">{formatCurrency(totalProjeto)}</p>
+          </div>
+          <button
+            onClick={handleGerarLink}
+            disabled={itens.length === 0}
+            className="flex items-center gap-2 bg-gradient-to-r from-orange-dim to-orange-accent text-white font-black text-sm px-5 py-3 rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 cursor-pointer"
+          >
+            <Link2 className="w-4 h-4" /> Gerar Link
+          </button>
+        </div>
       </main>
 
       {/* Footer */}

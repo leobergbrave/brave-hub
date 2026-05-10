@@ -390,7 +390,7 @@ export default function OrcamentoRapidoPage() {
       </header>
 
       {/* Product Cards — Show de Preços */}
-      <section className="relative z-10 max-w-lg mx-auto px-6 mb-6 space-y-4">
+      <section className="relative z-10 max-w-lg mx-auto px-4 sm:px-6 mb-6 space-y-4">
         {produtos.map(prod => {
           const qty = quantidades[prod.id] || 1;
           const media = prod.url_imagem ? parseMediaUrl(prod.url_imagem) : null;
@@ -487,7 +487,7 @@ export default function OrcamentoRapidoPage() {
 
       {/* CEP Input */}
       {!orcamentoGerado && (
-        <section className="relative z-10 max-w-lg mx-auto px-6 mb-8">
+        <section className="relative z-10 max-w-lg mx-auto px-4 sm:px-6 mb-8">
           <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 rounded-lg bg-orange-accent/10 flex items-center justify-center">
@@ -536,7 +536,7 @@ export default function OrcamentoRapidoPage() {
 
       {/* Quote Result — Dual Totals */}
       {orcamentoGerado && (
-        <section className="relative z-10 max-w-lg mx-auto px-6 pb-12 animate-fade-in-up">
+        <section className="relative z-10 max-w-lg mx-auto px-4 sm:px-6 pb-12 animate-fade-in-up">
           <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6 space-y-4">
             <h3 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-neon" /> Resumo do Investimento

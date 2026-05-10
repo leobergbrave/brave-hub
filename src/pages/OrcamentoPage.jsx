@@ -248,14 +248,14 @@ export default function OrcamentoPage() {
       </header>
 
       {/* Divider */}
-      <div className="max-w-3xl mx-auto px-6">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6">
         <div className="h-px bg-gradient-to-r from-transparent via-dark-600 to-transparent" />
       </div>
 
       {/* ══════════════════════════════════════════
           2. LISTA DE EQUIPAMENTOS
           ══════════════════════════════════════════ */}
-      <section className="relative z-10 max-w-3xl mx-auto px-6 py-8">
+      <section className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-8">
 
         <div className="space-y-4">
           {orcamento.itens.map((item, idx) => {
@@ -290,7 +290,7 @@ export default function OrcamentoPage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-white leading-tight pr-20">{item.nome}</h3>
+                    <h3 className="text-sm font-bold text-white leading-tight">{item.nome}</h3>
                     <div className="mt-1.5">
                       <span className="inline-flex items-center gap-1 bg-dark-700 border border-dark-600 rounded-md px-2 py-0.5 text-[11px] font-bold text-white">
                         Qtd: {item.quantidade}
@@ -353,7 +353,7 @@ export default function OrcamentoPage() {
       {/* ══════════════════════════════════════════
           3. RESUMO FINANCEIRO
           ══════════════════════════════════════════ */}
-      <section className="relative z-10 max-w-3xl mx-auto px-6 pb-6">
+      <section className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pb-6">
         <div className="bg-dark-800/80 backdrop-blur-md border border-dark-700/60 rounded-2xl p-6 sm:p-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
           <div className="flex items-center gap-2 mb-6">
             <div className="w-8 h-8 rounded-lg bg-neon/10 flex items-center justify-center">
@@ -436,7 +436,7 @@ export default function OrcamentoPage() {
       {/* ══════════════════════════════════════════
           4. CTAs — ÁREA DE AÇÃO
           ══════════════════════════════════════════ */}
-      <section className="relative z-10 max-w-3xl mx-auto px-6 pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+      <section className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
         {/* Escassez */}
         <div className="flex items-start gap-2.5 bg-orange-accent/5 border border-orange-accent/20 rounded-xl px-5 py-3.5 mb-5">
           <Shield className="w-4 h-4 text-orange-accent shrink-0 mt-0.5" />
@@ -459,7 +459,7 @@ export default function OrcamentoPage() {
       </section>
 
       {/* ── Selo de confiança ── */}
-      <div className="relative z-10 max-w-3xl mx-auto px-6 pb-8">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pb-8">
         <div className="flex flex-wrap items-center justify-center gap-6 py-6 border-t border-dark-700/30">
           <TrustBadge icon={Shield} label="Pagamento Seguro" />
           <TrustBadge icon={Truck} label="Entrega Rastreada" />
@@ -469,7 +469,7 @@ export default function OrcamentoPage() {
 
       {/* ── Footer ── */}
       <footer className="relative z-10 border-t border-dark-700/20">
-        <div className="max-w-3xl mx-auto px-6 py-5 text-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5 text-center">
           <p className="text-[11px] text-dark-500">
             © 2026 Brave — Equipamentos de Alta Performance
           </p>
