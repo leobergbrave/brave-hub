@@ -36,7 +36,14 @@ export default function OrcamentoPage() {
 
         if (slug) {
           const { data } = await supabase.from('orcamentos_salvos').select('*').eq('slug', slug).single();
-          if (data) setOrcamentoSalvo(data);
+          if (data) {
+            setOrcamentoSalvo(data);
+            // Dispara webhook de abertura (apenas uma vez, edge function garante idempotência)
+            if (!data.aberto) {
+              supabase.functions.invoke('notificar-orcamento-aberto', { body: { slug } })
+                .catch(err => console.error('Erro ao notificar abertura:', err));
+            }
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
