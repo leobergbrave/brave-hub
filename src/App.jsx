@@ -1300,11 +1300,12 @@ export default function App() {
                       <div className="absolute z-50 w-full mt-2 bg-dark-800 border border-dark-600 rounded-xl shadow-xl shadow-dark-950/50 max-h-60 overflow-y-auto">
                         {produtos
                           .filter(p => p.nome.toLowerCase().includes(buscaProduto.toLowerCase()) || (p.codigo_sku && p.codigo_sku.toLowerCase().includes(buscaProduto.toLowerCase())))
-                          .slice(0, 50) // Limit to 50 results to prevent lag
+                          .slice(0, 50)
                           .map(p => (
-                          <div 
+                          <div
                             key={p.id}
-                            onClick={() => {
+                            onPointerDown={(e) => {
+                              e.preventDefault(); // prevents input blur before selection fires
                               setProdutoId(p.id);
                               setDropdownAberto(false);
                               setBuscaProduto('');
