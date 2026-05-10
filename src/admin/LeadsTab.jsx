@@ -28,6 +28,7 @@ const STATUS_PIPELINE = [
   { value: 'novo', label: 'Novo', color: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/20' },
   { value: 'fluxo_disparado', label: 'Fluxo Disparado', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
   { value: 'link_aberto', label: 'Link Aberto', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+  { value: 'qualificando', label: 'Qualificando', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
   { value: 'orcamento_gerado', label: 'Orçamento Gerado', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
   { value: 'negociando', label: 'Negociando', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   { value: 'convertido', label: 'Convertido ✓', color: 'text-neon', bg: 'bg-neon/10', border: 'border-neon/20' },

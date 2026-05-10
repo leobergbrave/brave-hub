@@ -211,12 +211,10 @@ export default function OrcamentoRapidoPage() {
       setCepInfo(data);
       setEstado(data.uf);
 
-      // Dispara o gatilho de "CEP Digitado" para o BotConversa (via Edge Function para segurança)
-      // A Edge Function vai verificar se existe o telefone do lead vinculado a este código
+      // Marca cep_digitado = true para avançar o lead para 'qualificando' via trigger
       if (codigo) {
-        supabase.functions.invoke('botconversa-triggers', {
-          body: { evento: 'cep_calculado', codigo_link: codigo, cep_info: data }
-        }).catch(err => console.error('Erro ao disparar gatilho do CEP:', err));
+        supabase.from('links_rapidos').update({ cep_digitado: true }).eq('codigo', codigo)
+          .catch(err => console.error('Erro ao atualizar cep_digitado:', err));
       }
 
       const capitais = {
