@@ -60,7 +60,6 @@ export default function OrcamentoRapidoPage() {
   const [orcamentoGerado, setOrcamentoGerado] = useState(false);
   const [linkGerado, setLinkGerado] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [blingStatus, setBlingStatus] = useState(null); // null | 'ok' | 'erro'
   const [modoPagamento, setModoPagamento] = useState('avista');
 
   // ── Fuzzy match a search term against a product name ──
@@ -331,12 +330,10 @@ export default function OrcamentoRapidoPage() {
       setLinkGerado(`${window.location.origin}/orcamento/${slug}`);
       setOrcamentoGerado(true);
 
-      // Envia para a Bling e atualiza status
+      // Envia para a Bling silenciosamente
       supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: nomeCliente, consultor: 'Léo Berg', payload }
-      }).then(({ error: blingErr }) => {
-        setBlingStatus(blingErr ? 'erro' : 'ok');
-      }).catch(() => setBlingStatus('erro'));
+      }).catch(err => console.error('Erro ao syncar com Bling:', err));
     } catch (err) {
       console.error(err);
     } finally {
@@ -601,16 +598,6 @@ export default function OrcamentoRapidoPage() {
               Ver Orçamento Completo <ChevronRight className="w-4 h-4 inline" />
             </a>
 
-            {/* Status Bling */}
-            {blingStatus === 'ok' && (
-              <p className="text-center text-[11px] text-emerald-400 font-medium">✓ Proposta enviada ao Bling com sucesso</p>
-            )}
-            {blingStatus === 'erro' && (
-              <p className="text-center text-[11px] text-red-400 font-medium">⚠ Erro ao enviar ao Bling — verifique os logs</p>
-            )}
-            {blingStatus === null && orcamentoGerado && (
-              <p className="text-center text-[11px] text-zinc-600 animate-pulse">Enviando ao Bling...</p>
-            )}
           </div>
 
           {/* Trust badges */}
