@@ -60,6 +60,7 @@ export default function OrcamentoRapidoPage() {
   const [orcamentoGerado, setOrcamentoGerado] = useState(false);
   const [linkGerado, setLinkGerado] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [blingStatus, setBlingStatus] = useState(null); // null | 'ok' | 'erro'
   const [modoPagamento, setModoPagamento] = useState('avista');
 
   // ── Fuzzy match a search term against a product name ──
@@ -330,10 +331,12 @@ export default function OrcamentoRapidoPage() {
       setLinkGerado(`${window.location.origin}/orcamento/${slug}`);
       setOrcamentoGerado(true);
 
-      // Envia para a Bling silenciosamente no fundo
+      // Envia para a Bling e atualiza status
       supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: nomeCliente, consultor: 'Léo Berg', payload }
-      }).catch(err => console.error('Erro ao syncar com Bling:', err));
+      }).then(({ error: blingErr }) => {
+        setBlingStatus(blingErr ? 'erro' : 'ok');
+      }).catch(() => setBlingStatus('erro'));
     } catch (err) {
       console.error(err);
     } finally {
@@ -597,6 +600,17 @@ export default function OrcamentoRapidoPage() {
             <a href={linkGerado} className="block w-full text-center mt-2 bg-gradient-to-r from-orange-dim to-orange-accent text-white font-bold text-sm py-4 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-orange-accent/25 hover:scale-[1.02] active:scale-[0.98]">
               Ver Orçamento Completo <ChevronRight className="w-4 h-4 inline" />
             </a>
+
+            {/* Status Bling */}
+            {blingStatus === 'ok' && (
+              <p className="text-center text-[11px] text-emerald-400 font-medium">✓ Proposta enviada ao Bling com sucesso</p>
+            )}
+            {blingStatus === 'erro' && (
+              <p className="text-center text-[11px] text-red-400 font-medium">⚠ Erro ao enviar ao Bling — verifique os logs</p>
+            )}
+            {blingStatus === null && orcamentoGerado && (
+              <p className="text-center text-[11px] text-zinc-600 animate-pulse">Enviando ao Bling...</p>
+            )}
           </div>
 
           {/* Trust badges */}
