@@ -26,25 +26,12 @@ serve(async (req) => {
       });
     }
 
-    // 1. Gera um link_rapido para este lead
-    const codigo = Math.random().toString(36).substring(2, 8);
     const telefoneLimpo = telefone.replace(/\D/g, '');
     const telefoneFormatado = telefoneLimpo.length === 10 || telefoneLimpo.length === 11
       ? '55' + telefoneLimpo
       : telefoneLimpo;
 
-    const { error: linkError } = await supabase.from('links_rapidos').insert({
-      codigo,
-      produtos_texto: produtos_interesse.join(','),
-      nome_lead: nome,
-      telefone_lead: telefoneFormatado,
-      aberto: false,
-      alerta_abandono_enviado: false,
-    });
-
-    if (linkError) throw new Error('Erro ao criar link rápido: ' + linkError.message);
-
-    // 2. Salva o lead
+    // 1. Salva o lead (sem link_rapido — será gerado pelo BotConversa no final do fluxo)
     const { data: leadData, error: leadError } = await supabase.from('leads').insert({
       nome,
       telefone: telefoneFormatado,
@@ -54,17 +41,14 @@ serve(async (req) => {
       status: 'novo',
       consultor: consultor || 'Léo Berg',
       observacoes: observacoes || null,
-      link_rapido_codigo: codigo,
+      link_rapido_codigo: null,
     }).select().single();
 
     if (leadError) throw new Error('Erro ao salvar lead: ' + leadError.message);
 
-    // 3. Dispara o fluxo no BotConversa via webhook
+    // 2. Dispara o fluxo no BotConversa via webhook (sem link — bot gera no final do fluxo)
     const webhookUrl = Deno.env.get('BOTCONVERSA_WEBHOOK_NOVO_LEAD');
     if (webhookUrl) {
-      const baseUrl = Deno.env.get('APP_BASE_URL') || 'https://brave-hub-two.vercel.app';
-      const linkOrcamento = `${baseUrl}/q/${codigo}`;
-
       await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -73,7 +57,6 @@ serve(async (req) => {
           nome,
           produtos: produtos_interesse.join(', '),
           momento: momento_compra,
-          link: linkOrcamento,
           consultor: consultor || 'Léo Berg',
         }),
       }).catch(err => console.error('Erro ao disparar webhook BotConversa:', err));
@@ -83,7 +66,7 @@ serve(async (req) => {
       leadData.status = 'fluxo_disparado';
     }
 
-    return new Response(JSON.stringify({ success: true, lead: leadData, codigo }), {
+    return new Response(JSON.stringify({ success: true, lead: leadData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

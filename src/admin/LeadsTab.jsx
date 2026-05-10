@@ -225,7 +225,6 @@ function CadastroModal({ onClose, onSaved }) {
   };
 
   if (sucesso) {
-    const linkGerado = `${window.location.origin}/q/${sucesso.codigo}`;
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
         <div className="bg-dark-900 border border-neon/30 rounded-2xl p-8 max-w-md w-full text-center">
@@ -233,17 +232,11 @@ function CadastroModal({ onClose, onSaved }) {
             <CheckCircle2 className="w-8 h-8 text-neon" />
           </div>
           <h2 className="text-xl font-black text-white mb-2">Lead cadastrado!</h2>
-          <p className="text-sm text-zinc-400 mb-4">
+          <p className="text-sm text-zinc-400 mb-6">
             {sucesso.lead.status === 'fluxo_disparado'
-              ? 'O fluxo foi disparado no BotConversa com sucesso.'
+              ? 'Fluxo disparado no BotConversa. O link de orçamento será gerado pelo bot ao final do fluxo.'
               : 'Lead salvo. Configure o webhook BOTCONVERSA_WEBHOOK_NOVO_LEAD para disparar o fluxo automaticamente.'}
           </p>
-          <div className="bg-dark-800 border border-dark-700 rounded-xl p-3 mb-5">
-            <p className="text-[10px] text-zinc-500 mb-1">Link de orçamento gerado:</p>
-            <a href={linkGerado} target="_blank" rel="noreferrer" className="text-xs text-neon font-mono break-all hover:underline">
-              {linkGerado}
-            </a>
-          </div>
           <button onClick={onClose} className="w-full py-3 rounded-xl bg-neon text-dark-950 font-black text-sm hover:bg-neon/90 transition-colors">
             Fechar
           </button>
