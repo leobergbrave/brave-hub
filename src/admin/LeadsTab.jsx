@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import {
   Loader2, Plus, Phone, User, Search, ChevronDown,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
-  CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine
+  CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine, Trash2
 } from 'lucide-react';
 
 /* ─── Constantes ─── */
@@ -469,6 +469,12 @@ export default function LeadsTab() {
     setAtualizandoStatus(null);
   };
 
+  const deleteLead = async (lead) => {
+    if (!confirm(`Excluir lead "${lead.nome}"? Esta ação não pode ser desfeita.`)) return;
+    await supabase.from('leads').delete().eq('id', lead.id);
+    setLeads(prev => prev.filter(l => l.id !== lead.id));
+  };
+
   const reenviarFluxo = async (lead) => {
     if (!confirm(`Reenviar fluxo para ${lead.nome}?`)) return;
     setAtualizandoStatus(lead.id);
@@ -601,6 +607,15 @@ export default function LeadsTab() {
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
+
+                {/* Deletar lead */}
+                <button
+                  onClick={() => deleteLead(lead)}
+                  title="Excluir lead"
+                  className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-dark-600 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
 
                 {/* Reenviar fluxo */}
                 <button
