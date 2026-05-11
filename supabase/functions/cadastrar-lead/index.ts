@@ -21,7 +21,7 @@ function buildEmailHtml(nome: string, produtos: string[], consultor: string, mom
     .map(p => `<li style="margin:6px 0;color:#d4d4d8;">${EQUIPAMENTOS[p] || p}</li>`)
     .join('');
 
-  const whatsappConsultor = 'https://wa.me/5511999999999'; // substitua pelo número real
+  const whatsappConsultor = 'https://wa.me/5531973446109';
   const momentoTexto: Record<string, string> = {
     'Quero comprar agora':                  'que deseja comprar agora',
     'Quero comprar em breve (até 30 dias)': 'que pretende comprar em breve',
