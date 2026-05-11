@@ -17,7 +17,7 @@ export default function DashboardTab() {
   const [leadsStats, setLeadsStats] = useState({
     total: 0, agora: 0, breve: 0, comparando: 0, entender: 0,
     novo: 0, fluxo_disparado: 0, link_aberto: 0,
-    orcamento_gerado: 0, negociando: 0, convertido: 0, perdido: 0,
+    orcamento_gerado: 0, convertido: 0,
     taxaConversao: 0,
   });
   const [pendingDisparos, setPendingDisparos] = useState([]);
@@ -83,9 +83,7 @@ export default function DashboardTab() {
         fluxo_disparado:  countStatus('fluxo_disparado'),
         link_aberto:      countStatus('link_aberto'),
         orcamento_gerado: countStatus('orcamento_gerado'),
-        negociando:       countStatus('negociando'),
         convertido:       convertidos,
-        perdido:          countStatus('perdido'),
         taxaConversao: leads.length > 0 ? ((convertidos / leads.length) * 100).toFixed(1) : 0,
       });
 
@@ -345,7 +343,6 @@ export default function DashboardTab() {
                 { label: 'Fluxo Disparado', value: leadsStats.fluxo_disparado, color: 'bg-blue-500' },
                 { label: 'Link Aberto', value: leadsStats.link_aberto, color: 'bg-purple-500' },
                 { label: 'Orçamento Gerado', value: leadsStats.orcamento_gerado, color: 'bg-amber-500' },
-                { label: 'Negociando', value: leadsStats.negociando, color: 'bg-orange-500' },
                 { label: 'Convertido', value: leadsStats.convertido, color: 'bg-neon' },
               ].map(s => (
                 <div key={s.label}>
