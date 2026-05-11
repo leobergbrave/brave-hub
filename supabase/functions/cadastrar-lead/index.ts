@@ -24,7 +24,7 @@ const KEYWORDS: Record<string, string[]> = {
   remo:    ['remo indoor', 'remo'],
   skierg:  ['ski erg', 'skierg'],
   storm:   ['storm bike', 'storm'],
-  estcv:   ['esteira curva', 'esteira'],
+  estcv:   ['esteira curva'],
   escada:  ['escada'],
 };
 
