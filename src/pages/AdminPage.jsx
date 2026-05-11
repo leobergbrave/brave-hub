@@ -7,8 +7,9 @@ import OrcamentosTab from '../admin/OrcamentosTab';
 import DashboardTab from '../admin/DashboardTab';
 import MarketingTab from '../admin/MarketingTab';
 import CategoriasTab from '../admin/CategoriasTab';
-import { Layers, Users } from 'lucide-react';
+import { Layers, Users, Mail } from 'lucide-react';
 import LeadsTab from '../admin/LeadsTab';
+import EmailsTab from '../admin/EmailsTab';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'frete', label: 'Frete', icon: Truck },
   { id: 'orcamentos', label: 'Orçamentos', icon: Receipt },
   { id: 'marketing', label: 'Funil & Automação', icon: Megaphone },
+  { id: 'emails', label: 'Emails', icon: Mail },
 ];
 
 export default function AdminPage() {
@@ -42,6 +44,7 @@ export default function AdminPage() {
       case 'frete': return <FreteTab />;
       case 'orcamentos': return <OrcamentosTab />;
       case 'marketing': return <MarketingTab />;
+      case 'emails': return <EmailsTab />;
       default: return null;
     }
   };
