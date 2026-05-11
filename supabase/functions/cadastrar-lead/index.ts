@@ -43,15 +43,21 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 async function buscarProdutosEmail(aliases: string[], supabase: any): Promise<any[]> {
   const { data: produtos } = await supabase
     .from('produtos')
-    .select('id, nome, preco, preco_avista, preco_prazo');
+    .select('id, nome, preco, preco_avista, preco_prazo, codigo_sku');
   if (!produtos) return [];
 
   return aliases.map(alias => {
+    const sku = alias.toUpperCase().trim();
+    const bysku = produtos.find((p: any) =>
+      p.codigo_sku && p.codigo_sku.toUpperCase() === sku
+    );
+    if (bysku) return bysku;
+
     const kws = KEYWORDS[alias.toLowerCase().trim()] || [alias];
-    const found = produtos.find((p: any) =>
+    const bykw = produtos.find((p: any) =>
       kws.some((kw: string) => p.nome.toLowerCase().includes(kw))
     );
-    return found || { nome: EQUIPAMENTOS[alias] || alias, preco_avista: null, preco_prazo: null };
+    return bykw || { nome: EQUIPAMENTOS[alias] || alias, preco_avista: null, preco_prazo: null };
   });
 }
 
