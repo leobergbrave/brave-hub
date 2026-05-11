@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone } from 'lucide-react';
+import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban } from 'lucide-react';
 
 export default function MarketingTab() {
   const [templates, setTemplates] = useState([]);
@@ -118,6 +118,13 @@ export default function MarketingTab() {
 
   const handleOpenDisparos = () => {
     setIsModalOpen(true);
+  };
+
+  const handleIgnorar = async (d) => {
+    const sent = d.orcamento.payload.marketing_sent || [];
+    const newPayload = { ...d.orcamento.payload, marketing_sent: [...sent, d.template.id] };
+    await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', d.orcamento.id);
+    setPendingDisparos(prev => prev.filter(p => !(p.orcamento.id === d.orcamento.id && p.template.id === d.template.id)));
   };
 
   const handleSendIndividual = async (d, customMessage) => {
@@ -352,22 +359,33 @@ export default function MarketingTab() {
                             {d.template.nome}
                           </span>
                         </div>
-                        <button
-                          onClick={() => {
-                            if (isEditing) {
-                              handleSendIndividual(d, editingDisparo.message);
-                            } else {
-                              setEditingDisparo({ id: d.orcamento.id, templateId: d.template.id, message: defaultMessage });
-                            }
-                          }}
-                          disabled={sending}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
-                            isEditing ? 'bg-neon text-dark-950 hover:bg-neon/90' : 'bg-blue-600 text-white hover:bg-blue-500'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          {sending && isEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          {isEditing ? 'Confirmar e Enviar' : 'Revisar e Enviar'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleIgnorar(d)}
+                            disabled={sending}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm border border-dark-600 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Ignorar este envio permanentemente"
+                          >
+                            <Ban className="w-4 h-4" />
+                            Ignorar
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (isEditing) {
+                                handleSendIndividual(d, editingDisparo.message);
+                              } else {
+                                setEditingDisparo({ id: d.orcamento.id, templateId: d.template.id, message: defaultMessage });
+                              }
+                            }}
+                            disabled={sending}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
+                              isEditing ? 'bg-neon text-dark-950 hover:bg-neon/90' : 'bg-blue-600 text-white hover:bg-blue-500'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {sending && isEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                            {isEditing ? 'Confirmar e Enviar' : 'Revisar e Enviar'}
+                          </button>
+                        </div>
                       </div>
                       
                       {isEditing ? (
