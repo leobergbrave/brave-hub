@@ -15,6 +15,10 @@ const EQUIPAMENTOS: Record<string, string> = {
   escada:  'Escada',
 };
 
+function aliasParaNome(aliases: string[]): string {
+  return aliases.map(a => EQUIPAMENTOS[a.trim()] || a.trim()).join(', ');
+}
+
 function buildEmailHtml(nome: string, produtos: string[], consultor: string, momento: string): string {
   const primeiroNome = nome.split(' ')[0];
   const listaProdutos = produtos
@@ -154,7 +158,7 @@ serve(async (req) => {
         body: JSON.stringify({
           telefone: telefoneFormatado,
           nome,
-          produtos: produtos_interesse.join(', '),
+          produtos: aliasParaNome(produtos_interesse),
           momento: momento_compra,
           consultor: consultorNome,
         }),

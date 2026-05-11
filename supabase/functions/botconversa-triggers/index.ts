@@ -11,6 +11,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const EQUIPAMENTOS: Record<string, string> = {
+  bikeerg: 'Bike Erg',
+  remo:    'Remo Indoor',
+  skierg:  'Ski Erg',
+  storm:   'Storm Bike',
+  estcv:   'Esteira Curva',
+  escada:  'Escada',
+};
+
+function aliasParaNome(texto: string): string {
+  return texto.split(',').map(a => EQUIPAMENTOS[a.trim()] || a.trim()).join(', ');
+}
+
 serve(async (req) => {
   // Trata a requisição de pré-verificação (CORS) do navegador
   if (req.method === 'OPTIONS') {
@@ -51,7 +64,7 @@ serve(async (req) => {
           body: JSON.stringify({
             telefone: linkData.telefone_lead,
             nome: linkData.nome_lead,
-            produtos: linkData.produtos_texto,
+            produtos: aliasParaNome(linkData.produtos_texto || ''),
             cep_cidade: cep_info?.localidade,
             cep_estado: cep_info?.uf
           })
@@ -118,7 +131,7 @@ serve(async (req) => {
             body: JSON.stringify({
               telefone: lead.telefone_lead,
               nome: lead.nome_lead,
-              produtos: lead.produtos_texto
+              produtos: aliasParaNome(lead.produtos_texto || '')
             })
           }).catch(err => console.error('Erro na requisição pro BotConversa:', err));
           
