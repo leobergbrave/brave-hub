@@ -175,7 +175,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Brave Equipamentos <contato@braveequipamentos.com.br>',
+          from: 'Brave Equipamentos <onboarding@resend.dev>',
           to: [email],
           subject: `${nome.split(' ')[0]}, recebemos seu contato! 🏋️`,
           html,
