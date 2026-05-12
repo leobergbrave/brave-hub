@@ -1,10 +1,10 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Shield, CalendarDays, Clock, UserRound, Package, Weight,
   Truck, MessageCircle, ChevronRight,
   Star, Award, Loader2, X, FolderOpen, CreditCard, Banknote,
-  Flame, Zap
+  Flame, Zap, CheckCircle2
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
 import { supabase } from '../lib/supabase';
@@ -26,6 +26,10 @@ export default function OrcamentoPage() {
   const [regrasFreteDb, setRegrasFreteDb] = useState([]);
   const [orcamentoSalvo, setOrcamentoSalvo] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [qtds, setQtds] = useState({});
+  const [saving, setSaving] = useState(false);
+  const saveTimer = useRef(null);
 
   useEffect(() => {
     async function loadData() {
@@ -76,6 +80,42 @@ export default function OrcamentoPage() {
     }
     return () => { document.title = 'Brave Hub — Gerador de Orçamentos'; };
   }, [orcamentoSalvo]);
+
+  // Initialise qtds from loaded orcamento (runs once after first successful compute)
+  useEffect(() => {
+    if (orcamentoSalvo && produtosDb.length) {
+      const itensRaw = orcamentoSalvo.payload.itens || [];
+      const map = {};
+      itensRaw.forEach(it => {
+        const qty = it.q !== undefined ? it.q : it.quantidade;
+        if (it.id && qty !== undefined) map[it.id] = qty;
+      });
+      setQtds(map);
+    }
+  }, [orcamentoSalvo, produtosDb]);
+
+  const doSave = useCallback(async (newQtds) => {
+    if (!orcamentoSalvo) return;
+    setSaving(true);
+    const newItens = orcamentoSalvo.payload.itens.map(it => ({
+      ...it,
+      quantidade: newQtds[it.id] ?? it.quantidade,
+      q: newQtds[it.id] ?? (it.q ?? it.quantidade),
+    }));
+    await supabase.from('orcamentos_salvos').update({
+      payload: { ...orcamentoSalvo.payload, itens: newItens },
+    }).eq('id', orcamentoSalvo.id);
+    setSaving(false);
+  }, [orcamentoSalvo]);
+
+  const changeQty = useCallback((itemId, delta) => {
+    setQtds(prev => {
+      const newQtds = { ...prev, [itemId]: Math.max(0, (prev[itemId] ?? 0) + delta) };
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => doSave(newQtds), 1500);
+      return newQtds;
+    });
+  }, [doSave]);
 
   const orcamento = useMemo(() => {
     try {
@@ -192,11 +232,37 @@ export default function OrcamentoPage() {
     }
   }, [searchParams, produtosDb, regrasFreteDb, orcamentoSalvo]);
 
+  // Orcamento with client-edited quantities applied
+  const activeOrcamento = useMemo(() => {
+    if (!orcamento || Object.keys(qtds).length === 0) return orcamento;
+
+    const itens = orcamento.itens.map(i => ({ ...i, quantidade: qtds[i.id] ?? i.quantidade }));
+    const ativos = itens.filter(i => i.quantidade > 0);
+
+    const pesoTotal = ativos.reduce((acc, i) => acc + i.peso * i.quantidade, 0);
+    const { frete, descAvista, descCartao, parcelas } = orcamento;
+
+    const subtotalAvista = ativos.reduce((acc, i) => {
+      if (i.preco_avista) return acc + i.preco_avista * i.quantidade;
+      return acc + i.preco * (1 - descAvista / 100) * i.quantidade;
+    }, 0);
+    const totalAvista = subtotalAvista + frete;
+
+    const subtotalCartao = ativos.reduce((acc, i) => {
+      if (i.preco_prazo) return acc + i.preco_prazo * i.quantidade;
+      return acc + i.preco * (1 - descCartao / 100) * i.quantidade;
+    }, 0);
+    const totalCartao = subtotalCartao + frete;
+    const parcelaValor = totalCartao / parcelas;
+
+    return { ...orcamento, itens, pesoTotal, totalAvista, totalCartao, parcelaValor };
+  }, [orcamento, qtds]);
+
   const handleNegociarProjeto = useCallback(() => {
-    if (!orcamento) return;
-    const texto = `Olá ${orcamento.consultor}! Analisei o orçamento no valor de ${fmt(orcamento.totalAvista)} à vista / ${fmt(orcamento.totalCartao)} parcelado. Podemos conversar sobre o projeto?`;
+    if (!activeOrcamento) return;
+    const texto = `Olá ${activeOrcamento.consultor}! Analisei o orçamento no valor de ${fmt(activeOrcamento.totalAvista)} à vista / ${fmt(activeOrcamento.totalCartao)} parcelado. Podemos conversar sobre o projeto?`;
     window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
-  }, [orcamento]);
+  }, [activeOrcamento]);
 
   if (loading) {
     return (
@@ -207,7 +273,7 @@ export default function OrcamentoPage() {
     );
   }
 
-  if (!orcamento) {
+  if (!orcamento || !activeOrcamento) {
     return (
       <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center text-center px-6">
         <p className="text-white font-bold text-xl mb-2">Orçamento não encontrado</p>
@@ -239,7 +305,7 @@ export default function OrcamentoPage() {
 
           {/* Title */}
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-3 uppercase">
-            Orçamento Exclusivo <span className="text-neon">{orcamento.cliente}</span>
+            Orçamento Exclusivo <span className="text-neon">{activeOrcamento.cliente}</span>
           </h1>
           <p className="text-sm sm:text-base text-zinc-400 font-medium">
             Equipamentos de alta performance
@@ -247,9 +313,9 @@ export default function OrcamentoPage() {
 
           {/* Badges */}
           <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-            <Badge icon={CalendarDays} label="Data" value={orcamento.data} />
-            <Badge icon={Clock} label="Validade" value={orcamento.validade} />
-            <Badge icon={UserRound} label="Consultor" value={orcamento.consultor} />
+            <Badge icon={CalendarDays} label="Data" value={activeOrcamento.data} />
+            <Badge icon={Clock} label="Validade" value={activeOrcamento.validade} />
+            <Badge icon={UserRound} label="Consultor" value={activeOrcamento.consultor} />
           </div>
         </div>
       </header>
@@ -265,28 +331,30 @@ export default function OrcamentoPage() {
       <section className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-8">
 
         <div className="space-y-4">
-          {orcamento.itens.map((item, idx) => {
+          {activeOrcamento.itens.map((item, idx) => {
+            const qty = item.quantidade;
+            const removed = qty === 0;
             const pTabela = item.precoOriginal;
-            const pAvista = item.preco_avista ?? item.preco * (1 - orcamento.descAvista / 100);
-            const pPrazo = item.preco_prazo ?? item.preco * (1 - orcamento.descCartao / 100);
-            const descAvista = pTabela > 0 ? Math.round(((pTabela - pAvista) / pTabela) * 100) : 0;
-            const descPrazo = pTabela > 0 ? Math.round(((pTabela - pPrazo) / pTabela) * 100) : 0;
-            const totalPrazo = pPrazo * item.quantidade;
-            const totalAvista = pAvista * item.quantidade;
-            const totalTabela = pTabela * item.quantidade;
-            const parcelaMensal = totalPrazo / orcamento.parcelas;
-            const economiaTotal = totalTabela - totalAvista;
+            const pAvista = item.preco_avista ?? item.preco * (1 - activeOrcamento.descAvista / 100);
+            const pPrazo = item.preco_prazo ?? item.preco * (1 - activeOrcamento.descCartao / 100);
+            const descAvistaP = pTabela > 0 ? Math.round(((pTabela - pAvista) / pTabela) * 100) : 0;
+            const descPrazoP = pTabela > 0 ? Math.round(((pTabela - pPrazo) / pTabela) * 100) : 0;
+            const totalPrazo = pPrazo * qty;
+            const totalAvistaItem = pAvista * qty;
+            const totalTabela = pTabela * qty;
+            const parcelaMensal = totalPrazo / activeOrcamento.parcelas;
+            const economiaTotal = totalTabela - totalAvistaItem;
             const unidsDisp = ((item.id.charCodeAt(0) || 3) % 4) + 2;
             const media = item.url_imagem ? parseMediaUrl(item.url_imagem) : null;
 
             return (
-              <div key={item.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden relative animate-fade-in-up" style={{ animationDelay: `${idx * 0.1}s` }}>
+              <div key={item.id} className={`bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden relative animate-fade-in-up transition-opacity ${removed ? 'opacity-40' : ''}`} style={{ animationDelay: `${idx * 0.1}s` }}>
 
-                {/* Header: imagem + nome + qtd */}
+                {/* Header: imagem + nome + stepper */}
                 <div className="flex items-center gap-4 p-4 pb-2">
                   <div
-                    className={`shrink-0 w-16 h-16 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden ${item.url_imagem ? 'cursor-pointer hover:border-neon border border-transparent transition-colors' : ''}`}
-                    onClick={() => item.url_imagem && setExpandedImage(item.url_imagem)}
+                    className={`shrink-0 w-16 h-16 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden ${item.url_imagem && !removed ? 'cursor-pointer hover:border-neon border border-transparent transition-colors' : ''}`}
+                    onClick={() => item.url_imagem && !removed && setExpandedImage(item.url_imagem)}
                   >
                     {media && media.type === 'image' ? (
                       <img src={media.url} alt={item.nome} className="max-h-full max-w-full object-contain" />
@@ -297,60 +365,76 @@ export default function OrcamentoPage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-white leading-tight">{item.nome}</h3>
-                    <div className="mt-1.5">
-                      <span className="inline-flex items-center gap-1 bg-dark-700 border border-dark-600 rounded-md px-2 py-0.5 text-[11px] font-bold text-white">
-                        Qtd: {item.quantidade}
+                    <h3 className={`text-sm font-bold leading-tight ${removed ? 'line-through text-zinc-500' : 'text-white'}`}>{item.nome}</h3>
+                    {/* Quantity stepper */}
+                    <div className="mt-2 flex items-center gap-0 w-fit">
+                      <button
+                        onClick={() => changeQty(item.id, -1)}
+                        disabled={qty === 0}
+                        className="w-7 h-7 flex items-center justify-center rounded-l-lg bg-dark-700 border border-dark-600 text-zinc-400 hover:text-white hover:bg-dark-600 disabled:opacity-30 transition-colors cursor-pointer text-base font-bold select-none"
+                      >−</button>
+                      <span className="w-9 h-7 flex items-center justify-center bg-dark-900 border-t border-b border-dark-600 text-xs font-black text-white">
+                        {qty}
                       </span>
+                      <button
+                        onClick={() => changeQty(item.id, 1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-r-lg bg-dark-700 border border-dark-600 text-zinc-400 hover:text-neon hover:bg-dark-600 transition-colors cursor-pointer text-base font-bold select-none"
+                      >+</button>
                     </div>
                   </div>
+                  {removed && (
+                    <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-700/50 text-zinc-500">
+                      Não incluído
+                    </span>
+                  )}
                 </div>
 
-                {/* 3 tiers de preço */}
-                <div className="px-4 pb-2 space-y-1.5">
-                  {/* Tier 1: Preço de tabela */}
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-dark-900/50">
-                    <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium">Preço de tabela</span>
-                    <span className="text-sm text-zinc-600 line-through font-medium">{fmt(totalTabela)}</span>
-                  </div>
+                {/* 3 tiers de preço — hidden when removed */}
+                {!removed && (
+                  <div className="px-4 pb-2 space-y-1.5">
+                    <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-dark-900/50">
+                      <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium">Preço de tabela</span>
+                      <span className="text-sm text-zinc-600 line-through font-medium">{fmt(totalTabela)}</span>
+                    </div>
 
-                  {/* Tier 2: Cartão parcelado */}
-                  {descPrazo > 0 && (
                     <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/20">
-                      <div>
-                        <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão {orcamento.parcelas}x</span>
-                        <p className="text-base font-black text-white mt-0.5">{orcamento.parcelas}x {fmt(parcelaMensal)}</p>
-                        <p className="text-[10px] text-zinc-500">Total: {fmt(totalPrazo)}</p>
+                        <div>
+                          <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão {activeOrcamento.parcelas}x</span>
+                          <p className="text-base font-black text-white mt-0.5">{activeOrcamento.parcelas}x {fmt(parcelaMensal)}</p>
+                          <p className="text-[10px] text-zinc-500">Total: {fmt(totalPrazo)}</p>
+                        </div>
+                        {descPrazoP > 0 && (
+                          <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
+                            {descPrazoP}% off
+                          </span>
+                        )}
                       </div>
-                      <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
-                        {descPrazo}% off
-                      </span>
-                    </div>
-                  )}
 
-                  {/* Tier 3: À Vista */}
-                  {descAvista > 0 && (
-                    <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-neon/30" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
-                      <div>
-                        <span className="text-[10px] text-neon/80 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
-                        <p className="text-lg font-black text-neon mt-0.5">{fmt(totalAvista)}</p>
-                        <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaTotal)}</p>
+                      <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-neon/30" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
+                        <div>
+                          <span className="text-[10px] text-neon/80 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
+                          <p className="text-lg font-black text-neon mt-0.5">{fmt(totalAvistaItem)}</p>
+                          {economiaTotal > 0 && <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaTotal)}</p>}
+                        </div>
+                        {descAvistaP > 0 && (
+                          <span className="text-[10px] font-bold text-dark-950 bg-gradient-to-r from-neon to-emerald-400 px-2.5 py-1 rounded-full shadow-lg shadow-neon/25 animate-pulse whitespace-nowrap">
+                            {descAvistaP}% off
+                          </span>
+                        )}
                       </div>
-                      <span className="text-[10px] font-bold text-dark-950 bg-gradient-to-r from-neon to-emerald-400 px-2.5 py-1 rounded-full shadow-lg shadow-neon/25 animate-pulse whitespace-nowrap">
-                        {descAvista}% off
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Urgency Bar */}
-                <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-500/[0.05] border border-red-500/15">
-                  <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
-                  <span className="text-[11px] text-red-400 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
-                  <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden ml-auto max-w-[50px]">
-                    <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
                   </div>
-                </div>
+                )}
+
+                {/* Urgency Bar — hidden when removed */}
+                {!removed && (
+                  <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-500/[0.05] border border-red-500/15">
+                    <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
+                    <span className="text-[11px] text-red-400 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
+                    <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden ml-auto max-w-[50px]">
+                      <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
