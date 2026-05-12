@@ -763,6 +763,12 @@ export default function App() {
   // ── PDF Extraction Handler ──
   const handleExtrairPDF = useCallback(async () => {
     if (!pdfFile || iaExtraindo) return;
+
+    if (pdfFile.size > 5 * 1024 * 1024) {
+      showToastMessage('PDF muito grande (máx. 5MB). Reduza o tamanho do arquivo.', true);
+      return;
+    }
+
     setIaExtraindo(true);
     try {
       showToastMessage('Extraindo texto do PDF...');
@@ -770,7 +776,10 @@ export default function App() {
       const { data, error } = await supabase.functions.invoke('extract-pdf-text', {
         body: { fileBase64: base64, mimeType: pdfFile.type || 'application/pdf' },
       });
-      if (error) throw error;
+      if (error) {
+        const detail = data?.error || error?.message || String(error);
+        throw new Error(detail);
+      }
       if (!data?.texto?.trim()) {
         showToastMessage('Não foi possível extrair texto do PDF.', true);
         return;
@@ -781,7 +790,7 @@ export default function App() {
       showToastMessage('Texto extraído! Revise e clique em "Processar Lista com IA".');
     } catch (err) {
       console.error('Erro PDF:', err);
-      showToastMessage('Erro ao extrair texto do PDF.', true);
+      showToastMessage(`Erro ao extrair PDF: ${err?.message || 'Tente novamente.'}`, true);
     } finally {
       setIaExtraindo(false);
     }
