@@ -764,8 +764,8 @@ export default function App() {
   const handleExtrairPDF = useCallback(async () => {
     if (!pdfFile || iaExtraindo) return;
 
-    if (pdfFile.size > 5 * 1024 * 1024) {
-      showToastMessage('PDF muito grande (máx. 5MB). Reduza o tamanho do arquivo.', true);
+    if (pdfFile.size > 50 * 1024 * 1024) {
+      showToastMessage('PDF muito grande (máx. 50MB). Reduza o tamanho do arquivo.', true);
       return;
     }
 
