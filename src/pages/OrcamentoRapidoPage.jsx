@@ -281,7 +281,7 @@ export default function OrcamentoRapidoPage() {
 
   // ── Generate quote ──
   const handleGerarOrcamento = useCallback(async () => {
-    if (produtos.length === 0 || !estado || salvando) return;
+    if (produtos.length === 0 || !estado || !zona || salvando) return;
     setSalvando(true);
 
     try {
@@ -289,6 +289,13 @@ export default function OrcamentoRapidoPage() {
       const slugBase = nomeCliente.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const slugId = Math.random().toString(36).substring(2, 8);
       const slug = `${slugBase}-${slugId}`;
+
+      // Compute frete at call time — avoids stale closure from useMemo
+      const pesoAtual = produtos.reduce((acc, p) => acc + (p.peso_kg || 0) * (quantidades[p.id] || 1), 0);
+      const regraAtual = regras.find(r => r.estado === estado && r.zona === zona);
+      const freteAtual = regraAtual
+        ? Math.max(Math.floor(pesoAtual) * (regraAtual.multiplicador || 0), regraAtual.valor_minimo || 0)
+        : 0;
 
       const payload = {
         itens: produtos.map(p => ({
@@ -313,7 +320,7 @@ export default function OrcamentoRapidoPage() {
           parcelas: 12,
           personalizarPorProduto: false,
         },
-        frete,
+        frete: freteAtual,
       };
 
       const { error } = await supabase.from('orcamentos_salvos').insert({
@@ -328,23 +335,22 @@ export default function OrcamentoRapidoPage() {
       setLinkGerado(`${window.location.origin}/orcamento/${slug}`);
       setOrcamentoGerado(true);
 
-      // Envia para a Bling silenciosamente
       supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: nomeCliente, consultor: 'Léo Berg', payload }
       }).catch(err => console.error('Erro ao syncar com Bling:', err));
     } catch (err) {
-      console.error(err);
+      console.error('Erro ao gerar orçamento:', err);
     } finally {
       setSalvando(false);
     }
-  }, [produtos, quantidades, estado, zona, nomeUrl, salvando]);
+  }, [produtos, quantidades, estado, zona, regras, nomeUrl, salvando]);
 
   // ── Auto-gerar quando CEP é validado ──
   useEffect(() => {
     if (cepInfo && estado && zona && produtos.length > 0 && !orcamentoGerado && !salvando) {
       handleGerarOrcamento();
     }
-  }, [cepInfo, estado, zona, produtos, orcamentoGerado]);
+  }, [cepInfo, estado, zona, produtos, orcamentoGerado, handleGerarOrcamento]);
 
   // ── Render ──
   if (loading) {
