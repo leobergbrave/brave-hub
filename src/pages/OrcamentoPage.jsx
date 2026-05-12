@@ -456,9 +456,9 @@ export default function OrcamentoPage() {
           </div>
 
           <div className="space-y-4">
-            <SummaryRow icon={<Weight className="w-4 h-4" />} label="Peso Total da Carga" value={`${orcamento.pesoTotal} kg`} />
-            <SummaryRow icon={<Package className="w-4 h-4" />} label="Subtotal dos Equipamentos (À Vista)" value={fmt(orcamento.totalAvista - orcamento.frete)} />
-            <SummaryRow icon={<Truck className="w-4 h-4" />} label="Frete Aplicado" value={fmt(orcamento.frete)} valueClass="text-orange-accent" />
+            <SummaryRow icon={<Weight className="w-4 h-4" />} label="Peso Total da Carga" value={`${activeOrcamento.pesoTotal.toFixed(1)} kg`} />
+            <SummaryRow icon={<Package className="w-4 h-4" />} label="Subtotal dos Equipamentos (À Vista)" value={fmt(activeOrcamento.totalAvista - activeOrcamento.frete)} />
+            <SummaryRow icon={<Truck className="w-4 h-4" />} label="Frete Aplicado" value={fmt(activeOrcamento.frete)} valueClass="text-orange-accent" />
           </div>
 
           <div className="my-6 h-px bg-gradient-to-r from-transparent via-dark-500/50 to-transparent" />
@@ -487,10 +487,10 @@ export default function OrcamentoPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-2xl sm:text-4xl font-black text-neon">
-                    {fmt(orcamento.totalAvista)}
+                    {fmt(activeOrcamento.totalAvista)}
                   </p>
-                  {orcamento.totalAvista < orcamento.totalCartao && (
-                    <p className="text-[10px] text-emerald-400 font-medium mt-1">economize {fmt(orcamento.totalCartao - orcamento.totalAvista)}</p>
+                  {activeOrcamento.totalAvista < activeOrcamento.totalCartao && (
+                    <p className="text-[10px] text-emerald-400 font-medium mt-1">economize {fmt(activeOrcamento.totalCartao - activeOrcamento.totalAvista)}</p>
                   )}
                 </div>
               </div>
@@ -509,13 +509,13 @@ export default function OrcamentoPage() {
                       Total no Cartão
                     </p>
                     <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">
-                      {orcamento.parcelas}x de {fmt(orcamento.parcelaValor)} sem juros
+                      {activeOrcamento.parcelas}x de {fmt(activeOrcamento.parcelaValor)} sem juros
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-2xl sm:text-4xl font-black text-white">
-                    {fmt(orcamento.totalCartao)}
+                    {fmt(activeOrcamento.totalCartao)}
                   </p>
                 </div>
               </div>
@@ -566,6 +566,13 @@ export default function OrcamentoPage() {
           </p>
         </div>
       </footer>
+
+      {/* Saving indicator */}
+      {saving && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full bg-dark-800 border border-dark-600 text-xs text-zinc-400 shadow-xl">
+          <Loader2 className="w-3 h-3 animate-spin" /> Salvando seleção...
+        </div>
+      )}
 
       {/* Lightbox / Modal de Imagem Expandida */}
       {expandedImage && (() => {
