@@ -3,16 +3,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -26,12 +16,12 @@ Deno.serve(async (req) => {
 
     if (!fileBase64 || !mimeType) {
       return new Response(JSON.stringify({ error: "Arquivo não enviado" }), {
-        status: 400,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -46,10 +36,16 @@ Deno.serve(async (req) => {
       }),
     });
 
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`Gemini HTTP ${res.status}:`, errText);
+      throw new Error(`Gemini retornou ${res.status}: ${errText.slice(0, 300)}`);
+    }
+
     const data = await res.json();
     if (data.error) {
       console.error("Gemini API Error:", data.error);
-      throw new Error("Erro na API do Gemini: " + data.error.message);
+      throw new Error("Gemini: " + (data.error.message || JSON.stringify(data.error)));
     }
 
     const texto = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
