@@ -776,10 +776,8 @@ export default function App() {
       const { data, error } = await supabase.functions.invoke('extract-pdf-text', {
         body: { fileBase64: base64, mimeType: pdfFile.type || 'application/pdf' },
       });
-      if (error) {
-        const detail = data?.error || error?.message || String(error);
-        throw new Error(detail);
-      }
+      if (error) throw new Error(error?.message || String(error));
+      if (data?.error) throw new Error(data.error);
       if (!data?.texto?.trim()) {
         showToastMessage('Não foi possível extrair texto do PDF.', true);
         return;

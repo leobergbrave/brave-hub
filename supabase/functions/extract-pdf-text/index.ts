@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     console.error("Edge Function error:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message || "Erro interno" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
