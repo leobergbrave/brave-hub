@@ -536,7 +536,7 @@ export default function OrcamentoPage() {
                   </div>
                   <div>
                     <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-700">Total no Cartão</p>
-                    <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">{activeOrcamento.parcelas}x de {fmt(activeOrcamento.parcelaValor)} sem juros</p>
+                    <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">Crédito sem juros</p>
                   </div>
                 </div>
                 <div className="text-right">
