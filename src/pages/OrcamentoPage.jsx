@@ -189,7 +189,7 @@ export default function OrcamentoPage() {
       const condicoes = orcamentoSalvo?.payload?.condicoes || {};
       const descAvista = condicoes.descontoAvista || 0;
       const descCartao = condicoes.descontoCartao || 0;
-      const parcelas = condicoes.parcelas || 12;
+      const parcelas = condicoes.parcelas || 10;
 
       // Hybrid calculation: fixed price per product when available, % fallback
       const subtotalAvista = itensCompletos.reduce((acc, i) => {
@@ -514,7 +514,7 @@ export default function OrcamentoPage() {
                   </div>
                   <div>
                     <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-700">Total À Vista</p>
-                    <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">PIX / Boleto</p>
+                    <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">PIX</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -540,7 +540,7 @@ export default function OrcamentoPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl sm:text-4xl font-black text-gray-900">{fmt(activeOrcamento.totalCartao)}</p>
+                  <p className="text-2xl sm:text-4xl font-black text-gray-900">{activeOrcamento.parcelas}x {fmt(activeOrcamento.parcelaValor)}</p>
                 </div>
               </div>
             </div>
