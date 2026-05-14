@@ -7,13 +7,15 @@ import OrcamentosTab from '../admin/OrcamentosTab';
 import DashboardTab from '../admin/DashboardTab';
 import MarketingTab from '../admin/MarketingTab';
 import CategoriasTab from '../admin/CategoriasTab';
-import { Layers, Users, Mail } from 'lucide-react';
+import { Layers, Users, Mail, BookUser } from 'lucide-react';
 import LeadsTab from '../admin/LeadsTab';
 import EmailsTab from '../admin/EmailsTab';
+import ContatosTab from '../admin/ContatosTab';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'leads', label: 'Leads', icon: Users },
+  { id: 'contatos', label: 'Contatos', icon: BookUser },
   { id: 'produtos', label: 'Produtos', icon: Package },
   { id: 'categorias', label: 'Categorias', icon: Layers },
   { id: 'descontos', label: 'Descontos', icon: Tag },
@@ -38,6 +40,7 @@ export default function AdminPage() {
     switch (tab) {
       case 'dashboard': return <DashboardTab />;
       case 'leads': return <LeadsTab />;
+      case 'contatos': return <ContatosTab />;
       case 'produtos': return <ProdutosTab />;
       case 'categorias': return <CategoriasTab />;
       case 'descontos': return <DescontosTab />;
