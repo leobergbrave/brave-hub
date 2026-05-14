@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, Search, Plus, Upload, X, Check, CheckSquare, Square,
-  Phone, Mail, Building2, Loader2, Image, ChevronDown,
-  Flame, Thermometer, Snowflake, WholeWord, Filter, RefreshCw,
-  MessageCircle, FileText, Zap
+  Phone, Mail, Building2, Loader2, Image,
+  Flame, Thermometer, Snowflake, RefreshCw,
+  MessageCircle, Zap
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -130,6 +130,17 @@ export default function ContatosTab() {
     const file = e.dataTransfer.files[0];
     handleImageFile(file);
   };
+
+  // Captura Ctrl+V quando o modal de upload está aberto
+  useEffect(() => {
+    if (importStep !== 'upload') return;
+    const handlePaste = (e) => {
+      const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
+      if (item) handleImageFile(item.getAsFile());
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [importStep]);
 
   const fileToBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -332,9 +343,7 @@ export default function ContatosTab() {
           <>
             <div className="divide-y divide-dark-700/30">
               {contatos.map(c => {
-                const st = STATUS[c.status] || STATUS.frio;
                 const or = ORIGEM[c.origem] || ORIGEM.manual;
-                const StIcon = st.icon;
                 return (
                   <div key={c.id} className="flex items-center gap-3 px-4 py-3 hover:bg-dark-700/20 transition-colors group">
                     {/* Avatar */}
@@ -460,7 +469,7 @@ export default function ContatosTab() {
                     ) : (
                       <>
                         <Upload className="w-10 h-10 text-dark-500 mx-auto mb-3" />
-                        <p className="text-sm text-zinc-400">Arraste a imagem aqui ou clique para selecionar</p>
+                        <p className="text-sm text-zinc-400">Arraste, clique para selecionar ou <span className="text-purple-400 font-semibold">Ctrl+V</span> para colar</p>
                         <p className="text-[10px] text-dark-500 mt-1">PNG, JPG, WEBP</p>
                       </>
                     )}
