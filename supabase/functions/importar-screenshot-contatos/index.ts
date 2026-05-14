@@ -26,8 +26,19 @@ Deno.serve(async (req) => {
               text: `Analise esta captura de tela de um CRM ou lista de contatos e extraia TODOS os contatos visíveis.
 Retorne APENAS um JSON array válido (sem markdown, sem texto extra, sem blocos de código) no formato:
 [{"nome": "...", "telefone": "...", "email": "...", "empresa": "..."}]
-Regras:
-- Se um campo não estiver visível, use null
+
+Regras para EMAIL (importante):
+- Se o email estiver completo, use-o exatamente como está
+- Se o email estiver truncado (ex: "joao.silva@gmail...", "maria@hotm...", "pedro123@yah..."):
+  * Tente completar se reconhecer o domínio: @gmail.com, @hotmail.com, @yahoo.com, @yahoo.com.br, @outlook.com, @icloud.com, @live.com, @bol.com.br, @uol.com.br, @terra.com.br
+  * Exemplo: "joao.silva@gmail..." → "joao.silva@gmail.com"
+  * Exemplo: "maria@hotm..." → "maria@hotmail.com"
+  * Exemplo: "pedro@yah..." → "pedro@yahoo.com"
+- Se o domínio não for identificável (ex: "@minhaempresa...", "@crm..."), use null para email
+- Se não houver email visível, use null
+
+Outras regras:
+- Se nome, telefone ou empresa não estiver visível, use null
 - Telefone: mantenha o número como está na tela
 - Extraia todos os contatos visíveis, mesmo que incompletos
 - Responda SOMENTE com o array JSON, nada mais`,
