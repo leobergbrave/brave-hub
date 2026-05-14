@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     const { imageBase64, mimeType } = await req.json();
     if (!imageBase64) throw new Error("Imagem não enviada");
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
