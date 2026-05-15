@@ -203,10 +203,14 @@ export default function OrcamentosTab() {
   // ── Rápidos metrics ──
   const leadMap = Object.fromEntries(leadsRapidos.map(l => [l.link_rapido_codigo, l]));
 
-  const rAbertos   = links.filter(l => { const ld = leadMap[l.codigo]; return ld && isAtLeast(ld.status, 'link_aberto'); }).length;
-  const rCep       = links.filter(l => { const ld = leadMap[l.codigo]; return l.cep_digitado || (ld && isAtLeast(ld.status, 'qualificando')); }).length;
-  const rOrc       = links.filter(l => { const ld = leadMap[l.codigo]; return ld && isAtLeast(ld.status, 'orcamento_gerado'); }).length;
-  const rConv      = links.filter(l => { const ld = leadMap[l.codigo]; return ld && ld.status === 'convertido'; }).length;
+  const rAbertos = links.filter(l => l.aberto).length;
+  const rCep     = links.filter(l => l.cep_digitado).length;
+  const rOrc     = links.filter(l => l.slug_gerado).length;
+  const rConv    = links.filter(l => {
+    if (!l.slug_gerado) return false;
+    const orc = orcs.find(o => o.slug === l.slug_gerado);
+    return orc?.payload?.status === 'Aprovado';
+  }).length;
   const txAbertura = links.length > 0 ? Math.round((rAbertos / links.length) * 100) : 0;
   const txConv     = links.length > 0 ? Math.round((rConv / links.length) * 100) : 0;
 
