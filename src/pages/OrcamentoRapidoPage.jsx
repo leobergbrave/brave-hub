@@ -45,6 +45,8 @@ export default function OrcamentoRapidoPage() {
 
   // ── States ──
   const [nomeUrl, setNomeUrl] = useState(nomeUrlParam);
+  const [estadoLead, setEstadoLead] = useState(searchParams.get('estado') || '');
+  const [cidadeLead, setCidadeLead] = useState(searchParams.get('cidade') || '');
   const [produtos, setProdutos] = useState([]); // array of products
   const [quantidades, setQuantidades] = useState({}); // { productId: qty }
   const [regras, setRegras] = useState([]);
@@ -126,7 +128,7 @@ export default function OrcamentoRapidoPage() {
           // /q/:codigo — fetch from links_rapidos table
           const { data: linkData, error: linkError } = await supabase
             .from('links_rapidos')
-            .select('produtos_texto, nome_lead, telefone_lead, aberto')
+            .select('produtos_texto, nome_lead, telefone_lead, aberto, estado_lead, cidade_lead')
             .eq('codigo', codigo)
             .single();
 
@@ -136,13 +138,21 @@ export default function OrcamentoRapidoPage() {
             return;
           }
 
-          // Marca o link como aberto para cancelar o gatilho de abandono de 15 minutos
+          // Marca o link como aberto e registra o timestamp para o gatilho "sem CEP"
           if (!linkData.aberto) {
-            await supabase.from('links_rapidos').update({ aberto: true, alerta_abandono_enviado: true }).eq('codigo', codigo);
+            await supabase.from('links_rapidos').update({
+              aberto: true,
+              alerta_abandono_enviado: true,
+              abandono_stage: 3,
+              proximo_alerta_em: null,
+              aberto_em: new Date().toISOString(),
+            }).eq('codigo', codigo);
           }
 
           termos = linkData.produtos_texto.split(',').map(t => t.trim()).filter(Boolean);
           if (linkData.nome_lead) setNomeUrl(linkData.nome_lead);
+          if (linkData.estado_lead) setEstadoLead(linkData.estado_lead);
+          if (linkData.cidade_lead) setCidadeLead(linkData.cidade_lead);
         } else {
           // /orcamento-rapido/:alias or ?produtos=
           const raw = produtosParam || alias || '';
@@ -245,6 +255,36 @@ export default function OrcamentoRapidoPage() {
       setBuscandoCep(false);
     }
   }, [regras]);
+
+  // ── Usar localização pré-identificada (sem CEP) ──
+  const usarLocalizacaoPreenchida = useCallback((uf, cidade) => {
+    const capitais = {
+      AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
+      BA: 'Salvador', CE: 'Fortaleza', DF: 'Brasília', ES: 'Vitória',
+      GO: 'Goiânia', MA: 'São Luís', MT: 'Cuiabá', MS: 'Campo Grande',
+      MG: 'Belo Horizonte', PA: 'Belém', PB: 'João Pessoa', PR: 'Curitiba',
+      PE: 'Recife', PI: 'Teresina', RJ: 'Rio de Janeiro', RN: 'Natal',
+      RS: 'Porto Alegre', RO: 'Porto Velho', RR: 'Boa Vista', SC: 'Florianópolis',
+      SP: 'São Paulo', SE: 'Aracaju', TO: 'Palmas',
+    };
+    const capital = capitais[uf];
+    const isCapital = capital && cidade && cidade.toLowerCase() === capital.toLowerCase();
+    const zonaDetectada = isCapital ? 'CAPITAL' : 'INTERIOR 1';
+    const regraExata = regras.find(r => r.estado === uf && r.zona === zonaDetectada);
+    const regraFallback = regras.find(r => r.estado === uf);
+    const regraFinal = regraExata || regraFallback;
+
+    if (!regraFinal) return;
+
+    setCepInfo({ localidade: cidade || uf, uf });
+    setEstado(uf);
+    setZona(regraFinal.zona || zonaDetectada);
+
+    if (codigo) {
+      supabase.from('links_rapidos').update({ cep_digitado: true }).eq('codigo', codigo)
+        .catch(err => console.error('Erro ao atualizar cep_digitado:', err));
+    }
+  }, [regras, codigo]);
 
   // ── Derived calculations ──
   const regraFrete = useMemo(
@@ -544,6 +584,22 @@ export default function OrcamentoRapidoPage() {
 
             {cep.replace(/\D/g, '').length === 8 && !buscandoCep && !cepInfo && (
               <p className="mt-3 text-xs text-red-400">CEP não encontrado. Verifique e tente novamente.</p>
+            )}
+
+            {estadoLead && !cepInfo && (
+              <div className="mt-4 p-3 bg-dark-900/70 border border-dark-600/50 rounded-xl">
+                <p className="text-xs text-zinc-400 mb-2 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-neon" />
+                  Localização identificada: <span className="text-white font-semibold ml-1">{cidadeLead ? `${cidadeLead}, ${estadoLead}` : estadoLead}</span>
+                </p>
+                <button
+                  onClick={() => usarLocalizacaoPreenchida(estadoLead, cidadeLead)}
+                  className="w-full text-xs font-bold text-dark-950 bg-neon hover:bg-neon/90 rounded-lg py-2.5 transition-colors"
+                >
+                  Usar essa localização →
+                </button>
+                <p className="text-[10px] text-zinc-600 mt-1.5 text-center">ou digite seu CEP acima para maior precisão no frete</p>
+              </div>
             )}
 
             {erroGeracao && (

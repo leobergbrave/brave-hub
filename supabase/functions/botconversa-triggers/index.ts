@@ -1,10 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Configuração das URLs de Webhook do BotConversa
-// Lembre-se de definir estas variáveis de ambiente no seu painel do Supabase!
-// BOTCONVERSA_WEBHOOK_CEP
-// BOTCONVERSA_WEBHOOK_ABANDONO
+// Variáveis de ambiente necessárias:
+// BOTCONVERSA_WEBHOOK_CEP          — CEP calculado
+// BOTCONVERSA_WEBHOOK_ABANDONO     — abandono 15 min
+// BOTCONVERSA_WEBHOOK_ABANDONO_2H  — abandono 2h (urgência)
+// BOTCONVERSA_WEBHOOK_ABANDONO_24H — abandono manhã seguinte (última chamada)
+// BOTCONVERSA_WEBHOOK_SEM_CEP      — abriu mas não digitou CEP
+// APP_BASE_URL                     — base da URL do app (ex: https://brave-hub-two.vercel.app)
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,147 +15,249 @@ const corsHeaders = {
 };
 
 const EQUIPAMENTOS: Record<string, string> = {
-  bikeerg: 'Bike Erg',
-  remo:    'Remo Indoor',
-  skierg:  'Ski Erg',
-  storm:   'Storm Bike',
-  estcv:   'Esteira Curva',
-  escada:  'Escada',
+  bikeerg: 'Bike Erg', remo: 'Remo Indoor', skierg: 'Ski Erg',
+  storm: 'Storm Bike', estcv: 'Esteira Curva', escada: 'Escada',
 };
 
 function aliasParaNome(texto: string): string {
   return texto.split(',').map(a => EQUIPAMENTOS[a.trim()] || a.trim()).join(', ');
 }
 
+// Retorna o próximo horário de envio respeitando horário comercial Brasília (9h-18h, UTC-3)
+// Se o candidato cair fora do horário, empurra para 9h do próximo dia
+function nextAlertTime(now: Date, minutesFromNow: number): string {
+  const candidate = new Date(now.getTime() + minutesFromNow * 60 * 1000);
+  const brasiliaHour = (candidate.getUTCHours() + 21) % 24; // UTC-3
+  if (brasiliaHour >= 9 && brasiliaHour < 18) return candidate.toISOString();
+  return next9hBrasilia(candidate).toISOString();
+}
+
+// Próxima manhã às 9h Brasília, com pelo menos minHours de distância
+function next9hBrasilia(from: Date, minHours = 0): Date {
+  const candidate = new Date(from.getTime() + minHours * 60 * 60 * 1000);
+  const brasiliaHour = (candidate.getUTCHours() + 21) % 24;
+  const next = new Date(candidate);
+  if (brasiliaHour >= 9) next.setUTCDate(next.getUTCDate() + 1); // já passou das 9h → dia seguinte
+  next.setUTCHours(12, 0, 0, 0); // 9h Brasília = 12h UTC
+  return next;
+}
+
+async function dispararWebhook(url: string, body: Record<string, unknown>): Promise<void> {
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(err => console.error('Erro webhook BotConversa:', err));
+}
+
 serve(async (req) => {
-  // Trata a requisição de pré-verificação (CORS) do navegador
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // Inicializa o cliente Supabase com a chave de serviço (bypass RLS)
-    const supabaseClient = createClient(
+    const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    const BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://brave-hub-two.vercel.app';
     const { evento, codigo_link, cep_info } = await req.json();
 
-    // ==========================================
-    // 1. GATILHO: CEP CALCULADO
-    // ==========================================
+    // ══════════════════════════════════════════════
+    // 1. CEP CALCULADO
+    // ══════════════════════════════════════════════
     if (evento === 'cep_calculado') {
-      const { data: linkData, error: linkError } = await supabaseClient
+      const { data: linkData, error: linkError } = await supabase
         .from('links_rapidos')
         .select('telefone_lead, nome_lead, produtos_texto')
         .eq('codigo', codigo_link)
         .single();
 
-      if (linkError || !linkData || !linkData.telefone_lead) {
-        return new Response(JSON.stringify({ error: 'Link não encontrado ou sem telefone configurado' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
+      if (linkError || !linkData?.telefone_lead) {
+        return new Response(JSON.stringify({ error: 'Link não encontrado ou sem telefone' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
         });
       }
 
-      const webhookUrl = Deno.env.get('BOTCONVERSA_WEBHOOK_CEP') || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/khASXU0abK3M/';
-      if (webhookUrl) {
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telefone: linkData.telefone_lead,
-            nome: linkData.nome_lead,
-            produtos: aliasParaNome(linkData.produtos_texto || ''),
-            cep_cidade: cep_info?.localidade,
-            cep_estado: cep_info?.uf
-          })
-        });
-      }
+      const webhookCep = Deno.env.get('BOTCONVERSA_WEBHOOK_CEP')
+        || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/khASXU0abK3M/';
 
-      // Marca como aberto e cancela o gatilho de abandono definitivamente
-      await supabaseClient
-        .from('links_rapidos')
-        .update({ aberto: true, alerta_abandono_enviado: true })
-        .eq('codigo', codigo_link);
+      await dispararWebhook(webhookCep, {
+        telefone:   linkData.telefone_lead,
+        nome:       linkData.nome_lead,
+        produtos:   aliasParaNome(linkData.produtos_texto || ''),
+        cep_cidade: cep_info?.localidade,
+        cep_estado: cep_info?.uf,
+      });
 
-      return new Response(JSON.stringify({ success: true, message: 'Webhook de CEP enviado e abandono cancelado' }), {
+      // Marca aberto, registra aberto_em e encerra sequência de abandono
+      await supabase.from('links_rapidos').update({
+        aberto:                  true,
+        alerta_abandono_enviado: true,
+        abandono_stage:          3,
+        proximo_alerta_em:       null,
+        aberto_em:               new Date().toISOString(),
+      }).eq('codigo', codigo_link);
+
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ==========================================
-    // 2. GATILHO: ABANDONO (VERIFICAÇÃO DE 15 MINUTOS)
-    // ==========================================
+    // ══════════════════════════════════════════════
+    // 2. VERIFICAR ABANDONOS — sequência multi-step
+    //    + "abriu mas não digitou CEP"
+    // ══════════════════════════════════════════════
     if (evento === 'verificar_abandonos') {
-      const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      
-      const { data: abandonos, error: fetchError } = await supabaseClient
-        .from('links_rapidos')
-        .select('id, telefone_lead, nome_lead, produtos_texto')
-        .eq('aberto', false)
-        .eq('alerta_abandono_enviado', false)
-        .not('telefone_lead', 'is', null) // Só manda mensagem se o lead tiver telefone
-        .lt('criado_em', fifteenMinsAgo);
+      const now = new Date();
+      const processados = { stage1: 0, stage2: 0, stage3: 0, semCep: 0 };
 
-      if (fetchError || !abandonos || abandonos.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'Nenhum abandono pendente' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      const wh15min = Deno.env.get('BOTCONVERSA_WEBHOOK_ABANDONO')
+        || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/QRvsDhJ18g5P/';
+      const wh2h    = Deno.env.get('BOTCONVERSA_WEBHOOK_ABANDONO_2H');
+      const wh24h   = Deno.env.get('BOTCONVERSA_WEBHOOK_ABANDONO_24H');
+      const whSemCep = Deno.env.get('BOTCONVERSA_WEBHOOK_SEM_CEP');
 
-      const webhookUrl = Deno.env.get('BOTCONVERSA_WEBHOOK_ABANDONO') || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/QRvsDhJ18g5P/';
-      let processados = 0;
-
-      for (const lead of abandonos) {
-        // Double-check: re-verifica se o lead continua sem abrir (evita race condition)
-        const { data: recheck } = await supabaseClient
+      // ── Stage 0 → 1: 15 min após criação ──
+      {
+        const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+        const { data: leads } = await supabase
           .from('links_rapidos')
-          .select('aberto, alerta_abandono_enviado')
-          .eq('id', lead.id)
-          .single();
+          .select('id, telefone_lead, nome_lead, produtos_texto, codigo')
+          .eq('aberto', false)
+          .eq('abandono_stage', 0)
+          .eq('alerta_abandono_enviado', false)
+          .not('telefone_lead', 'is', null)
+          .lt('criado_em', fifteenMinsAgo);
 
-        if (recheck?.aberto || recheck?.alerta_abandono_enviado) {
-          // Lead já abriu ou já recebeu alerta — pula
-          continue;
-        }
+        for (const lead of leads || []) {
+          const { data: rc } = await supabase.from('links_rapidos')
+            .select('aberto, abandono_stage').eq('id', lead.id).single();
+          if (rc?.aberto || (rc?.abandono_stage ?? 0) > 0) continue;
 
-        // Trava de segurança imediata: marca como enviado ANTES de fazer a requisição externa
-        const { error: updateError } = await supabaseClient
-          .from('links_rapidos')
-          .update({ alerta_abandono_enviado: true })
-          .eq('id', lead.id);
+          const { error } = await supabase.from('links_rapidos').update({
+            alerta_abandono_enviado: true,
+            abandono_stage:          1,
+            proximo_alerta_em:       nextAlertTime(now, 120), // 2h, respeitando horário
+          }).eq('id', lead.id);
 
-        if (!updateError && webhookUrl) {
-          await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              telefone: lead.telefone_lead,
-              nome: lead.nome_lead,
-              produtos: aliasParaNome(lead.produtos_texto || '')
-            })
-          }).catch(err => console.error('Erro na requisição pro BotConversa:', err));
-          
-          processados++;
+          if (!error) {
+            await dispararWebhook(wh15min, {
+              telefone: lead.telefone_lead, nome: lead.nome_lead,
+              produtos: aliasParaNome(lead.produtos_texto || ''),
+              link: `${BASE_URL}/q/${lead.codigo}`,
+            });
+            processados.stage1++;
+          }
         }
       }
 
-      return new Response(JSON.stringify({ success: true, message: `${processados} gatilhos de abandono enviados` }), {
+      // ── Stage 1 → 2: 2h depois (urgência) ──
+      if (wh2h) {
+        const { data: leads } = await supabase
+          .from('links_rapidos')
+          .select('id, telefone_lead, nome_lead, produtos_texto, codigo')
+          .eq('aberto', false)
+          .eq('abandono_stage', 1)
+          .lte('proximo_alerta_em', now.toISOString())
+          .not('telefone_lead', 'is', null);
+
+        for (const lead of leads || []) {
+          const { data: rc } = await supabase.from('links_rapidos')
+            .select('aberto, abandono_stage').eq('id', lead.id).single();
+          if (rc?.aberto || rc?.abandono_stage !== 1) continue;
+
+          const { error } = await supabase.from('links_rapidos').update({
+            abandono_stage:    2,
+            proximo_alerta_em: next9hBrasilia(now, 12).toISOString(), // manhã seguinte
+          }).eq('id', lead.id);
+
+          if (!error) {
+            await dispararWebhook(wh2h, {
+              telefone: lead.telefone_lead, nome: lead.nome_lead,
+              produtos: aliasParaNome(lead.produtos_texto || ''),
+              link: `${BASE_URL}/q/${lead.codigo}`,
+            });
+            processados.stage2++;
+          }
+        }
+      }
+
+      // ── Stage 2 → 3: manhã seguinte (última chamada) ──
+      if (wh24h) {
+        const { data: leads } = await supabase
+          .from('links_rapidos')
+          .select('id, telefone_lead, nome_lead, produtos_texto, codigo')
+          .eq('aberto', false)
+          .eq('abandono_stage', 2)
+          .lte('proximo_alerta_em', now.toISOString())
+          .not('telefone_lead', 'is', null);
+
+        for (const lead of leads || []) {
+          const { data: rc } = await supabase.from('links_rapidos')
+            .select('aberto, abandono_stage').eq('id', lead.id).single();
+          if (rc?.aberto || rc?.abandono_stage !== 2) continue;
+
+          const { error } = await supabase.from('links_rapidos').update({
+            abandono_stage:    3,
+            proximo_alerta_em: null,
+          }).eq('id', lead.id);
+
+          if (!error) {
+            await dispararWebhook(wh24h, {
+              telefone: lead.telefone_lead, nome: lead.nome_lead,
+              produtos: aliasParaNome(lead.produtos_texto || ''),
+              link: `${BASE_URL}/q/${lead.codigo}`,
+            });
+            processados.stage3++;
+          }
+        }
+      }
+
+      // ── "Abriu mas não digitou CEP" (30 min após abertura) ──
+      if (whSemCep) {
+        const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+        const { data: leads } = await supabase
+          .from('links_rapidos')
+          .select('id, telefone_lead, nome_lead, produtos_texto, codigo')
+          .eq('aberto', true)
+          .eq('cep_digitado', false)
+          .eq('alerta_sem_cep_enviado', false)
+          .not('telefone_lead', 'is', null)
+          .not('aberto_em', 'is', null)
+          .lt('aberto_em', thirtyMinsAgo);
+
+        for (const lead of leads || []) {
+          const { data: rc } = await supabase.from('links_rapidos')
+            .select('cep_digitado, alerta_sem_cep_enviado').eq('id', lead.id).single();
+          if (rc?.cep_digitado || rc?.alerta_sem_cep_enviado) continue;
+
+          const { error } = await supabase.from('links_rapidos').update({
+            alerta_sem_cep_enviado: true,
+          }).eq('id', lead.id);
+
+          if (!error) {
+            await dispararWebhook(whSemCep, {
+              telefone: lead.telefone_lead, nome: lead.nome_lead,
+              produtos: aliasParaNome(lead.produtos_texto || ''),
+              link: `${BASE_URL}/q/${lead.codigo}`,
+            });
+            processados.semCep++;
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, processados }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     return new Response(JSON.stringify({ error: 'Evento inválido' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500,
     });
   }
 });
