@@ -78,6 +78,7 @@ export default function OrcamentosTab() {
   const [searchManuais, setSearchManuais] = useState('');
   const [searchRapidos, setSearchRapidos] = useState('');
   const [detail, setDetail] = useState(null);
+  const [detailRapido, setDetailRapido] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
@@ -114,6 +115,39 @@ export default function OrcamentosTab() {
   const handleDeleteRapido = async (id) => {
     if (!confirm('Excluir este orçamento rápido?')) return;
     await supabase.from('links_rapidos').delete().eq('id', id);
+    load();
+  };
+
+  const handleDuplicateRapido = async (l) => {
+    if (!confirm('Duplicar este link rápido?')) return;
+    const novoCodigo = Math.random().toString(36).substring(2, 10);
+    await supabase.from('links_rapidos').insert({
+      codigo: novoCodigo,
+      nome_lead: l.nome_lead,
+      produtos_texto: l.produtos_texto,
+    });
+    navigator.clipboard.writeText(`${window.location.origin}/orcamento-rapido/${novoCodigo}`);
+    alert('Link duplicado e copiado para a área de transferência!');
+    load();
+  };
+
+  const handleGerarBlingRapido = async (l) => {
+    const orc = orcs.find(o => o.slug === l.slug_gerado);
+    if (!orc) { alert('Orçamento gerado não encontrado.'); return; }
+    if (!confirm('Deseja gerar a proposta no Bling?')) return;
+    try {
+      const { error } = await supabase.functions.invoke('sync-bling-proposal', {
+        body: { cliente: orc.cliente, consultor: orc.consultor, payload: orc.payload },
+      });
+      if (error) throw error;
+      alert('Proposta gerada no Bling com sucesso!');
+    } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
+  };
+
+  const changeStatusRapido = async (l, status) => {
+    const orc = orcs.find(o => o.slug === l.slug_gerado);
+    if (!orc) return;
+    await supabase.from('orcamentos_salvos').update({ payload: { ...orc.payload, status } }).eq('id', orc.id);
     load();
   };
 
@@ -387,6 +421,8 @@ export default function OrcamentosTab() {
                 const dateStr = `${new Date(l.criado_em).toLocaleDateString('pt-BR')} ${new Date(l.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
                 const nomeExibido = lead?.nome || l.nome_lead || '—';
                 const tel = lead?.telefone || '';
+                const orcGerado = l.slug_gerado ? orcs.find(o => o.slug === l.slug_gerado) : null;
+                const statusGerado = orcGerado?.payload?.status || 'Pendente';
 
                 return (
                   <div key={l.id} className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-4">
@@ -407,32 +443,78 @@ export default function OrcamentosTab() {
                               <MapPin className="w-3 h-3" /> CEP
                             </span>
                           )}
+                          {l.slug_gerado && (
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 ${STATUS_MAP[statusGerado]?.bg || 'bg-amber-400/10'} ${STATUS_MAP[statusGerado]?.color || 'text-amber-400'}`}>
+                              {statusGerado}
+                            </span>
+                          )}
                           <span className="text-xs text-zinc-500 shrink-0">{dateStr}</span>
                         </div>
                         <p className="text-sm font-semibold text-white truncate">{nomeExibido}</p>
                         {tel && <p className="text-xs text-zinc-500">{tel}</p>}
                       </div>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/orcamento-rapido/${l.codigo}`)}
-                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-neon px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50 shrink-0"
-                      >
-                        <Copy className="w-3 h-3" /> Link
-                      </button>
                     </div>
 
                     <div className="bg-dark-900/50 rounded-lg px-3 py-2 text-xs text-zinc-400 mb-3">
                       {l.produtos_texto}
                     </div>
 
+                    {detailRapido === l.id && (
+                      <div className="bg-dark-900/50 rounded-xl p-3 mb-3 space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Código do link</span>
+                          <span className="text-zinc-300 font-mono">{l.codigo}</span>
+                        </div>
+                        {l.slug_gerado && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Orçamento gerado</span>
+                            <span className="text-zinc-300 font-mono">{l.slug_gerado}</span>
+                          </div>
+                        )}
+                        {lead && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Status do lead</span>
+                            <span className={`font-semibold ${stage?.color || 'text-zinc-400'}`}>{stage?.label || lead.status}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">CEP digitado</span>
+                          <span className="text-zinc-300">{l.cep_digitado ? 'Sim' : 'Não'}</span>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-1.5 border-t border-dark-700/50 pt-3">
+                      <button onClick={() => setDetailRapido(detailRapido === l.id ? null : l.id)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50">
+                        <Eye className="w-3 h-3" /> {detailRapido === l.id ? 'Fechar' : 'Ver'}
+                      </button>
+                      <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/orcamento-rapido/${l.codigo}`)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-neon px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50">
+                        <Copy className="w-3 h-3" /> Link
+                      </button>
+                      <button onClick={() => handleDuplicateRapido(l)} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 px-2.5 py-1.5 rounded-lg hover:bg-indigo-500/10 cursor-pointer border border-indigo-500/20">
+                        <CopyPlus className="w-3 h-3" /> Duplicar
+                      </button>
                       {l.slug_gerado && (
                         <>
                           <button onClick={() => navigate(`/?edit=${l.slug_gerado}`)} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-lg hover:bg-blue-500/10 cursor-pointer border border-blue-500/20">
-                            <Edit2 className="w-3 h-3" /> Editar Orçamento
+                            <Edit2 className="w-3 h-3" /> Editar
                           </button>
                           <a href={`/orcamento/${l.slug_gerado}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-neon hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-neon/10 cursor-pointer border border-neon/20">
                             <Eye className="w-3 h-3" /> Ver Gerado
                           </a>
+                          <button onClick={() => handleGerarBlingRapido(l)} className="flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 px-2.5 py-1.5 rounded-lg hover:bg-orange-500/10 cursor-pointer border border-orange-500/20">
+                            <Send className="w-3 h-3" /> Bling
+                          </button>
+                          {statusGerado === 'Pendente' && (
+                            <button onClick={() => changeStatusRapido(l, 'Aprovado')} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
+                              <CheckCircle2 className="w-3 h-3" /> Aprovar
+                            </button>
+                          )}
+                          {statusGerado === 'Pendente' && (
+                            <button onClick={() => changeStatusRapido(l, 'Expirado')} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 cursor-pointer border border-red-500/20">
+                              <XCircle className="w-3 h-3" /> Expirar
+                            </button>
+                          )}
                         </>
                       )}
                       <button onClick={() => handleDeleteRapido(l.id)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50 ml-auto">
