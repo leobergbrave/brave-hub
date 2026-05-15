@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
 import {
   Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle,
-  Edit2, Search, Send, CopyPlus, ChevronRight, MapPin, RefreshCw,
+  Edit2, Search, Send, CopyPlus, ChevronRight, MapPin, RefreshCw, Link2, X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -81,21 +81,26 @@ export default function OrcamentosTab() {
   const [detail, setDetail] = useState(null);
   const [detailRapido, setDetailRapido] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [linkingRapido, setLinkingRapido] = useState(null);
+  const [leadsDisponiveis, setLeadsDisponiveis] = useState([]);
+  const [searchVincular, setSearchVincular] = useState('');
 
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: orcsData }, { data: linksData }, { data: leadsData }, { count: contatoCount }] = await Promise.all([
+    const [{ data: orcsData }, { data: linksData }, { data: leadsData }, { count: contatoCount }, { data: dispData }] = await Promise.all([
       supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false }),
       supabase.from('links_rapidos').select('*').order('criado_em', { ascending: false }),
       supabase.from('leads').select('id, nome, status, link_rapido_codigo, telefone').not('link_rapido_codigo', 'is', null),
       supabase.from('leads').select('*', { count: 'exact', head: true }).neq('status', 'novo'),
+      supabase.from('leads').select('id, nome, telefone, status').is('link_rapido_codigo', null).order('criado_em', { ascending: false }),
     ]);
     setOrcs(orcsData || []);
     setLinks(linksData || []);
     setLeadsRapidos(leadsData || []);
     setPrimeiroContato(contatoCount || 0);
+    setLeadsDisponiveis(dispData || []);
     setLoading(false);
   }, []);
 
@@ -145,6 +150,14 @@ export default function OrcamentosTab() {
       if (error) throw error;
       alert('Proposta gerada no Bling com sucesso!');
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
+  };
+
+  const handleVincularLead = async (leadId) => {
+    if (!linkingRapido) return;
+    await supabase.from('leads').update({ link_rapido_codigo: linkingRapido.codigo }).eq('id', leadId);
+    setLinkingRapido(null);
+    setSearchVincular('');
+    load();
   };
 
   const changeStatusRapido = async (l, status) => {
@@ -248,8 +261,58 @@ export default function OrcamentosTab() {
       || ld?.nome?.toLowerCase().includes(t);
   });
 
+  const leadsVincularFiltrados = leadsDisponiveis.filter(ld => {
+    const t = searchVincular.toLowerCase();
+    return !t || ld.nome?.toLowerCase().includes(t) || ld.telefone?.includes(t);
+  });
+
   return (
     <div>
+      {/* Modal Vincular Lead */}
+      {linkingRapido && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-white font-bold text-sm">Vincular Lead</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">{linkingRapido.nome_lead} · {linkingRapido.produtos_texto}</p>
+              </div>
+              <button onClick={() => { setLinkingRapido(null); setSearchVincular(''); }} className="text-zinc-500 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+              <input
+                autoFocus
+                type="text"
+                value={searchVincular}
+                onChange={e => setSearchVincular(e.target.value)}
+                placeholder="Buscar por nome ou telefone..."
+                className="w-full pl-9 pr-3 py-2.5 bg-dark-800 border border-dark-600 rounded-xl text-zinc-300 placeholder-zinc-500 text-sm focus:outline-none focus:border-neon/50"
+              />
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {leadsVincularFiltrados.length === 0 ? (
+                <p className="text-zinc-500 text-xs text-center py-6">Nenhum lead disponível</p>
+              ) : leadsVincularFiltrados.map(ld => {
+                const st = LEAD_STAGE[ld.status];
+                return (
+                  <button key={ld.id} onClick={() => handleVincularLead(ld.id)}
+                    className="w-full text-left p-3 rounded-xl bg-dark-800 hover:bg-dark-700 transition-colors border border-dark-700/50 cursor-pointer">
+                    <p className="text-sm font-semibold text-white">{ld.nome}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-zinc-500">{ld.telefone}</span>
+                      {st && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${st.color}`}>{st.label}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl sm:text-2xl font-bold text-white">Orçamentos</h1>
         <button onClick={load} className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-800 transition-colors cursor-pointer">
@@ -497,6 +560,11 @@ export default function OrcamentosTab() {
                       <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/orcamento-rapido/${l.codigo}`)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-neon px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50">
                         <Copy className="w-3 h-3" /> Link
                       </button>
+                      {!lead && (
+                        <button onClick={() => setLinkingRapido(l)} className="flex items-center gap-1 text-xs text-yellow-400 hover:text-yellow-300 px-2.5 py-1.5 rounded-lg hover:bg-yellow-500/10 cursor-pointer border border-yellow-500/20">
+                          <Link2 className="w-3 h-3" /> Vincular Lead
+                        </button>
+                      )}
                       <button onClick={() => handleDuplicateRapido(l)} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 px-2.5 py-1.5 rounded-lg hover:bg-indigo-500/10 cursor-pointer border border-indigo-500/20">
                         <CopyPlus className="w-3 h-3" /> Duplicar
                       </button>
