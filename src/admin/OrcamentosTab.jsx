@@ -73,6 +73,7 @@ export default function OrcamentosTab() {
   const [orcs, setOrcs] = useState([]);
   const [links, setLinks] = useState([]);
   const [leadsRapidos, setLeadsRapidos] = useState([]);
+  const [primeiroContato, setPrimeiroContato] = useState(0);
 
   const [filter, setFilter] = useState('Todos');
   const [searchManuais, setSearchManuais] = useState('');
@@ -85,14 +86,16 @@ export default function OrcamentosTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: orcsData }, { data: linksData }, { data: leadsData }] = await Promise.all([
+    const [{ data: orcsData }, { data: linksData }, { data: leadsData }, { count: contatoCount }] = await Promise.all([
       supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false }),
       supabase.from('links_rapidos').select('*').order('criado_em', { ascending: false }),
       supabase.from('leads').select('id, nome, status, link_rapido_codigo, telefone').not('link_rapido_codigo', 'is', null),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).neq('status', 'novo'),
     ]);
     setOrcs(orcsData || []);
     setLinks(linksData || []);
     setLeadsRapidos(leadsData || []);
+    setPrimeiroContato(contatoCount || 0);
     setLoading(false);
   }, []);
 
@@ -205,28 +208,27 @@ export default function OrcamentosTab() {
 
   const rAbertos = links.filter(l => l.aberto).length;
   const rCep     = links.filter(l => l.cep_digitado).length;
-  const rOrc     = links.filter(l => l.slug_gerado).length;
   const rConv    = links.filter(l => {
     if (!l.slug_gerado) return false;
     const orc = orcs.find(o => o.slug === l.slug_gerado);
     return orc?.payload?.status === 'Aprovado';
   }).length;
   const txAbertura = links.length > 0 ? Math.round((rAbertos / links.length) * 100) : 0;
-  const txConv     = links.length > 0 ? Math.round((rConv / links.length) * 100) : 0;
+  const txConv     = primeiroContato > 0 ? Math.round((rConv / primeiroContato) * 100) : 0;
 
   const rapidosFunnel = [
-    { label: 'Enviados',    count: links.length, bg: 'bg-dark-800',       color: 'text-zinc-400' },
-    { label: 'Link Aberto', count: rAbertos,      bg: 'bg-purple-500/10', color: 'text-purple-400' },
-    { label: 'CEP Digitado',count: rCep,          bg: 'bg-cyan-500/10',   color: 'text-cyan-400' },
-    { label: 'Orç. Gerado', count: rOrc,          bg: 'bg-amber-500/10',  color: 'text-amber-400' },
-    { label: 'Convertido',  count: rConv,         bg: 'bg-emerald-500/10',color: 'text-emerald-400' },
+    { label: '1º Contato',   count: primeiroContato, bg: 'bg-dark-800',        color: 'text-zinc-400' },
+    { label: 'Orç. Gerado',  count: links.length,    bg: 'bg-blue-500/10',     color: 'text-blue-400' },
+    { label: 'Link Aberto',  count: rAbertos,        bg: 'bg-purple-500/10',   color: 'text-purple-400' },
+    { label: 'CEP Digitado', count: rCep,            bg: 'bg-cyan-500/10',     color: 'text-cyan-400' },
+    { label: 'Convertido',   count: rConv,           bg: 'bg-emerald-500/10',  color: 'text-emerald-400' },
   ];
 
   const rapidosStats = [
-    { label: 'Links enviados',   value: links.length,      color: 'text-white' },
-    { label: 'Taxa de abertura', value: `${txAbertura}%`,  color: 'text-purple-400' },
-    { label: 'CEP digitado',     value: rCep,              color: 'text-cyan-400' },
-    { label: 'Taxa conversão',   value: `${txConv}%`,      color: 'text-emerald-400' },
+    { label: '1º Contato',   value: primeiroContato,  color: 'text-white' },
+    { label: 'Orç. Gerado',  value: links.length,     color: 'text-blue-400' },
+    { label: 'CEP Digitado', value: rCep,             color: 'text-cyan-400' },
+    { label: 'Convertido',   value: `${txConv}%`,     color: 'text-emerald-400' },
   ];
 
   // ── Filtered lists ──
