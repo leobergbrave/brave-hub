@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   MapPin, Loader2, Truck, Package, CreditCard, Banknote,
@@ -61,6 +61,8 @@ export default function OrcamentoRapidoPage() {
   const [linkGerado, setLinkGerado] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [modoPagamento, setModoPagamento] = useState('avista');
+  const [erroGeracao, setErroGeracao] = useState('');
+  const hasGeneratedRef = useRef(false);
 
   // ── Fuzzy match a search term against a product name ──
   function matchScore(termo, nomeProduto) {
@@ -281,8 +283,10 @@ export default function OrcamentoRapidoPage() {
 
   // ── Generate quote ──
   const handleGerarOrcamento = useCallback(async () => {
-    if (produtos.length === 0 || !estado || !zona || salvando) return;
+    if (produtos.length === 0 || !estado || !zona || salvando || hasGeneratedRef.current) return;
     setSalvando(true);
+    setErroGeracao('');
+    hasGeneratedRef.current = true;
 
     try {
       const nomeCliente = nomeUrl || 'Lead WhatsApp';
@@ -335,22 +339,29 @@ export default function OrcamentoRapidoPage() {
       setLinkGerado(`${window.location.origin}/orcamento/${slug}`);
       setOrcamentoGerado(true);
 
+      if (codigo) {
+        supabase.from('links_rapidos').update({ slug_gerado: slug }).eq('codigo', codigo)
+          .catch(err => console.error('Erro ao atualizar slug_gerado:', err));
+      }
+
       supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: nomeCliente, consultor: 'Léo Berg', payload }
       }).catch(err => console.error('Erro ao syncar com Bling:', err));
     } catch (err) {
       console.error('Erro ao gerar orçamento:', err);
+      setErroGeracao('Não foi possível gerar seu orçamento no momento. Tente novamente.');
+      hasGeneratedRef.current = false;
     } finally {
       setSalvando(false);
     }
-  }, [produtos, quantidades, estado, zona, regras, nomeUrl, salvando]);
+  }, [produtos, quantidades, estado, zona, regras, nomeUrl, salvando, codigo]);
 
   // ── Auto-gerar quando CEP é validado ──
   useEffect(() => {
-    if (cepInfo && estado && zona && produtos.length > 0 && !orcamentoGerado && !salvando) {
+    if (cepInfo && estado && zona && produtos.length > 0 && !orcamentoGerado && !salvando && !hasGeneratedRef.current) {
       handleGerarOrcamento();
     }
-  }, [cepInfo, estado, zona, produtos, orcamentoGerado, handleGerarOrcamento]);
+  }, [cepInfo, estado, zona, produtos, orcamentoGerado, salvando, handleGerarOrcamento]);
 
   // ── Render ──
   if (loading) {
@@ -533,6 +544,15 @@ export default function OrcamentoRapidoPage() {
 
             {cep.replace(/\D/g, '').length === 8 && !buscandoCep && !cepInfo && (
               <p className="mt-3 text-xs text-red-400">CEP não encontrado. Verifique e tente novamente.</p>
+            )}
+
+            {erroGeracao && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <p className="text-xs text-red-400 font-medium text-center">{erroGeracao}</p>
+                <button onClick={() => { setErroGeracao(''); handleGerarOrcamento(); }} className="w-full mt-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 rounded-lg transition-colors">
+                  Tentar Novamente
+                </button>
+              </div>
             )}
           </div>
         </section>

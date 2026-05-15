@@ -111,6 +111,12 @@ export default function OrcamentosTab() {
     load();
   };
 
+  const handleDeleteRapido = async (id) => {
+    if (!confirm('Excluir este orçamento rápido?')) return;
+    await supabase.from('links_rapidos').delete().eq('id', id);
+    load();
+  };
+
   const copyLink = (slug) => navigator.clipboard.writeText(`${window.location.origin}/orcamento/${slug}`);
 
   const handleGerarBling = async (o) => {
@@ -414,8 +420,24 @@ export default function OrcamentosTab() {
                       </button>
                     </div>
 
-                    <div className="bg-dark-900/50 rounded-lg px-3 py-2 text-xs text-zinc-400">
+                    <div className="bg-dark-900/50 rounded-lg px-3 py-2 text-xs text-zinc-400 mb-3">
                       {l.produtos_texto}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 border-t border-dark-700/50 pt-3">
+                      {l.slug_gerado && (
+                        <>
+                          <button onClick={() => navigate(`/?edit=${l.slug_gerado}`)} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-lg hover:bg-blue-500/10 cursor-pointer border border-blue-500/20">
+                            <Edit2 className="w-3 h-3" /> Editar Orçamento
+                          </button>
+                          <a href={`/orcamento/${l.slug_gerado}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-neon hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-neon/10 cursor-pointer border border-neon/20">
+                            <Eye className="w-3 h-3" /> Ver Gerado
+                          </a>
+                        </>
+                      )}
+                      <button onClick={() => handleDeleteRapido(l.id)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50 ml-auto">
+                        <Trash2 className="w-3 h-3" /> Excluir
+                      </button>
                     </div>
                   </div>
                 );
