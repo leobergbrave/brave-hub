@@ -15,6 +15,28 @@ import { parseMediaUrl } from '../data';
 
 const LOGO_URL = 'https://jisbvqrnnujqgbsfondy.supabase.co/storage/v1/object/public/produtos_media/brave_logo.png';
 
+// Mapa de capitais por UF — extraído como constante de módulo para evitar duplicação
+const CAPITAIS = {
+  AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
+  BA: 'Salvador', CE: 'Fortaleza', DF: 'Brasília', ES: 'Vitória',
+  GO: 'Goiânia', MA: 'São Luís', MT: 'Cuiabá', MS: 'Campo Grande',
+  MG: 'Belo Horizonte', PA: 'Belém', PB: 'João Pessoa', PR: 'Curitiba',
+  PE: 'Recife', PI: 'Teresina', RJ: 'Rio de Janeiro', RN: 'Natal',
+  RS: 'Porto Alegre', RO: 'Porto Velho', RR: 'Boa Vista', SC: 'Florianópolis',
+  SP: 'São Paulo', SE: 'Aracaju', TO: 'Palmas',
+};
+
+// Detecta zona (CAPITAL ou INTERIOR 1) dada UF, localidade e regras
+function detectarZona(uf, localidade, regrasArr) {
+  const capital = CAPITAIS[uf];
+  const isCapital = capital && localidade && localidade.toLowerCase() === capital.toLowerCase();
+  const zonaDetectada = isCapital ? 'CAPITAL' : 'INTERIOR 1';
+  const regraExata = regrasArr.find(r => r.estado === uf && r.zona === zonaDetectada);
+  if (regraExata) return zonaDetectada;
+  const regraFallback = regrasArr.find(r => r.estado === uf);
+  return regraFallback ? regraFallback.zona : null; // null = sem cobertura ainda
+}
+
 const PRODUCT_ALIASES = {
   remo: 'Remo Indoor Profissional',
   rower: 'Remo Indoor Profissional',
@@ -65,6 +87,7 @@ export default function OrcamentoRapidoPage() {
   const [modoPagamento, setModoPagamento] = useState('avista');
   const [erroGeracao, setErroGeracao] = useState('');
   const hasGeneratedRef = useRef(false);
+  const regrasRef = useRef([]); // Ref para regras sempre atualizadas (evita race condition no buscarCep)
 
   // ── Fuzzy match a search term against a product name ──
   function matchScore(termo, nomeProduto) {
@@ -189,6 +212,7 @@ export default function OrcamentoRapidoPage() {
         setProdutos(prodsEncontrados);
         setQuantidades(qtds);
         setRegras(freteData || []);
+        regrasRef.current = freteData || [];
       } catch (err) {
         console.error(err);
         setErro('Erro ao carregar os produtos.');
@@ -229,62 +253,37 @@ export default function OrcamentoRapidoPage() {
           .catch(err => console.error('Erro ao atualizar cep_digitado:', err));
       }
 
-      const capitais = {
-        AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
-        BA: 'Salvador', CE: 'Fortaleza', DF: 'Brasília', ES: 'Vitória',
-        GO: 'Goiânia', MA: 'São Luís', MT: 'Cuiabá', MS: 'Campo Grande',
-        MG: 'Belo Horizonte', PA: 'Belém', PB: 'João Pessoa', PR: 'Curitiba',
-        PE: 'Recife', PI: 'Teresina', RJ: 'Rio de Janeiro', RN: 'Natal',
-        RS: 'Porto Alegre', RO: 'Porto Velho', RR: 'Boa Vista', SC: 'Florianópolis',
-        SP: 'São Paulo', SE: 'Aracaju', TO: 'Palmas',
-      };
-      const capital = capitais[data.uf];
-      const isCapital = capital && data.localidade && data.localidade.toLowerCase() === capital.toLowerCase();
-      const zonaDetectada = isCapital ? 'CAPITAL' : 'INTERIOR 1';
-
-      const regraExata = regras.find(r => r.estado === data.uf && r.zona === zonaDetectada);
-      if (regraExata) {
-        setZona(zonaDetectada);
+      // Usa regrasRef.current para evitar race condition:
+      // se o usuário digitou o CEP antes de regras carregar, o ref já tem o valor mais recente.
+      // Se regras ainda estiver vazia, zona fica '' e o useEffect de recuperação abaixo vai
+      // recalcular quando regras chegar.
+      const zona = detectarZona(data.uf, data.localidade, regrasRef.current);
+      if (zona) {
+        setZona(zona);
       } else {
-        const regraFallback = regras.find(r => r.estado === data.uf);
-        setZona(regraFallback?.zona || 'CAPITAL');
+        setZona(''); // regras ainda não carregaram — o safety useEffect vai corrigir
       }
     } catch (err) {
       console.error(err);
     } finally {
       setBuscandoCep(false);
     }
-  }, [regras]);
+  }, [codigo]); // sem 'regras' na dep — usamos regrasRef para evitar stale closure
 
   // ── Usar localização pré-identificada (sem CEP) ──
   const usarLocalizacaoPreenchida = useCallback((uf, cidade) => {
-    const capitais = {
-      AC: 'Rio Branco', AL: 'Maceió', AP: 'Macapá', AM: 'Manaus',
-      BA: 'Salvador', CE: 'Fortaleza', DF: 'Brasília', ES: 'Vitória',
-      GO: 'Goiânia', MA: 'São Luís', MT: 'Cuiabá', MS: 'Campo Grande',
-      MG: 'Belo Horizonte', PA: 'Belém', PB: 'João Pessoa', PR: 'Curitiba',
-      PE: 'Recife', PI: 'Teresina', RJ: 'Rio de Janeiro', RN: 'Natal',
-      RS: 'Porto Alegre', RO: 'Porto Velho', RR: 'Boa Vista', SC: 'Florianópolis',
-      SP: 'São Paulo', SE: 'Aracaju', TO: 'Palmas',
-    };
-    const capital = capitais[uf];
-    const isCapital = capital && cidade && cidade.toLowerCase() === capital.toLowerCase();
-    const zonaDetectada = isCapital ? 'CAPITAL' : 'INTERIOR 1';
-    const regraExata = regras.find(r => r.estado === uf && r.zona === zonaDetectada);
-    const regraFallback = regras.find(r => r.estado === uf);
-    const regraFinal = regraExata || regraFallback;
-
-    if (!regraFinal) return;
+    const zonaDetectada = detectarZona(uf, cidade, regrasRef.current);
+    if (!zonaDetectada) return; // regras ainda não carregaram
 
     setCepInfo({ localidade: cidade || uf, uf });
     setEstado(uf);
-    setZona(regraFinal.zona || zonaDetectada);
+    setZona(zonaDetectada);
 
     if (codigo) {
       supabase.from('links_rapidos').update({ cep_digitado: true }).eq('codigo', codigo)
         .catch(err => console.error('Erro ao atualizar cep_digitado:', err));
     }
-  }, [regras, codigo]);
+  }, [codigo]); // regras via ref, sem stale closure
 
   // ── Derived calculations ──
   const regraFrete = useMemo(
@@ -334,9 +333,9 @@ export default function OrcamentoRapidoPage() {
       const slugId = Math.random().toString(36).substring(2, 8);
       const slug = `${slugBase}-${slugId}`;
 
-      // Compute frete at call time — avoids stale closure from useMemo
+      // Compute frete at call time usando regrasRef.current (sempre atualizado)
       const pesoAtual = produtos.reduce((acc, p) => acc + (p.peso_kg || 0) * (quantidades[p.id] || 1), 0);
-      const regraAtual = regras.find(r => r.estado === estado && r.zona === zona);
+      const regraAtual = regrasRef.current.find(r => r.estado === estado && r.zona === zona);
       const freteAtual = regraAtual
         ? Math.max(Math.floor(pesoAtual) * (regraAtual.multiplicador || 0), regraAtual.valor_minimo || 0)
         : 0;
@@ -402,6 +401,14 @@ export default function OrcamentoRapidoPage() {
       handleGerarOrcamento();
     }
   }, [cepInfo, estado, zona, produtos, orcamentoGerado, salvando, handleGerarOrcamento]);
+
+  // ── Safety: se CEP foi digitado antes das regras carregarem, recalcula zona quando regras chegam ──
+  useEffect(() => {
+    if (cepInfo && estado && !zona && regras.length > 0 && !orcamentoGerado) {
+      const zonaRecuperada = detectarZona(estado, cepInfo.localidade, regras);
+      if (zonaRecuperada) setZona(zonaRecuperada);
+    }
+  }, [regras, cepInfo, estado, zona, orcamentoGerado]);
 
   // ── Render ──
   if (loading) {

@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import {
   Loader2, Plus, Phone, User, Search, ChevronDown,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
-  CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine, Trash2
+  CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine, Trash2,
+  ThumbsUp, ArrowRight
 } from 'lucide-react';
 
 /* ─── Constantes ─── */
@@ -25,12 +26,14 @@ const EQUIPAMENTOS = [
 ];
 
 const STATUS_PIPELINE = [
-  { value: 'novo', label: 'Novo', color: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/20' },
-  { value: 'fluxo_disparado', label: 'Fluxo Disparado', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-  { value: 'link_aberto', label: 'Link Aberto', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
-  { value: 'qualificando', label: 'Qualificando', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
-  { value: 'orcamento_gerado', label: 'Orçamento Gerado', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  { value: 'convertido', label: 'Convertido ✓', color: 'text-neon', bg: 'bg-neon/10', border: 'border-neon/20' },
+  { value: 'novo',             label: 'Novo',             color: 'text-zinc-400',   bg: 'bg-zinc-500/10',   border: 'border-zinc-500/20'   },
+  { value: 'fluxo_disparado',  label: 'Fluxo Disparado',  color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20'   },
+  { value: 'respondeu',        label: 'Respondeu',        color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20'  },
+  { value: 'link_aberto',      label: 'Link Aberto',      color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+  { value: 'qualificando',     label: 'Qualificando',     color: 'text-cyan-400',   bg: 'bg-cyan-500/10',   border: 'border-cyan-500/20'   },
+  { value: 'orcamento_gerado', label: 'Orçamento Gerado', color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20'  },
+  { value: 'convertido',       label: 'Convertido',       color: 'text-neon',       bg: 'bg-neon/10',       border: 'border-neon/20'       },
+  { value: 'aprovado',         label: 'Aprovado ✓',       color: 'text-emerald-400',bg: 'bg-emerald-500/10',border: 'border-emerald-500/20'},
 ];
 
 function StatusBadge({ status }) {
@@ -53,25 +56,47 @@ function MomentoBadge({ momento }) {
 
 /* ─── Funnel metrics ─── */
 function FunnelBar({ leads }) {
-  const total = leads.length || 1;
   const counts = STATUS_PIPELINE.map(s => ({
     ...s,
     count: leads.filter(l => l.status === s.value).length,
   }));
+
+  // Taxa de conversão: count[i] / count[i-1] (do estágio anterior com pelo menos 1 lead)
+  function taxa(i) {
+    const prev = counts[i - 1]?.count;
+    const curr = counts[i]?.count;
+    if (!prev || prev === 0) return null;
+    return Math.round((curr / prev) * 100);
+  }
 
   return (
     <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-5 mb-6">
       <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
         <TrendingUp className="w-4 h-4 text-neon" /> Pipeline de Leads
       </h3>
-      <div className="grid grid-cols-7 gap-2">
-        {counts.map(s => (
-          <div key={s.value} className="text-center">
-            <div className={`text-xl font-black ${s.color}`}>{s.count}</div>
-            <div className="text-[9px] text-zinc-500 mt-0.5 leading-tight">{s.label}</div>
-            <div className="mt-1.5 h-1 rounded-full bg-dark-700 overflow-hidden">
-              <div className={`h-full rounded-full ${s.bg.replace('/10', '/60')}`} style={{ width: `${Math.round((s.count / total) * 100)}%` }} />
+      <div className="flex items-start gap-1 overflow-x-auto pb-1">
+        {counts.map((s, i) => (
+          <div key={s.value} className="flex items-start gap-1 shrink-0">
+            {/* Estágio */}
+            <div className="flex flex-col items-center min-w-[72px]">
+              <div className={`text-2xl font-black ${s.color}`}>{s.count}</div>
+              <div className="text-[9px] text-zinc-500 mt-0.5 leading-tight text-center">{s.label}</div>
+              <div className="mt-1.5 w-full h-1 rounded-full bg-dark-700 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${s.bg.replace('/10', '/60')}`}
+                  style={{ width: `${leads.length ? Math.round((s.count / leads.length) * 100) : 0}%` }}
+                />
+              </div>
             </div>
+            {/* Seta com taxa entre estágios */}
+            {i < counts.length - 1 && (
+              <div className="flex flex-col items-center pt-1.5 min-w-[32px]">
+                <ArrowRight className="w-3.5 h-3.5 text-zinc-600" />
+                {taxa(i + 1) !== null && (
+                  <span className="text-[9px] font-bold text-zinc-500 mt-0.5">{taxa(i + 1)}%</span>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -577,6 +602,18 @@ export default function LeadsTab() {
 
               {/* Ações */}
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {/* Aprovar lead (manual) */}
+                {lead.status !== 'aprovado' && (
+                  <button
+                    onClick={() => changeStatus(lead, 'aprovado')}
+                    disabled={atualizandoStatus === lead.id}
+                    title="Marcar como Aprovado"
+                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 border border-dark-600 transition-all disabled:opacity-40 cursor-pointer"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                  </button>
+                )}
+
                 {/* Link do orçamento */}
                 {lead.link_rapido_codigo && (
                   <a

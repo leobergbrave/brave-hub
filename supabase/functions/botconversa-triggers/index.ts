@@ -60,7 +60,50 @@ serve(async (req) => {
     );
 
     const BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://brave-hub-two.vercel.app';
-    const { evento, codigo_link, cep_info } = await req.json();
+    const body = await req.json();
+    const { evento, codigo_link, cep_info } = body;
+
+    // ══════════════════════════════════════════════
+    // 0. LEAD RESPONDEU — chamado pelo BotConversa
+    //    após o lead responder à 1ª mensagem do fluxo
+    // ══════════════════════════════════════════════
+    if (evento === 'lead_respondeu') {
+      const telefoneRaw: string = body.telefone || '';
+      if (!telefoneRaw) {
+        return new Response(JSON.stringify({ error: 'Telefone obrigatório' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+        });
+      }
+
+      const telNorm = telefoneRaw.replace(/\D/g, '');
+
+      // Busca leads em fluxo_disparado e normaliza o telefone para comparar
+      const { data: leadsRaw } = await supabase
+        .from('leads')
+        .select('id, telefone, status')
+        .eq('status', 'fluxo_disparado')
+        .order('criado_em', { ascending: false })
+        .limit(50);
+
+      const leadMatch = (leadsRaw || []).find(
+        (l: any) => l.telefone.replace(/\D/g, '') === telNorm
+      );
+
+      if (!leadMatch) {
+        return new Response(JSON.stringify({ ok: false, motivo: 'Lead não encontrado ou status incompatível' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      await supabase.from('leads').update({
+        status:       'respondeu',
+        respondeu_em: new Date().toISOString(),
+      }).eq('id', leadMatch.id);
+
+      return new Response(JSON.stringify({ ok: true, lead_id: leadMatch.id }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // ══════════════════════════════════════════════
     // 1. CEP CALCULADO
