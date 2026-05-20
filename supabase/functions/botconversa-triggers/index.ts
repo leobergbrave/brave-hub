@@ -87,7 +87,7 @@ serve(async (req) => {
         .order('criado_em', { ascending: false })
         .limit(50);
 
-      const leadMatch = (leadsRaw || []).find(
+const leadMatch = (leadsRaw || []).find(
         (l: any) => l.telefone.replace(/\D/g, '') === telNorm
       );
 
