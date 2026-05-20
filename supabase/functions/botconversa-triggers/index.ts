@@ -60,7 +60,9 @@ serve(async (req) => {
     );
 
     const BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://brave-hub-two.vercel.app';
-    const body = await req.json();
+    const raw = await req.json();
+    // BotConversa envolve o payload em { root: { ... } } — normaliza para formato plano
+    const body = raw.root ?? raw;
     const { evento, codigo_link, cep_info } = body;
 
     // ══════════════════════════════════════════════
