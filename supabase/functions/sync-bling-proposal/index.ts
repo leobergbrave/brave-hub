@@ -181,7 +181,6 @@ serve(async (req) => {
       return {
         codigo: item.codigo_sku || '',
         descricao: item.nome,
-        descricaoDetalhada: item.nome,
         unidade: 'UN',
         quantidade: item.quantidade,
         valor: Number(precoTabela.toFixed(2)),
@@ -200,7 +199,6 @@ serve(async (req) => {
       return {
         codigo: item.codigo_sku || '',
         descricao: item.nome,
-        descricaoDetalhada: item.nome,
         unidade: 'UN',
         quantidade: item.quantidade,
         valor: Number(precoTabela.toFixed(2)),
