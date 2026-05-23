@@ -54,12 +54,16 @@ function MomentoBadge({ momento }) {
   );
 }
 
+const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'link_aberto', 'orcamento_gerado', 'aprovado'];
+
 /* ─── Funnel metrics ─── */
 function FunnelBar({ leads }) {
-  const counts = STATUS_PIPELINE.map(s => ({
-    ...s,
-    count: leads.filter(l => l.status === s.value).length,
-  }));
+  const counts = STATUS_PIPELINE
+    .filter(s => FUNNEL_STAGES.includes(s.value))
+    .map(s => ({
+      ...s,
+      count: leads.filter(l => l.status === s.value).length,
+    }));
 
   // Taxa de conversão: count[i] / count[i-1] (do estágio anterior com pelo menos 1 lead)
   function taxa(i) {
