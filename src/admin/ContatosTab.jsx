@@ -3,7 +3,7 @@ import {
   Users, Search, Plus, Upload, X, Check, CheckSquare, Square,
   Phone, Mail, Building2, Loader2, Image,
   Flame, Thermometer, Snowflake, RefreshCw,
-  MessageCircle, Zap
+  MessageCircle, Zap, Settings, Clock, Calendar, ChevronDown, ChevronUp, Pause, Play
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -248,11 +248,53 @@ export default function ContatosTab() {
     buscaDebounced.current = setTimeout(() => setPage(0), 400);
   };
 
-  // ── Disparo em massa ──
+  // ── Disparo em massa (sistema de fila) ──
   const [showDisparoModal, setShowDisparoModal] = useState(false);
+  const [disparoTab, setDisparoTab] = useState('novo'); // 'novo' | 'campanhas' | 'config'
   const [disparoLoading, setDisparoLoading] = useState(false);
-  const [disparoProgress, setDisparoProgress] = useState({ atual: 0, total: 0, ok: 0 });
   const [disparoDone, setDisparoDone] = useState(false);
+
+  // Config
+  const [config, setConfig] = useState({ hora_inicio: '08:00', hora_fim: '18:00', dias_semana: [1,2,3,4,5], max_por_dia: 50, delay_min_min: 1, delay_max_min: 30, webhook_url: '' });
+  const [configId, setConfigId] = useState(null);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  // Campanhas ativas
+  const [campanhas, setCampanhas] = useState([]);
+  const [loadingCampanhas, setLoadingCampanhas] = useState(false);
+
+  const fetchConfig = useCallback(async () => {
+    const { data } = await supabase.from('disparo_config').select('*').limit(1).maybeSingle();
+    if (data) { setConfig(data); setConfigId(data.id); }
+  }, []);
+
+  const fetchCampanhas = useCallback(async () => {
+    setLoadingCampanhas(true);
+    const { data } = await supabase.from('disparo_campanhas').select('*').order('criado_em', { ascending: false }).limit(10);
+    setCampanhas(data || []);
+    setLoadingCampanhas(false);
+  }, []);
+
+  useEffect(() => {
+    if (showDisparoModal) { fetchConfig(); fetchCampanhas(); }
+  }, [showDisparoModal, fetchConfig, fetchCampanhas]);
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    if (configId) {
+      await supabase.from('disparo_config').update({ ...config, atualizado_em: new Date().toISOString() }).eq('id', configId);
+    } else {
+      const { data } = await supabase.from('disparo_config').insert(config).select().single();
+      if (data) setConfigId(data.id);
+    }
+    setSavingConfig(false);
+  };
+
+  const handlePausarCampanha = async (id, statusAtual) => {
+    const novoStatus = statusAtual === 'ativa' ? 'pausada' : 'ativa';
+    await supabase.from('disparo_campanhas').update({ status: novoStatus }).eq('id', id);
+    fetchCampanhas();
+  };
 
   const fetchAllFiltrados = async () => {
     let q = supabase.from('contatos').select('nome, telefone').not('telefone', 'is', null);
@@ -266,29 +308,44 @@ export default function ContatosTab() {
     return (data || []).filter(c => c.telefone?.replace(/\D/g, '').length >= 10);
   };
 
-  const handleDisparo = async () => {
-    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK_CONTATOS;
-    if (!webhookUrl) return;
+  const handleCriarCampanha = async () => {
     setDisparoLoading(true);
-    setDisparoDone(false);
-    const todos = await fetchAllFiltrados();
-    setDisparoProgress({ atual: 0, total: todos.length, ok: 0 });
-    let ok = 0;
-    for (let i = 0; i < todos.length; i++) {
-      try {
-        let tel = (todos[i].telefone || '').replace(/\D/g, '');
-        if (tel.length === 10 || tel.length === 11) tel = '55' + tel;
-        await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cliente: todos[i].nome || '', telefone: tel }),
-        });
-        ok++;
-      } catch {}
-      setDisparoProgress({ atual: i + 1, total: todos.length, ok });
+    try {
+      const contatos = await fetchAllFiltrados();
+      if (!contatos.length) return;
+
+      const segLabel = [
+        filtroStatus !== 'todos' ? filtroStatus : 'todos',
+        filtroOrigem !== 'todos' ? filtroOrigem : null,
+        busca.trim() ? `"${busca.trim()}"` : null,
+      ].filter(Boolean).join(' · ');
+
+      const { data: campanha, error } = await supabase.from('disparo_campanhas').insert({
+        nome: `Disparo ${segLabel} — ${new Date().toLocaleDateString('pt-BR')}`,
+        total_contatos: contatos.length,
+      }).select().single();
+
+      if (error || !campanha) throw new Error(error?.message || 'Erro ao criar campanha');
+
+      const itens = contatos.map(c => ({
+        campanha_id: campanha.id,
+        nome: c.nome || '',
+        telefone: c.telefone,
+      }));
+
+      const BATCH = 500;
+      for (let i = 0; i < itens.length; i += BATCH) {
+        await supabase.from('disparo_fila').insert(itens.slice(i, i + BATCH));
+      }
+
+      setDisparoDone(true);
+      fetchCampanhas();
+      setDisparoTab('campanhas');
+    } catch (e) {
+      console.error('Erro ao criar campanha:', e);
+    } finally {
+      setDisparoLoading(false);
     }
-    setDisparoLoading(false);
-    setDisparoDone(true);
   };
 
   return (
@@ -487,90 +544,182 @@ export default function ContatosTab() {
       {/* ── Modal de Disparo em Massa ── */}
       {showDisparoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700/40">
+          <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700/40 shrink-0">
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-emerald-400" />
                 <h2 className="text-sm font-bold text-white">Disparo via BotConversa</h2>
               </div>
-              {!disparoLoading && (
-                <button onClick={() => setShowDisparoModal(false)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors cursor-pointer">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              <button onClick={() => { setShowDisparoModal(false); setDisparoDone(false); }} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* Segmento ativo */}
-              <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Segmento atual</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-neon/10 text-neon border border-neon/20">
-                    {total.toLocaleString('pt-BR')} contatos
-                  </span>
-                  {filtroStatus !== 'todos' && (
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">
-                      Status: {STATUS[filtroStatus]?.label}
-                    </span>
-                  )}
-                  {filtroOrigem !== 'todos' && (
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">
-                      Origem: {ORIGEM[filtroOrigem]?.label}
-                    </span>
-                  )}
-                  {busca.trim() && (
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">
-                      Busca: "{busca}"
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-zinc-500">Apenas contatos com telefone válido serão disparados.</p>
-              </div>
+            {/* Tabs */}
+            <div className="flex border-b border-dark-700/40 shrink-0">
+              {[['novo', 'Novo Disparo'], ['campanhas', 'Campanhas'], ['config', 'Configurações']].map(([id, label]) => (
+                <button key={id} onClick={() => setDisparoTab(id)}
+                  className={`flex-1 py-3 text-xs font-semibold transition-colors cursor-pointer ${disparoTab === id ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
 
-              {/* Progresso */}
-              {(disparoLoading || disparoDone) && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-zinc-400">
-                    <span>{disparoDone ? 'Disparo concluído!' : `Disparando... ${disparoProgress.atual}/${disparoProgress.total}`}</span>
-                    <span className="text-emerald-400 font-semibold">{disparoProgress.ok} enviados</span>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+
+              {/* ── Tab: Novo Disparo ── */}
+              {disparoTab === 'novo' && (
+                <>
+                  <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Segmento</p>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-neon/10 text-neon border border-neon/20 font-semibold">
+                        {total.toLocaleString('pt-BR')} contatos
+                      </span>
+                      {filtroStatus !== 'todos' && <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">Status: {STATUS[filtroStatus]?.label}</span>}
+                      {filtroOrigem !== 'todos' && <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">Origem: {ORIGEM[filtroOrigem]?.label}</span>}
+                      {busca.trim() && <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">Busca: "{busca}"</span>}
+                    </div>
+                    <p className="text-[10px] text-zinc-500">Apenas contatos com telefone válido serão enfileirados.</p>
                   </div>
-                  <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                      style={{ width: `${disparoProgress.total ? (disparoProgress.atual / disparoProgress.total) * 100 : 0}%` }}
-                    />
+
+                  <div className="bg-dark-800/40 border border-dark-700/30 rounded-xl p-4 space-y-1.5">
+                    <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Regras ativas</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
+                      <span className="flex items-center gap-1.5"><Clock className="w-3 h-3 text-emerald-400" /> {config.hora_inicio} – {config.hora_fim}</span>
+                      <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3 text-emerald-400" /> Seg–Sex</span>
+                      <span className="flex items-center gap-1.5"><Zap className="w-3 h-3 text-emerald-400" /> Máx {config.max_por_dia}/dia</span>
+                      <span className="flex items-center gap-1.5"><Settings className="w-3 h-3 text-emerald-400" /> Delay {config.delay_min_min}–{config.delay_max_min} min</span>
+                    </div>
                   </div>
-                </div>
+
+                  {disparoDone && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+                      <Check className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                      <p className="text-sm font-bold text-emerald-400">Campanha criada!</p>
+                      <p className="text-xs text-zinc-400 mt-0.5">Os contatos foram enfileirados. O worker processa automaticamente respeitando as regras.</p>
+                    </div>
+                  )}
+
+                  {!disparoDone && (
+                    <button onClick={handleCriarCampanha} disabled={disparoLoading || total === 0}
+                      className="w-full flex items-center justify-center gap-2 py-3 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default">
+                      {disparoLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Enfileirando...</> : <><Zap className="w-4 h-4" /> Confirmar — Enfileirar {total.toLocaleString('pt-BR')} contatos</>}
+                    </button>
+                  )}
+                </>
               )}
 
-              {/* Ações */}
-              <div className="flex gap-3">
-                {!disparoDone ? (
-                  <>
-                    <button
-                      onClick={() => setShowDisparoModal(false)}
-                      disabled={disparoLoading}
-                      className="flex-1 px-4 py-2.5 text-xs font-semibold text-zinc-400 bg-dark-800 border border-dark-700 rounded-xl hover:bg-dark-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
-                    >
-                      Cancelar
+              {/* ── Tab: Campanhas ── */}
+              {disparoTab === 'campanhas' && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Últimas campanhas</p>
+                    <button onClick={fetchCampanhas} className="p-1.5 text-zinc-500 hover:text-white rounded-lg transition-colors cursor-pointer">
+                      <RefreshCw className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={handleDisparo}
-                      disabled={disparoLoading || total === 0}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
-                    >
-                      {disparoLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Disparando...</> : <><Zap className="w-3.5 h-3.5" /> Confirmar Disparo</>}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setShowDisparoModal(false)}
-                    className="flex-1 px-4 py-2.5 text-xs font-bold text-white bg-neon/20 border border-neon/30 text-neon rounded-xl hover:bg-neon/30 transition-colors cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5 inline mr-1" /> Fechar
+                  </div>
+                  {loadingCampanhas ? (
+                    <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 text-neon animate-spin" /></div>
+                  ) : campanhas.length === 0 ? (
+                    <p className="text-xs text-zinc-500 text-center py-8">Nenhuma campanha ainda.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {campanhas.map(c => {
+                        const pct = c.total_contatos ? Math.round((c.enviados_total / c.total_contatos) * 100) : 0;
+                        const statusColor = c.status === 'ativa' ? 'text-emerald-400' : c.status === 'concluida' ? 'text-neon' : 'text-amber-400';
+                        return (
+                          <div key={c.id} className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-4 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-white truncate">{c.nome}</p>
+                                <p className={`text-[10px] font-bold uppercase ${statusColor}`}>{c.status} · {c.enviados_total}/{c.total_contatos} enviados · {c.enviados_hoje} hoje · {c.falhas_total || 0} falhas</p>
+                              </div>
+                              {(c.status === 'ativa' || c.status === 'pausada') && (
+                                <button onClick={() => handlePausarCampanha(c.id, c.status)}
+                                  className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer shrink-0">
+                                  {c.status === 'ativa' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                                </button>
+                              )}
+                            </div>
+                            <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                            <p className="text-[10px] text-zinc-600">{pct}% concluído · criado {new Date(c.criado_em).toLocaleDateString('pt-BR')}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Tab: Configurações ── */}
+              {disparoTab === 'config' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Hora início</label>
+                      <input type="time" value={config.hora_inicio}
+                        onChange={e => setConfig(p => ({ ...p, hora_inicio: e.target.value }))}
+                        className="w-full bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Hora fim</label>
+                      <input type="time" value={config.hora_fim}
+                        onChange={e => setConfig(p => ({ ...p, hora_fim: e.target.value }))}
+                        className="w-full bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Máx. por dia</label>
+                      <input type="number" min="1" max="500" value={config.max_por_dia}
+                        onChange={e => setConfig(p => ({ ...p, max_por_dia: Number(e.target.value) }))}
+                        className="w-full bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Delay mín. (min)</label>
+                      <input type="number" min="1" max="60" value={config.delay_min_min}
+                        onChange={e => setConfig(p => ({ ...p, delay_min_min: Number(e.target.value) }))}
+                        className="w-full bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Delay máx. (min)</label>
+                      <input type="number" min="1" max="120" value={config.delay_max_min}
+                        onChange={e => setConfig(p => ({ ...p, delay_max_min: Number(e.target.value) }))}
+                        className="w-full bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Dias da semana</label>
+                    <div className="flex gap-2">
+                      {[['Seg',1],['Ter',2],['Qua',3],['Qui',4],['Sex',5],['Sáb',6],['Dom',7]].map(([label, val]) => {
+                        const ativo = config.dias_semana?.includes(val);
+                        return (
+                          <button key={val} onClick={() => setConfig(p => ({
+                            ...p,
+                            dias_semana: ativo ? p.dias_semana.filter(d => d !== val) : [...(p.dias_semana || []), val].sort()
+                          }))}
+                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors cursor-pointer ${ativo ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-dark-800 text-zinc-600 border border-dark-700'}`}>
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Webhook URL</label>
+                    <input type="text" value={config.webhook_url || ''}
+                      onChange={e => setConfig(p => ({ ...p, webhook_url: e.target.value }))}
+                      className="w-full bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50 font-mono" />
+                  </div>
+                  <button onClick={handleSaveConfig} disabled={savingConfig}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors cursor-pointer disabled:opacity-40">
+                    {savingConfig ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</> : <><Check className="w-3.5 h-3.5" /> Salvar Configurações</>}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

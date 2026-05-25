@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"getActiveBatch\\\\|activeBatch\\\\|batch\\\\|lote\\\\|pricing_lot\" \"c:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Novo UAIROX\\\\src\\\\pages\\\\PublicEventRegistration.tsx\" | head -80)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Novo UAIROX/src/pages/**)"
+    ]
+  }
+}

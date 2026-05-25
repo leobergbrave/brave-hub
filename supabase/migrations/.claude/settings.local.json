@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Team WOD Brasil/Desktop/PETARDO/src/pages/admin/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/PETARDO/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Novo UAIROX/src/pages/admin/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Novo UAIROX/src/hooks/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Novo UAIROX/api/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Novo UAIROX/**)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Brave HUB/api/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Brave HUB/supabase/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Brave HUB/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Revenda Profit/src/pages/**)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/Revenda Profit/**)",
+      "Bash(npm run *)",
+      "Bash(node \"c:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Brave HUB\\\\test-gemini.js\")",
+      "Bash(npx vercel *)",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\src\\pages\\admin",
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\api",
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\src\\pages",
+      "c:\\Users\\Team WOD Brasil\\Desktop\\Revenda Profit\\src\\components\\stock",
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Brave HUB"
+    ]
+  }
+}
