@@ -46,18 +46,4 @@ CREATE INDEX IF NOT EXISTS idx_disparo_fila_pending
 CREATE INDEX IF NOT EXISTS idx_disparo_fila_campanha
   ON disparo_fila (campanha_id, status, send_after);
 
--- ── pg_cron: executa a cada minuto ───────────────────────────────────────────
-SELECT cron.unschedule('disparo-worker-minutely')
-WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'disparo-worker-minutely');
-
-SELECT cron.schedule(
-  'disparo-worker-minutely',
-  '* * * * *',
-  $$
-  SELECT net.http_post(
-    url     := 'https://jisbvqrnnujqgbsfondy.supabase.co/functions/v1/disparo-worker',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imppc2J2cXJubnVqcWdic2ZvbmR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1OTEwNzUsImV4cCI6MjA5MzE2NzA3NX0.DvEz4j0DVpVJHu_Ag9Fgtksbb2BzSARSSJWKhx-eduI"}'::jsonb,
-    body    := '{}'::jsonb
-  ) AS request_id;
-  $$
-);
+-- Agendamento via cron-job.org (externo) → POST /api/disparo-sender na Vercel a cada minuto.
