@@ -327,15 +327,31 @@ export default function ContatosTab() {
 
       if (error || !campanha) throw new Error(error?.message || 'Erro ao criar campanha');
 
+      const FAR_FUTURE = '2099-01-01T00:00:00.000Z';
       const itens = contatos.map(c => ({
         campanha_id: campanha.id,
         nome: c.nome || '',
         telefone: c.telefone,
+        send_after: FAR_FUTURE,
       }));
 
       const BATCH = 500;
       for (let i = 0; i < itens.length; i += BATCH) {
         await supabase.from('disparo_fila').insert(itens.slice(i, i + BATCH));
+      }
+
+      // Ativa apenas o primeiro item para envio imediato
+      const { data: firstItem } = await supabase
+        .from('disparo_fila')
+        .select('id')
+        .eq('campanha_id', campanha.id)
+        .eq('status', 'pending')
+        .limit(1)
+        .maybeSingle();
+      if (firstItem) {
+        await supabase.from('disparo_fila')
+          .update({ send_after: new Date().toISOString() })
+          .eq('id', firstItem.id);
       }
 
       setDisparoDone(true);
