@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Zap, Plus, X, ChevronRight, ChevronLeft, Check, Loader2,
   Pause, Play, Users, Calendar, Clock, Settings, RefreshCw,
-  Search, Target, AlertCircle,
+  Search, Target, AlertCircle, ThumbsUp, ThumbsDown, MessageSquareOff, ChevronDown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -44,6 +44,8 @@ export default function DisparosTab() {
   // ── Campaign list ──
   const [campanhas, setCampanhas] = useState([]);
   const [loadingCampanhas, setLoadingCampanhas] = useState(true);
+  const [respostas, setRespostas] = useState({}); // { campanha_id: { aceitou, optout, sem_resposta } }
+  const [expandedId, setExpandedId] = useState(null);
 
   // ── Wizard ──
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -81,6 +83,20 @@ export default function DisparosTab() {
       .order('criado_em', { ascending: false });
     setCampanhas(data || []);
     setLoadingCampanhas(false);
+  }, []);
+
+  const fetchRespostas = useCallback(async (campanhaId) => {
+    const { data } = await supabase
+      .from('disparo_fila')
+      .select('resposta')
+      .eq('campanha_id', campanhaId)
+      .eq('status', 'sent')
+      .not('resposta', 'is', null);
+
+    if (!data) return;
+    const r = { aceitou: 0, optout: 0, sem_resposta: 0 };
+    data.forEach(d => { if (r[d.resposta] !== undefined) r[d.resposta]++; });
+    setRespostas(prev => ({ ...prev, [campanhaId]: r }));
   }, []);
 
   const fetchConfig = useCallback(async () => {
@@ -304,53 +320,141 @@ export default function DisparosTab() {
           {campanhas.map(c => {
             const pct = c.total_contatos ? Math.round((c.enviados_total / c.total_contatos) * 100) : 0;
             const st = statusMap[c.status] || statusMap.ativa;
+            const expanded = expandedId === c.id;
+            const resp = respostas[c.id];
+            const totalRespondeu = resp ? (resp.aceitou + resp.optout + resp.sem_resposta) : 0;
+            const semResposta = c.enviados_total - totalRespondeu;
+
             return (
-              <div key={c.id} className="bg-dark-800/50 border border-dark-700/40 rounded-2xl p-5">
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${st.bg} ${st.color}`}>
-                        {st.label}
-                      </span>
+              <div key={c.id} className="bg-dark-800/50 border border-dark-700/40 rounded-2xl overflow-hidden">
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${st.bg} ${st.color}`}>
+                          {st.label}
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-white truncate">{c.nome}</p>
+                      <p className="text-[10px] text-zinc-600 mt-0.5">
+                        Criada em {new Date(c.criado_em).toLocaleDateString('pt-BR')}
+                      </p>
                     </div>
-                    <p className="text-sm font-bold text-white truncate">{c.nome}</p>
-                    <p className="text-[10px] text-zinc-600 mt-0.5">
-                      Criada em {new Date(c.criado_em).toLocaleDateString('pt-BR')}
-                    </p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {(c.status === 'ativa' || c.status === 'pausada') && (
+                        <button onClick={() => handlePausar(c.id, c.status)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-dark-600 text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+                          {c.status === 'ativa'
+                            ? <><Pause className="w-3 h-3" /> Pausar</>
+                            : <><Play className="w-3 h-3" /> Retomar</>}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {(c.status === 'ativa' || c.status === 'pausada') && (
-                    <button onClick={() => handlePausar(c.id, c.status)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-dark-600 text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer shrink-0">
-                      {c.status === 'ativa'
-                        ? <><Pause className="w-3 h-3" /> Pausar</>
-                        : <><Play className="w-3 h-3" /> Retomar</>}
-                    </button>
-                  )}
+
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-600 mb-1.5">
+                      <span>{c.enviados_total.toLocaleString('pt-BR')} de {c.total_contatos.toLocaleString('pt-BR')} enviados</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${st.bar}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    {[
+                      { label: 'Total',    value: c.total_contatos,    color: 'text-white' },
+                      { label: 'Enviados', value: c.enviados_total,    color: 'text-emerald-400' },
+                      { label: 'Hoje',     value: c.enviados_hoje,     color: 'text-blue-400' },
+                      { label: 'Falhas',   value: c.falhas_total || 0, color: c.falhas_total ? 'text-red-400' : 'text-zinc-600' },
+                    ].map(s => (
+                      <div key={s.label} className="bg-dark-700/30 rounded-xl p-2.5 text-center">
+                        <p className={`text-sm font-bold ${s.color}`}>{s.value.toLocaleString('pt-BR')}</p>
+                        <p className="text-[9px] text-zinc-600 uppercase tracking-wider mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Expandir métricas de resposta */}
+                  <button
+                    onClick={() => {
+                      const next = expanded ? null : c.id;
+                      setExpandedId(next);
+                      if (next && !respostas[c.id]) fetchRespostas(c.id);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-semibold text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    {expanded ? 'Ocultar respostas' : 'Ver respostas do BotConversa'}
+                  </button>
                 </div>
 
-                <div className="mb-3">
-                  <div className="flex items-center justify-between text-[10px] text-zinc-600 mb-1.5">
-                    <span>{c.enviados_total.toLocaleString('pt-BR')} de {c.total_contatos.toLocaleString('pt-BR')} enviados</span>
-                    <span>{pct}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${st.bar}`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { label: 'Total',    value: c.total_contatos,    color: 'text-white' },
-                    { label: 'Enviados', value: c.enviados_total,    color: 'text-emerald-400' },
-                    { label: 'Hoje',     value: c.enviados_hoje,     color: 'text-blue-400' },
-                    { label: 'Falhas',   value: c.falhas_total || 0, color: c.falhas_total ? 'text-red-400' : 'text-zinc-600' },
-                  ].map(s => (
-                    <div key={s.label} className="bg-dark-700/30 rounded-xl p-2.5 text-center">
-                      <p className={`text-sm font-bold ${s.color}`}>{s.value.toLocaleString('pt-BR')}</p>
-                      <p className="text-[9px] text-zinc-600 uppercase tracking-wider mt-0.5">{s.label}</p>
+                {/* Painel de respostas */}
+                {expanded && (
+                  <div className="border-t border-dark-700/40 bg-dark-900/40 px-5 py-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">Respostas do fluxo</p>
+                      <button onClick={() => fetchRespostas(c.id)}
+                        className="p-1 text-zinc-600 hover:text-zinc-300 cursor-pointer transition-colors">
+                        <RefreshCw className="w-3 h-3" />
+                      </button>
                     </div>
-                  ))}
-                </div>
+
+                    {!resp ? (
+                      <div className="flex justify-center py-3">
+                        <Loader2 className="w-4 h-4 text-zinc-600 animate-spin" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                            <ThumbsUp className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
+                            <p className="text-lg font-black text-emerald-400">{resp.aceitou}</p>
+                            <p className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Aceitaram</p>
+                          </div>
+                          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
+                            <ThumbsDown className="w-4 h-4 text-red-400 mx-auto mb-1" />
+                            <p className="text-lg font-black text-red-400">{resp.optout}</p>
+                            <p className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Optout</p>
+                          </div>
+                          <div className="bg-zinc-700/20 border border-zinc-700/30 rounded-xl p-3 text-center">
+                            <MessageSquareOff className="w-4 h-4 text-zinc-500 mx-auto mb-1" />
+                            <p className="text-lg font-black text-zinc-400">{Math.max(0, semResposta)}</p>
+                            <p className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Sem resposta</p>
+                          </div>
+                        </div>
+
+                        {c.enviados_total > 0 && (
+                          <div className="space-y-1.5 text-[10px] text-zinc-500">
+                            <div className="flex items-center justify-between">
+                              <span className="text-emerald-400">Taxa de aceitação</span>
+                              <span className="text-emerald-400 font-bold">
+                                {Math.round((resp.aceitou / c.enviados_total) * 100)}%
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-red-400">Taxa de optout</span>
+                              <span className="text-red-400 font-bold">
+                                {Math.round((resp.optout / c.enviados_total) * 100)}%
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Aguardando resposta</span>
+                              <span className="font-bold">{Math.max(0, semResposta)} ({Math.round((Math.max(0, semResposta) / c.enviados_total) * 100)}%)</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-dark-700/30">
+                          <p className="text-[9px] text-zinc-600">
+                            Configure o BotConversa para enviar webhooks para:<br/>
+                            <span className="font-mono text-zinc-500">POST brave-hub-two.vercel.app/api/disparo-resposta</span>
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
