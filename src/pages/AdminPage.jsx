@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X } from 'lucide-react';
+import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles } from 'lucide-react';
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
 import DescontosTab from '../admin/DescontosTab';
@@ -11,6 +11,7 @@ import { Layers, Users, Mail, BookUser } from 'lucide-react';
 import LeadsTab from '../admin/LeadsTab';
 import EmailsTab from '../admin/EmailsTab';
 import ContatosTab from '../admin/ContatosTab';
+import OrcamentoPage from './OrcamentoPage';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -23,6 +24,7 @@ const TABS = [
   { id: 'orcamentos', label: 'Orçamentos', icon: Receipt },
   { id: 'marketing', label: 'Funil & Automação', icon: Megaphone },
   { id: 'emails', label: 'Emails', icon: Mail },
+  { id: 'gerador', label: 'Gerador de Orç.', icon: Sparkles },
 ];
 
 export default function AdminPage() {
@@ -48,6 +50,7 @@ export default function AdminPage() {
       case 'orcamentos': return <OrcamentosTab />;
       case 'marketing': return <MarketingTab />;
       case 'emails': return <EmailsTab />;
+      case 'gerador': return <OrcamentoPage />;
       default: return null;
     }
   };
