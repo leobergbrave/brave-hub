@@ -361,7 +361,7 @@ export default function ContatosTab() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setShowDisparoModal(true); setDisparoDone(false); setDisparoProgress({ atual: 0, total: 0, ok: 0 }); }}
+            onClick={() => { setShowDisparoModal(true); setDisparoDone(false); }}
             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/20 transition-colors cursor-pointer"
           >
             <Zap className="w-3.5 h-3.5" /> Disparar ({total.toLocaleString('pt-BR')})
