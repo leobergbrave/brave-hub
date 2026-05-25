@@ -50,6 +50,18 @@ export default async function handler(req) {
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
+  try {
+    return await run(req, cors);
+  } catch (err) {
+    return new Response(JSON.stringify({ ok: false, fatal: err.message, stack: err.stack }), {
+      status: 200,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+async function run(req, cors) {
+
   // Autenticação via secret header
   const secret = process.env.DISPARO_CRON_SECRET;
   if (secret && req.headers.get('x-cron-secret') !== secret) {
@@ -213,4 +225,4 @@ export default async function handler(req) {
   return new Response(JSON.stringify({ ok: true, processed: results.length, results }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
-}
+} // fim run
