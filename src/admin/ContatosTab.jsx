@@ -248,6 +248,49 @@ export default function ContatosTab() {
     buscaDebounced.current = setTimeout(() => setPage(0), 400);
   };
 
+  // ── Disparo em massa ──
+  const [showDisparoModal, setShowDisparoModal] = useState(false);
+  const [disparoLoading, setDisparoLoading] = useState(false);
+  const [disparoProgress, setDisparoProgress] = useState({ atual: 0, total: 0, ok: 0 });
+  const [disparoDone, setDisparoDone] = useState(false);
+
+  const fetchAllFiltrados = async () => {
+    let q = supabase.from('contatos').select('nome, telefone').not('telefone', 'is', null);
+    if (busca.trim()) {
+      const b = busca.trim();
+      q = q.or(`nome.ilike.%${b}%,telefone.ilike.%${b}%,email.ilike.%${b}%,empresa.ilike.%${b}%`);
+    }
+    if (filtroStatus !== 'todos') q = q.eq('status', filtroStatus);
+    if (filtroOrigem !== 'todos') q = q.eq('origem', filtroOrigem);
+    const { data } = await q;
+    return (data || []).filter(c => c.telefone?.replace(/\D/g, '').length >= 10);
+  };
+
+  const handleDisparo = async () => {
+    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+    if (!webhookUrl) return;
+    setDisparoLoading(true);
+    setDisparoDone(false);
+    const todos = await fetchAllFiltrados();
+    setDisparoProgress({ atual: 0, total: todos.length, ok: 0 });
+    let ok = 0;
+    for (let i = 0; i < todos.length; i++) {
+      try {
+        let tel = (todos[i].telefone || '').replace(/\D/g, '');
+        if (tel.length === 10 || tel.length === 11) tel = '55' + tel;
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cliente: todos[i].nome || '', telefone: tel }),
+        });
+        ok++;
+      } catch {}
+      setDisparoProgress({ atual: i + 1, total: todos.length, ok });
+    }
+    setDisparoLoading(false);
+    setDisparoDone(true);
+  };
+
   return (
     <div className="space-y-6">
 
@@ -260,6 +303,12 @@ export default function ContatosTab() {
           <p className="text-xs text-zinc-500 mt-0.5">{stats.total.toLocaleString('pt-BR')} contatos salvos</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowDisparoModal(true); setDisparoDone(false); setDisparoProgress({ atual: 0, total: 0, ok: 0 }); }}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/20 transition-colors cursor-pointer"
+          >
+            <Zap className="w-3.5 h-3.5" /> Disparar ({total.toLocaleString('pt-BR')})
+          </button>
           <button
             onClick={() => { setImportStep('upload'); setImportFile(null); setImportPreview(null); }}
             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded-xl hover:bg-purple-500/20 transition-colors cursor-pointer"
@@ -434,6 +483,98 @@ export default function ContatosTab() {
           </>
         )}
       </div>
+
+      {/* ── Modal de Disparo em Massa ── */}
+      {showDisparoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700/40">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-emerald-400" />
+                <h2 className="text-sm font-bold text-white">Disparo via BotConversa</h2>
+              </div>
+              {!disparoLoading && (
+                <button onClick={() => setShowDisparoModal(false)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Segmento ativo */}
+              <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-4 space-y-2">
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Segmento atual</p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-neon/10 text-neon border border-neon/20">
+                    {total.toLocaleString('pt-BR')} contatos
+                  </span>
+                  {filtroStatus !== 'todos' && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">
+                      Status: {STATUS[filtroStatus]?.label}
+                    </span>
+                  )}
+                  {filtroOrigem !== 'todos' && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">
+                      Origem: {ORIGEM[filtroOrigem]?.label}
+                    </span>
+                  )}
+                  {busca.trim() && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-700/40 text-zinc-300 border border-zinc-600/20">
+                      Busca: "{busca}"
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-zinc-500">Apenas contatos com telefone válido serão disparados.</p>
+              </div>
+
+              {/* Progresso */}
+              {(disparoLoading || disparoDone) && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-zinc-400">
+                    <span>{disparoDone ? 'Disparo concluído!' : `Disparando... ${disparoProgress.atual}/${disparoProgress.total}`}</span>
+                    <span className="text-emerald-400 font-semibold">{disparoProgress.ok} enviados</span>
+                  </div>
+                  <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${disparoProgress.total ? (disparoProgress.atual / disparoProgress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Ações */}
+              <div className="flex gap-3">
+                {!disparoDone ? (
+                  <>
+                    <button
+                      onClick={() => setShowDisparoModal(false)}
+                      disabled={disparoLoading}
+                      className="flex-1 px-4 py-2.5 text-xs font-semibold text-zinc-400 bg-dark-800 border border-dark-700 rounded-xl hover:bg-dark-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleDisparo}
+                      disabled={disparoLoading || total === 0}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                    >
+                      {disparoLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Disparando...</> : <><Zap className="w-3.5 h-3.5" /> Confirmar Disparo</>}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setShowDisparoModal(false)}
+                    className="flex-1 px-4 py-2.5 text-xs font-bold text-white bg-neon/20 border border-neon/30 text-neon rounded-xl hover:bg-neon/30 transition-colors cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5 inline mr-1" /> Fechar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Import Modal ── */}
       {importStep && (
