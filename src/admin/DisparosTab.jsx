@@ -3,6 +3,7 @@ import {
   Zap, Plus, X, ChevronRight, ChevronLeft, Check, Loader2,
   Pause, Play, Users, Calendar, Clock, Settings, RefreshCw,
   Search, Target, AlertCircle, ThumbsUp, ThumbsDown, MessageSquareOff, ChevronDown,
+  Pencil, Trash2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -73,6 +74,15 @@ export default function DisparosTab() {
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState(null); // null | 'ok' | 'erro'
   const [testErro, setTestErro] = useState('');
+
+  // ── Editar campanha ──
+  const [editModal, setEditModal] = useState(null); // campanha object
+  const [editNome, setEditNome] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  // ── Deletar campanha ──
+  const [deleteModal, setDeleteModal] = useState(null); // campanha object
+  const [deleting, setDeleting] = useState(false);
 
   // ── Fetches ──
   const fetchCampanhas = useCallback(async () => {
@@ -232,6 +242,27 @@ export default function DisparosTab() {
     fetchCampanhas();
   };
 
+  const handleSaveEdit = async () => {
+    if (!editModal || !editNome.trim()) return;
+    setEditSaving(true);
+    await supabase.from('disparo_campanhas')
+      .update({ nome: editNome.trim() })
+      .eq('id', editModal.id);
+    setEditSaving(false);
+    setEditModal(null);
+    fetchCampanhas();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteModal) return;
+    setDeleting(true);
+    await supabase.from('disparo_fila').delete().eq('campanha_id', deleteModal.id);
+    await supabase.from('disparo_campanhas').delete().eq('id', deleteModal.id);
+    setDeleting(false);
+    setDeleteModal(null);
+    fetchCampanhas();
+  };
+
   const handleTesteWebhook = async () => {
     if (!config.webhook_url || !testPhone.trim()) return;
     setTestLoading(true);
@@ -340,7 +371,7 @@ export default function DisparosTab() {
                         Criada em {new Date(c.criado_em).toLocaleDateString('pt-BR')}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {(c.status === 'ativa' || c.status === 'pausada') && (
                         <button onClick={() => handlePausar(c.id, c.status)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-dark-600 text-zinc-400 hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
@@ -349,6 +380,18 @@ export default function DisparosTab() {
                             : <><Play className="w-3 h-3" /> Retomar</>}
                         </button>
                       )}
+                      <button
+                        onClick={() => { setEditModal(c); setEditNome(c.nome); }}
+                        className="p-1.5 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-dark-700 transition-colors cursor-pointer"
+                        title="Editar nome">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteModal(c)}
+                        className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        title="Deletar campanha">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -458,6 +501,76 @@ export default function DisparosTab() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Modal: Editar nome ── */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Editar campanha</h3>
+              <button onClick={() => setEditModal(null)} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold block mb-1.5">Nome</label>
+              <input
+                value={editNome}
+                onChange={e => setEditNome(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSaveEdit()}
+                autoFocus
+                className="w-full bg-dark-800 border border-dark-700 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500/50"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditModal(null)}
+                className="flex-1 py-2.5 text-xs font-semibold text-zinc-400 border border-dark-600 rounded-xl hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+                Cancelar
+              </button>
+              <button onClick={handleSaveEdit} disabled={editSaving || !editNome.trim()}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default">
+                {editSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Confirmar deleção ── */}
+      {deleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Deletar campanha?</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl px-4 py-3 space-y-1">
+              <p className="text-sm font-semibold text-white truncate">{deleteModal.nome}</p>
+              <p className="text-xs text-zinc-500">
+                {deleteModal.total_contatos.toLocaleString('pt-BR')} contatos na fila ·{' '}
+                {deleteModal.enviados_total.toLocaleString('pt-BR')} já enviados
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteModal(null)}
+                className="flex-1 py-2.5 text-xs font-semibold text-zinc-400 border border-dark-600 rounded-xl hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+                Cancelar
+              </button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default">
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                {deleting ? 'Deletando...' : 'Deletar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
