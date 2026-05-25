@@ -267,7 +267,7 @@ export default function ContatosTab() {
   };
 
   const handleDisparo = async () => {
-    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK_CONTATOS;
     if (!webhookUrl) return;
     setDisparoLoading(true);
     setDisparoDone(false);
