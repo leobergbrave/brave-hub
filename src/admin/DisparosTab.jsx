@@ -66,6 +66,12 @@ export default function DisparosTab() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(false);
 
+  // Teste de webhook
+  const [testPhone, setTestPhone] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState(null); // null | 'ok' | 'erro'
+  const [testErro, setTestErro] = useState('');
+
   // ── Fetches ──
   const fetchCampanhas = useCallback(async () => {
     setLoadingCampanhas(true);
@@ -208,6 +214,33 @@ export default function DisparosTab() {
       .update({ status: status === 'ativa' ? 'pausada' : 'ativa' })
       .eq('id', id);
     fetchCampanhas();
+  };
+
+  const handleTesteWebhook = async () => {
+    if (!config.webhook_url || !testPhone.trim()) return;
+    setTestLoading(true);
+    setTestResult(null);
+    setTestErro('');
+    try {
+      let tel = testPhone.replace(/\D/g, '');
+      if (tel.length === 10 || tel.length === 11) tel = '55' + tel;
+      const res = await fetch(config.webhook_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente: 'Teste Brave HUB', telefone: tel }),
+      });
+      if (res.ok) {
+        setTestResult('ok');
+      } else {
+        setTestResult('erro');
+        setTestErro(`HTTP ${res.status}`);
+      }
+    } catch (e) {
+      setTestResult('erro');
+      setTestErro(e.message);
+    } finally {
+      setTestLoading(false);
+    }
   };
 
   const estimativa = () => {
@@ -624,6 +657,39 @@ export default function DisparosTab() {
                         </span>
                       )}
                     </div>
+                  </div>
+
+                  {/* ── Teste de webhook ── */}
+                  <div className="bg-dark-800/40 border border-dark-700/30 rounded-xl p-4 space-y-3">
+                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">Testar webhook antes de ativar</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="tel"
+                        value={testPhone}
+                        onChange={e => { setTestPhone(e.target.value); setTestResult(null); }}
+                        placeholder="Seu WhatsApp: (11) 99999-9999"
+                        className="flex-1 bg-dark-800 border border-dark-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500/50 placeholder:text-dark-500"
+                      />
+                      <button
+                        onClick={handleTesteWebhook}
+                        disabled={testLoading || !testPhone.trim() || !config.webhook_url}
+                        className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default text-zinc-300 border-dark-600 hover:text-white hover:bg-dark-700">
+                        {testLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                        {testLoading ? 'Enviando...' : 'Disparar teste'}
+                      </button>
+                    </div>
+                    {testResult === 'ok' && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        Webhook respondeu OK — verifique seu WhatsApp!
+                      </div>
+                    )}
+                    {testResult === 'erro' && (
+                      <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        Falha: {testErro} — verifique a Webhook URL nas Regras.
+                      </div>
+                    )}
                   </div>
 
                   {preview.total === 0 && (
