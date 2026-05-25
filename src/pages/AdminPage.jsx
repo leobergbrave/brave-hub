@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles } from 'lucide-react';
+import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap } from 'lucide-react';
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
 import DescontosTab from '../admin/DescontosTab';
@@ -11,12 +11,14 @@ import { Layers, Users, Mail, BookUser } from 'lucide-react';
 import LeadsTab from '../admin/LeadsTab';
 import EmailsTab from '../admin/EmailsTab';
 import ContatosTab from '../admin/ContatosTab';
+import DisparosTab from '../admin/DisparosTab';
 import OrcamentoPage from './OrcamentoPage';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'leads', label: 'Leads', icon: Users },
   { id: 'contatos', label: 'Contatos', icon: BookUser },
+  { id: 'disparos', label: 'Disparos', icon: Zap },
   { id: 'produtos', label: 'Produtos', icon: Package },
   { id: 'categorias', label: 'Categorias', icon: Layers },
   { id: 'descontos', label: 'Descontos', icon: Tag },
@@ -43,6 +45,7 @@ export default function AdminPage() {
       case 'dashboard': return <DashboardTab />;
       case 'leads': return <LeadsTab />;
       case 'contatos': return <ContatosTab />;
+      case 'disparos': return <DisparosTab />;
       case 'produtos': return <ProdutosTab />;
       case 'categorias': return <CategoriasTab />;
       case 'descontos': return <DescontosTab />;
