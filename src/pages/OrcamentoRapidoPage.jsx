@@ -170,6 +170,18 @@ export default function OrcamentoRapidoPage() {
               proximo_alerta_em: null,
               aberto_em: new Date().toISOString(),
             }).eq('codigo', codigo);
+
+            // Avança o lead para "link_aberto" quando o cliente abre o link
+            if (linkData.telefone_lead) {
+              const tel = linkData.telefone_lead.replace(/\D/g, '');
+              const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
+              const telSemDDI = tel.startsWith('55') ? tel.slice(2) : tel;
+              await supabase
+                .from('leads')
+                .update({ status: 'link_aberto' })
+                .or(`telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`)
+                .in('status', ['novo', 'fluxo_disparado', 'respondeu', 'orcamento_gerado']);
+            }
           }
 
           termos = linkData.produtos_texto.split(',').map(t => t.trim()).filter(Boolean);

@@ -83,6 +83,15 @@ export default async function handler(req) {
       await dbPatch('contatos', orFilter, { optout: true, optout_em: agora });
     }
 
+    // Avança o lead para "respondeu" quando responde positivamente à campanha
+    if (resposta === 'aceitou') {
+      const orFilter = `or=(telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI})`;
+      const leadItems = await dbSelect('leads', `${orFilter}&status=in.(novo,fluxo_disparado)&order=criado_em.desc&limit=1`, 'id');
+      if (leadItems?.length) {
+        await dbPatch('leads', `id=eq.${leadItems[0].id}`, { status: 'respondeu', respondeu_em: agora });
+      }
+    }
+
     return json({ ok: true, campanha_id: item.campanha_id, resposta, telefone: tel });
 
   } catch (err) {

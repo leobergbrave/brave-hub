@@ -25,8 +25,7 @@ export default async function handler(req, res) {
     }
 
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     // Gerar código curto único (6 chars)
     const codigo = Math.random().toString(36).substring(2, 8);
@@ -41,6 +40,18 @@ export default async function handler(req, res) {
     });
 
     if (error) throw error;
+
+    // Avança o lead para "orcamento_gerado" quando o bot gera o link
+    if (telefone) {
+      const tel = telefone.replace(/\D/g, '');
+      const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
+      const telSemDDI = tel.startsWith('55') ? tel.slice(2) : tel;
+      await supabase
+        .from('leads')
+        .update({ status: 'orcamento_gerado' })
+        .or(`telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`)
+        .in('status', ['novo', 'fluxo_disparado', 'respondeu']);
+    }
 
     const baseUrl = req.headers['x-forwarded-host']
       ? `https://${req.headers['x-forwarded-host']}`
