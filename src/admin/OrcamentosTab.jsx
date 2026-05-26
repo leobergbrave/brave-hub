@@ -84,6 +84,8 @@ export default function OrcamentosTab() {
   const [linkingRapido, setLinkingRapido] = useState(null);
   const [leadsDisponiveis, setLeadsDisponiveis] = useState([]);
   const [searchVincular, setSearchVincular] = useState('');
+  const [aprovandoModal, setAprovandoModal] = useState(null);
+  const [valorFechado, setValorFechado] = useState('');
 
   const navigate = useNavigate();
 
@@ -110,6 +112,18 @@ export default function OrcamentosTab() {
   const changeStatus = async (o, status) => {
     const newPayload = { ...o.payload, status };
     await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', o.id);
+    load();
+  };
+
+  const confirmarAprovacao = async () => {
+    if (!aprovandoModal) return;
+    const o = aprovandoModal;
+    const valor = parseFloat(valorFechado.replace(',', '.')) || null;
+    await supabase.from('orcamentos_salvos')
+      .update({ payload: { ...o.payload, status: 'Aprovado' }, valor_fechado: valor })
+      .eq('id', o.id);
+    setAprovandoModal(null);
+    setValorFechado('');
     load();
   };
 
@@ -199,9 +213,14 @@ export default function OrcamentosTab() {
   const mAprovados  = orcs.filter(o => (o.payload?.status || 'Pendente') === 'Aprovado').length;
   const mPendentes  = orcs.filter(o => (o.payload?.status || 'Pendente') === 'Pendente').length;
   const mAbertos    = orcs.filter(o => o.aberto).length;
-  const mValorAberto = orcs
-    .filter(o => (o.payload?.status || 'Pendente') === 'Pendente')
-    .reduce((acc, o) => acc + (o.payload?.itens || []).reduce((s, i) => s + i.preco * i.quantidade, 0), 0);
+  const mValorAprovado = orcs
+    .filter(o => (o.payload?.status || 'Pendente') === 'Aprovado')
+    .reduce((acc, o) => {
+      const v = o.valor_fechado != null
+        ? o.valor_fechado
+        : (o.payload?.itens || []).reduce((s, i) => s + i.preco * i.quantidade, 0);
+      return acc + v;
+    }, 0);
 
   const manuaisFunnel = [
     { label: 'Criados',   count: totalManuais, bg: 'bg-dark-800',        color: 'text-zinc-400' },
@@ -210,10 +229,10 @@ export default function OrcamentosTab() {
   ];
 
   const manuaisStats = [
-    { label: 'Total',           value: totalManuais,          color: 'text-white' },
-    { label: 'Pendentes',       value: mPendentes,            color: 'text-amber-400' },
-    { label: 'Aprovados',       value: mAprovados,            color: 'text-emerald-400' },
-    { label: 'Valor em aberto', value: formatCurrency(mValorAberto), color: 'text-neon' },
+    { label: 'Total',          value: totalManuais,                 color: 'text-white' },
+    { label: 'Pendentes',      value: mPendentes,                   color: 'text-amber-400' },
+    { label: 'Aprovados',      value: mAprovados,                   color: 'text-emerald-400' },
+    { label: 'Total Fechado',  value: formatCurrency(mValorAprovado), color: 'text-neon' },
   ];
 
   // ── Rápidos metrics ──
@@ -268,6 +287,41 @@ export default function OrcamentosTab() {
 
   return (
     <div>
+      {/* Modal Aprovar */}
+      {aprovandoModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-white font-bold text-base mb-1">Confirmar Aprovação</h3>
+            <p className="text-xs text-zinc-500 mb-5">{aprovandoModal.cliente}</p>
+            <div className="bg-dark-800/60 rounded-xl p-3 mb-5 flex justify-between items-center">
+              <span className="text-xs text-zinc-500">Valor do orçamento</span>
+              <span className="text-sm font-bold text-white">
+                {formatCurrency((aprovandoModal.payload?.itens || []).reduce((acc, i) => acc + i.preco * i.quantidade, 0))}
+              </span>
+            </div>
+            <label className="block text-xs font-semibold text-zinc-400 mb-2">Valor real de fechamento (R$)</label>
+            <input
+              autoFocus
+              type="text"
+              inputMode="decimal"
+              value={valorFechado}
+              onChange={e => setValorFechado(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && confirmarAprovacao()}
+              placeholder="Ex: 1.250,00"
+              className="w-full px-3 py-2.5 bg-dark-800 border border-dark-600 rounded-xl text-zinc-300 placeholder-zinc-500 text-sm focus:outline-none focus:border-neon/50 mb-5"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setAprovandoModal(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-zinc-400 hover:text-white bg-dark-800 hover:bg-dark-700 transition-colors cursor-pointer">
+                Cancelar
+              </button>
+              <button onClick={confirmarAprovacao} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors cursor-pointer">
+                Confirmar Aprovação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Vincular Lead */}
       {linkingRapido && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -439,7 +493,7 @@ export default function OrcamentosTab() {
                         <Send className="w-3 h-3" /> Bling
                       </button>
                       {statusStr === 'Pendente' && (
-                        <button onClick={() => changeStatus(o, 'Aprovado')} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
+                        <button onClick={() => { setAprovandoModal(o); setValorFechado(''); }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
                           <CheckCircle2 className="w-3 h-3" /> Aprovar
                         </button>
                       )}
@@ -580,7 +634,7 @@ export default function OrcamentosTab() {
                             <Send className="w-3 h-3" /> Bling
                           </button>
                           {statusGerado === 'Pendente' && (
-                            <button onClick={() => changeStatusRapido(l, 'Aprovado')} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
+                            <button onClick={() => { if (orcGerado) { setAprovandoModal(orcGerado); setValorFechado(''); } }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
                               <CheckCircle2 className="w-3 h-3" /> Aprovar
                             </button>
                           )}
