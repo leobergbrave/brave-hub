@@ -49,7 +49,7 @@ export default async function handler(req) {
 
   const tel = telefoneRaw.replace(/\D/g, '');
   if (tel.length < 10) {
-    return json({ ok: false, msg: 'Telefone inválido ou variável não substituída pelo BotConversa' });
+    return json({ ok: true, updated: false, msg: 'Telefone inválido ou variável não substituída' });
   }
 
   const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
@@ -65,7 +65,7 @@ export default async function handler(req) {
     );
 
     if (!leads?.length) {
-      return json({ ok: false, msg: 'Lead não encontrado ou já avançado além de fluxo_disparado' });
+      return json({ ok: true, updated: false, msg: 'Lead não encontrado ou já avançado' });
     }
 
     await dbPatch('leads', `id=eq.${leads[0].id}`, { status: 'respondeu', respondeu_em: agora });
