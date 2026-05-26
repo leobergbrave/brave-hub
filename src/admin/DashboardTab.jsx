@@ -45,13 +45,14 @@ export default function DashboardTab() {
       const totalGerados = orcamentos.length;
       
       const calcTotal = (o) => {
+        if (o.valor_fechado != null) return o.valor_fechado;
         const itens = o.payload?.itens || [];
         return itens.reduce((acc, i) => acc + (i.preco * i.quantidade), 0);
       };
 
       const pendentes = orcamentos.filter(o => (o.payload?.status || 'Pendente') === 'Pendente');
       const aprovados = orcamentos.filter(o => o.payload?.status === 'Aprovado');
-      
+
       const valorAprovado = aprovados.reduce((s, o) => s + calcTotal(o), 0);
       const potencialVendas = pendentes.reduce((s, o) => s + calcTotal(o), 0);
 
@@ -294,7 +295,9 @@ export default function DashboardTab() {
             ) : (
               <div className="space-y-4">
                 {recentWins.map(w => {
-                  const total = w.payload?.itens?.reduce((acc, i) => acc + (i.preco * i.quantidade), 0) || 0;
+                  const total = w.valor_fechado != null
+                    ? w.valor_fechado
+                    : (w.payload?.itens?.reduce((acc, i) => acc + (i.preco * i.quantidade), 0) || 0);
                   return (
                     <div key={w.id} className="flex flex-col p-4 bg-dark-900/50 rounded-2xl border border-dark-700/30 hover:border-emerald-500/30 transition-colors">
                       <span className="text-emerald-400 font-black mb-1">{formatCurrency(total)}</span>
