@@ -49,22 +49,37 @@ function todayBRT() {
   return nowBRT().toISOString().split('T')[0];
 }
 
-function isWithinWindow(cfg) {
-  const brt    = nowBRT();
-  const hour   = brt.getUTCHours();
-  const min    = brt.getUTCMinutes();
-  const jsDow  = brt.getUTCDay();
-  const ourDow = jsDow === 0 ? 7 : jsDow;
-
+// Desloca um timestamp proposto (ms) para o próximo slot válido dentro da janela (BRT).
+// Usado para agendar o PRÓXIMO item após cada envio — não bloqueia o primeiro envio.
+function nextWindowSlot(cfg, proposedMs) {
   const [startH, startM] = (cfg.hora_inicio || '08:00').split(':').map(Number);
   const [endH,   endM  ] = (cfg.hora_fim    || '18:00').split(':').map(Number);
-
-  const now   = hour * 60 + min;
-  const start = startH * 60 + startM;
-  const end   = endH   * 60 + endM;
-
+  const startMin = startH * 60 + startM;
+  const endMin   = endH   * 60 + endM;
   const dias = cfg.dias_semana || [1, 2, 3, 4, 5];
-  return dias.includes(ourDow) && now >= start && now < end;
+
+  let dt = new Date(proposedMs);
+
+  for (let i = 0; i < 14; i++) {
+    const brt    = new Date(dt.getTime() - 3 * 60 * 60 * 1000);
+    const jsDow  = brt.getUTCDay();
+    const ourDow = jsDow === 0 ? 7 : jsDow;
+    const curMin = brt.getUTCHours() * 60 + brt.getUTCMinutes();
+
+    if (dias.includes(ourDow)) {
+      if (curMin >= startMin && curMin < endMin) return dt.toISOString(); // já na janela
+      if (curMin < startMin) {
+        // Mesmo dia válido, antes do início → empurra para hora_inicio
+        brt.setUTCHours(startH, startM, 0, 0);
+        return new Date(brt.getTime() + 3 * 60 * 60 * 1000).toISOString();
+      }
+    }
+    // Após o fim da janela ou dia inválido → próximo dia em hora_inicio
+    brt.setUTCDate(brt.getUTCDate() + 1);
+    brt.setUTCHours(startH, startM, 0, 0);
+    dt = new Date(brt.getTime() + 3 * 60 * 60 * 1000);
+  }
+  return dt.toISOString();
 }
 
 function randomDelayMs(minMin, maxMin) {
@@ -102,9 +117,9 @@ async function run(req) {
   if (!cfgArr?.length) return respond({ ok: true, skipped: 'configuração não encontrada' });
   const cfg = cfgArr[0];
 
-  if (!isWithinWindow(cfg)) {
-    return respond({ ok: true, skipped: `fora da janela (${cfg.hora_inicio}–${cfg.hora_fim})` });
-  }
+  // Sem bloqueio global de janela horária — campanhas começam imediatamente ao serem
+  // ativadas. A janela (hora_inicio/hora_fim) é usada apenas para agendar o PRÓXIMO
+  // item após cada envio bem-sucedido, via nextWindowSlot().
 
   const nowIso = new Date().toISOString();
   const today  = todayBRT();
@@ -179,9 +194,10 @@ async function run(req) {
         ultima_data:    today,
       });
 
+      // Agenda próximo item no próximo slot válido da janela configurada
       const delayMs       = randomDelayMs(cfg.delay_min_min, cfg.delay_max_min);
-      const nextSendAfter = new Date(Date.now() + delayMs).toISOString();
-      const delayMin      = Math.round(delayMs / 60000);
+      const nextSendAfter = nextWindowSlot(cfg, Date.now() + delayMs);
+      const delayMin      = Math.round((new Date(nextSendAfter).getTime() - Date.now()) / 60000);
 
       const nextItems = await dbSelect(
         'disparo_fila',
