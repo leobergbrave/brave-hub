@@ -140,10 +140,10 @@ async function run(req) {
       continue;
     }
 
-    const nowEnc = encodeURIComponent(nowIso);
+    // Busca próximo item pronto — sem encodeURIComponent para evitar problema de parsing no PostgREST
     const items = await dbSelect(
       'disparo_fila',
-      `campanha_id=eq.${campanha.id}&status=eq.pending&send_after=lte.${nowEnc}&order=send_after.asc&limit=1`,
+      `campanha_id=eq.${campanha.id}&status=eq.pending&send_after=lte.${nowIso}&order=send_after.asc&limit=1`,
       'id,campanha_id,nome,telefone'
     );
 
@@ -153,7 +153,23 @@ async function run(req) {
         await dbPatch('disparo_campanhas', `id=eq.${campanha.id}`, { status: 'concluida' });
         results.push({ campanha_id: campanha.id, completed: true });
       } else {
-        results.push({ campanha_id: campanha.id, skipped: 'próximo envio agendado no futuro' });
+        // Recovery: se a campanha nunca enviou/falhou, o primeiro item provavelmente ficou
+        // preso com send_after = FAR_FUTURE (bug no create). Ativa imediatamente.
+        if (!campanha.enviados_total && !campanha.falhas_total) {
+          const firstPending = await dbSelect(
+            'disparo_fila',
+            `campanha_id=eq.${campanha.id}&status=eq.pending&order=criado_em.asc&limit=1`,
+            'id,send_after'
+          );
+          if (firstPending?.length) {
+            await dbPatch('disparo_fila', `id=eq.${firstPending[0].id}`, { send_after: nowIso });
+            results.push({ campanha_id: campanha.id, skipped: 'primeiro item ativado — aguardar próximo ciclo', send_after_era: firstPending[0].send_after });
+          } else {
+            results.push({ campanha_id: campanha.id, skipped: 'próximo envio agendado no futuro' });
+          }
+        } else {
+          results.push({ campanha_id: campanha.id, skipped: 'próximo envio agendado no futuro' });
+        }
       }
       continue;
     }
