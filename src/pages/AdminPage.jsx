@@ -12,7 +12,6 @@ import LeadsTab from '../admin/LeadsTab';
 import EmailsTab from '../admin/EmailsTab';
 import ContatosTab from '../admin/ContatosTab';
 import DisparosTab from '../admin/DisparosTab';
-import OrcamentoPage from './OrcamentoPage';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -36,6 +35,10 @@ export default function AdminPage() {
   const currentTab = TABS.find(t => t.id === tab);
 
   const handleTabChange = (id) => {
+    if (id === 'gerador') {
+      window.open('/', '_blank');
+      return;
+    }
     setTab(id);
     setDrawerOpen(false);
   };
@@ -53,7 +56,6 @@ export default function AdminPage() {
       case 'orcamentos': return <OrcamentosTab />;
       case 'marketing': return <MarketingTab />;
       case 'emails': return <EmailsTab />;
-      case 'gerador': return <OrcamentoPage />;
       default: return null;
     }
   };
