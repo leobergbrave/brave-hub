@@ -491,7 +491,7 @@ export default function DisparosTab() {
                         <div className="pt-2 border-t border-dark-700/30">
                           <p className="text-[9px] text-zinc-600">
                             Configure o BotConversa para enviar webhooks para:<br/>
-                            <span className="font-mono text-zinc-500">POST brave-hub-two-liard.vercel.app/api/disparo-resposta</span>
+                            <span className="font-mono text-zinc-500">POST brave-hub-two.vercel.app/api/disparo-resposta</span>
                           </p>
                         </div>
                       </>
