@@ -29,9 +29,9 @@ const STATUS_PIPELINE = [
   { value: 'novo',             label: 'Novo',             color: 'text-zinc-400',   bg: 'bg-zinc-500/10',   border: 'border-zinc-500/20'   },
   { value: 'fluxo_disparado',  label: 'Fluxo Disparado',  color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20'   },
   { value: 'respondeu',        label: 'Respondeu',        color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20'  },
+  { value: 'orcamento_gerado', label: 'Orçamento Gerado', color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20'  },
   { value: 'link_aberto',      label: 'Link Aberto',      color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
   { value: 'qualificando',     label: 'Qualificando',     color: 'text-cyan-400',   bg: 'bg-cyan-500/10',   border: 'border-cyan-500/20'   },
-  { value: 'orcamento_gerado', label: 'Orçamento Gerado', color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20'  },
   { value: 'convertido',       label: 'Convertido',       color: 'text-neon',       bg: 'bg-neon/10',       border: 'border-neon/20'       },
   { value: 'aprovado',         label: 'Aprovado ✓',       color: 'text-emerald-400',bg: 'bg-emerald-500/10',border: 'border-emerald-500/20'},
 ];
@@ -54,7 +54,7 @@ function MomentoBadge({ momento }) {
   );
 }
 
-const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'link_aberto', 'orcamento_gerado', 'aprovado'];
+const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link_aberto', 'aprovado'];
 
 /* ─── Funnel metrics ─── */
 function FunnelBar({ leads }) {
