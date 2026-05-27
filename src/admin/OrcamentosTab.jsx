@@ -86,6 +86,7 @@ export default function OrcamentosTab() {
   const [searchVincular, setSearchVincular] = useState('');
   const [aprovandoModal, setAprovandoModal] = useState(null);
   const [valorFechado, setValorFechado] = useState('');
+  const [filtroSemLead, setFiltroSemLead] = useState(false);
 
   const navigate = useNavigate();
 
@@ -297,7 +298,10 @@ export default function OrcamentosTab() {
     return statusOk && (o.cliente?.toLowerCase().includes(t) || new Date(o.criado_em).toLocaleDateString('pt-BR').includes(t));
   });
 
+  const semLeadCount = links.filter(l => !leadMap[l.codigo]).length;
+
   const filteredRapidos = links.filter(l => {
+    if (filtroSemLead && leadMap[l.codigo]) return false;
     if (!searchRapidos) return true;
     const t = searchRapidos.toLowerCase();
     const ld = leadMap[l.codigo];
@@ -552,14 +556,18 @@ export default function OrcamentosTab() {
           {/* Stats */}
           <StatRow items={rapidosStats} />
 
-          {/* Search + vincular histórico */}
-          <div className="flex gap-2 mb-5">
-            <div className="relative flex-1">
+          {/* Search + filtros */}
+          <div className="flex gap-2 mb-5 flex-wrap">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
               <input type="text" value={searchRapidos} onChange={e => setSearchRapidos(e.target.value)}
                 placeholder="Buscar por lead ou produto..."
                 className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 text-sm transition-all" />
             </div>
+            <button onClick={() => setFiltroSemLead(v => !v)}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl border cursor-pointer whitespace-nowrap transition-colors ${filtroSemLead ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-dark-800 text-zinc-400 hover:text-white border-dark-600'}`}>
+              Sem lead {semLeadCount > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${filtroSemLead ? 'bg-red-500/30' : 'bg-dark-700'}`}>{semLeadCount}</span>}
+            </button>
             <button onClick={handleVincularHistorico}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 cursor-pointer whitespace-nowrap transition-colors">
               <Link2 className="w-3.5 h-3.5" /> Vincular histórico
