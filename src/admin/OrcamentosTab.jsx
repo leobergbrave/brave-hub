@@ -174,6 +174,32 @@ export default function OrcamentosTab() {
     load();
   };
 
+  const handleVincularHistorico = async () => {
+    const semLead = links.filter(l => !leadMap[l.codigo] && l.telefone_lead);
+    if (!semLead.length) {
+      alert('Nenhum link sem vínculo com telefone disponível.');
+      return;
+    }
+    let count = 0;
+    for (const l of semLead) {
+      const tel = l.telefone_lead.replace(/\D/g, '');
+      const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
+      const telSemDDI = tel.startsWith('55') ? tel.slice(2) : tel;
+      const { data } = await supabase
+        .from('leads')
+        .select('id')
+        .or(`telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`)
+        .is('link_rapido_codigo', null)
+        .limit(1);
+      if (data?.length) {
+        await supabase.from('leads').update({ link_rapido_codigo: l.codigo }).eq('id', data[0].id);
+        count++;
+      }
+    }
+    alert(`${count} de ${semLead.length} leads vinculados.`);
+    load();
+  };
+
   const changeStatusRapido = async (l, status) => {
     const orc = orcs.find(o => o.slug === l.slug_gerado);
     if (!orc) return;
@@ -526,12 +552,18 @@ export default function OrcamentosTab() {
           {/* Stats */}
           <StatRow items={rapidosStats} />
 
-          {/* Search */}
-          <div className="mb-5 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-            <input type="text" value={searchRapidos} onChange={e => setSearchRapidos(e.target.value)}
-              placeholder="Buscar por lead ou produto..."
-              className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 text-sm transition-all" />
+          {/* Search + vincular histórico */}
+          <div className="flex gap-2 mb-5">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
+              <input type="text" value={searchRapidos} onChange={e => setSearchRapidos(e.target.value)}
+                placeholder="Buscar por lead ou produto..."
+                className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 text-sm transition-all" />
+            </div>
+            <button onClick={handleVincularHistorico}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 cursor-pointer whitespace-nowrap transition-colors">
+              <Link2 className="w-3.5 h-3.5" /> Vincular histórico
+            </button>
           </div>
 
           {filteredRapidos.length === 0 ? (

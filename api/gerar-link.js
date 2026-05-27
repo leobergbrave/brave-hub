@@ -41,16 +41,25 @@ export default async function handler(req, res) {
 
     if (error) throw error;
 
-    // Avança o lead para "orcamento_gerado" quando o bot gera o link
+    // Avança o lead e vincula ao link rápido
     if (telefone) {
       const tel = telefone.replace(/\D/g, '');
       const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
       const telSemDDI = tel.startsWith('55') ? tel.slice(2) : tel;
+      const orFilter = `telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`;
+
       await supabase
         .from('leads')
         .update({ status: 'orcamento_gerado' })
-        .or(`telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`)
+        .or(orFilter)
         .in('status', ['novo', 'fluxo_disparado', 'respondeu']);
+
+      // Vincula o código do link ao lead (se ainda não tiver vínculo)
+      await supabase
+        .from('leads')
+        .update({ link_rapido_codigo: codigo })
+        .or(orFilter)
+        .is('link_rapido_codigo', null);
     }
 
     const baseUrl = req.headers['x-forwarded-host']
