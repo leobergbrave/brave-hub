@@ -63,7 +63,7 @@ export default async function handler(req) {
     const buscarFila = async (statusFilter) => {
       let qs = `or=(telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI})&order=criado_em.desc&limit=1`;
       if (statusFilter) qs += `&status=eq.${statusFilter}`;
-      return dbSelect('disparo_fila', qs, 'id,campanha_id');
+      return dbSelect('disparo_fila', qs, 'id,campanha_id,resposta');
     };
 
     let items = await buscarFila('sent');
@@ -75,6 +75,12 @@ export default async function handler(req) {
 
     const item  = items[0];
     const agora = new Date().toISOString();
+
+    // Não sobrescreve estado final (aceitou/optout) com sem_resposta
+    const ESTADOS_FINAIS = ['aceitou', 'optout'];
+    if (resposta === 'sem_resposta' && ESTADOS_FINAIS.includes(item.resposta)) {
+      return json({ ok: true, skipped: true, campanha_id: item.campanha_id, msg: 'Estado final preservado' });
+    }
 
     await dbPatch('disparo_fila', `id=eq.${item.id}`, { resposta, respondeu_em: agora });
 
