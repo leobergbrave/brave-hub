@@ -100,11 +100,23 @@ export default function ContatosTab() {
   }, [busca, filtroStatus, filtroOrigem, page]);
 
   const fetchStats = useCallback(async () => {
-    const { data } = await supabase.from('contatos').select('status');
-    if (!data) return;
-    const s = { total: data.length, quente: 0, morno: 0, frio: 0 };
-    data.forEach(c => { if (s[c.status] !== undefined) s[c.status]++; });
-    setStats(s);
+    const [
+      { count: totalCount },
+      { count: quenteCount },
+      { count: mornoCount },
+      { count: frioCount },
+    ] = await Promise.all([
+      supabase.from('contatos').select('*', { count: 'exact', head: true }),
+      supabase.from('contatos').select('*', { count: 'exact', head: true }).eq('status', 'quente'),
+      supabase.from('contatos').select('*', { count: 'exact', head: true }).eq('status', 'morno'),
+      supabase.from('contatos').select('*', { count: 'exact', head: true }).eq('status', 'frio'),
+    ]);
+    setStats({
+      total: totalCount || 0,
+      quente: quenteCount || 0,
+      morno: mornoCount || 0,
+      frio: frioCount || 0,
+    });
   }, []);
 
   useEffect(() => { fetchContatos(); }, [fetchContatos]);
