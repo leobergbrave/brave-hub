@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
 import {
@@ -6,6 +7,7 @@ import {
   Users, Zap, ChevronLeft, ChevronRight, Minus,
   Target, RefreshCw, Loader2, Filter,
   DollarSign, BarChart2, AlertTriangle, CheckCircle2, Calculator, Lightbulb,
+  Edit2, ExternalLink,
 } from 'lucide-react';
 
 function parseCurrency(str) {
@@ -95,10 +97,13 @@ export default function CockpitTab() {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
   });
+  const navigate = useNavigate();
   const [meta, setMeta] = useState('');
   const [filtroOrigem, setFiltroOrigem] = useState('Todos');
   const [loading, setLoading] = useState(true);
   const [raw, setRaw] = useState(null);
+  const [editCell, setEditCell] = useState({ id: null, field: null, val: '' });
+  const [savingCell, setSavingCell] = useState(false);
 
   // Marketing Intelligence — persiste no localStorage
   const [cplGlobal, setCplGlobal] = useState(() => localStorage.getItem('cockpit_cpl') || '');
@@ -270,6 +275,33 @@ export default function CockpitTab() {
 
     return { cac, roi, ltvCac, retornoPorReal, paybackDias, cacHealth, cacPct, sim, metaInvest, porCanal, cpl };
   }, [dados, cplGlobal, orcamentoSim, cplPorOrigem, metaNum]);
+
+  // Vendas aprovadas do mês (sem filtro de origem — mostra todas)
+  const vendasAprovadas = useMemo(() => {
+    if (!raw) return [];
+    return raw.orcsAtual
+      .filter(o => o.payload?.status === 'Aprovado')
+      .sort((a, b) => new Date(b.aprovado_em || b.criado_em) - new Date(a.aprovado_em || a.criado_em));
+  }, [raw]);
+
+  const saveEdit = async () => {
+    const { id, field, val } = editCell;
+    if (!id || !field || savingCell) return;
+    setSavingCell(true);
+    const update = {};
+    if (field === 'valor_fechado') update.valor_fechado = parseCurrency(val) || null;
+    if (field === 'origem_lead')   update.origem_lead   = val || null;
+    if (field === 'cliente')       update.cliente       = val.trim() || null;
+    await supabase.from('orcamentos_salvos').update(update).eq('id', id);
+    setEditCell({ id: null, field: null, val: '' });
+    setSavingCell(false);
+    load();
+  };
+
+  const startEdit = (id, field, currentVal) =>
+    setEditCell({ id, field, val: currentVal ?? '' });
+
+  const cancelEdit = () => setEditCell({ id: null, field: null, val: '' });
 
   const changeMonth = (dir) => {
     const [y, m] = mes.split('-').map(Number);
@@ -525,6 +557,133 @@ export default function CockpitTab() {
             ))}
           </div>
         </div>
+
+        {/* ── Vendas Fechadas ── */}
+        {vendasAprovadas.length > 0 && (
+          <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-dark-700/40 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <p className="text-sm font-bold text-white">Vendas Fechadas</p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">{vendasAprovadas.length}</span>
+              </div>
+              <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Clique nos campos coloridos para editar</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-700/30 bg-dark-900/30">
+                    <th className="text-left px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Cliente</th>
+                    <th className="text-right px-3 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Valor Orçado</th>
+                    <th className="text-right px-3 py-3 text-[10px] font-bold text-emerald-500/70 uppercase tracking-wider">Valor Fechado ✎</th>
+                    <th className="text-center px-3 py-3 text-[10px] font-bold text-blue-400/70 uppercase tracking-wider">Origem ✎</th>
+                    <th className="text-right px-3 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Data</th>
+                    <th className="text-center px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Proposta</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-700/20">
+                  {vendasAprovadas.map(o => {
+                    const subtotal = (o.payload?.itens || []).reduce((acc, i) => acc + i.preco * i.quantidade, 0);
+                    const data = new Date(o.aprovado_em || o.criado_em).toLocaleDateString('pt-BR');
+                    const isEditValor  = editCell.id === o.id && editCell.field === 'valor_fechado';
+                    const isEditOrigem = editCell.id === o.id && editCell.field === 'origem_lead';
+                    const isEditCliente = editCell.id === o.id && editCell.field === 'cliente';
+                    const onKey = (e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); };
+
+                    return (
+                      <tr key={o.id} className="hover:bg-dark-700/20 transition-colors group">
+                        {/* Cliente */}
+                        <td className="px-4 py-3">
+                          {isEditCliente ? (
+                            <input autoFocus value={editCell.val}
+                              onChange={e => setEditCell(c => ({ ...c, val: e.target.value }))}
+                              onBlur={saveEdit} onKeyDown={onKey}
+                              className="w-40 text-sm bg-dark-900 border border-neon/50 rounded-lg px-2 py-1 text-white focus:outline-none" />
+                          ) : (
+                            <div>
+                              <button onClick={() => startEdit(o.id, 'cliente', o.cliente)}
+                                className="text-sm font-semibold text-white hover:text-neon cursor-pointer transition-colors text-left">
+                                {o.cliente}
+                              </button>
+                              <p className="text-[10px] text-zinc-500">{o.consultor}</p>
+                            </div>
+                          )}
+                        </td>
+                        {/* Valor Orçado */}
+                        <td className="px-3 py-3 text-right text-xs text-zinc-500">{formatCurrency(subtotal)}</td>
+                        {/* Valor Fechado — editável */}
+                        <td className="px-3 py-3 text-right">
+                          {isEditValor ? (
+                            <input autoFocus type="text" value={editCell.val}
+                              onChange={e => setEditCell(c => ({ ...c, val: e.target.value }))}
+                              onBlur={saveEdit} onKeyDown={onKey}
+                              className="w-32 text-right text-sm bg-dark-900 border border-neon/50 rounded-lg px-2 py-1 text-white focus:outline-none" />
+                          ) : (
+                            <button onClick={() => startEdit(o.id, 'valor_fechado', o.valor_fechado ? String(o.valor_fechado) : '')}
+                              className="font-bold text-sm cursor-pointer hover:underline decoration-neon/50">
+                              {o.valor_fechado
+                                ? <span className="text-neon">{formatCurrency(o.valor_fechado)}</span>
+                                : <span className="text-zinc-600 text-xs font-normal">+ valor real</span>}
+                            </button>
+                          )}
+                        </td>
+                        {/* Origem — editável */}
+                        <td className="px-3 py-3 text-center">
+                          {isEditOrigem ? (
+                            <select autoFocus value={editCell.val}
+                              onChange={e => setEditCell(c => ({ ...c, val: e.target.value }))}
+                              onBlur={saveEdit}
+                              className="text-xs bg-dark-900 border border-neon/50 rounded-lg px-2 py-1.5 text-white focus:outline-none">
+                              <option value="">Não informado</option>
+                              <option value="RD STATION">RD Station</option>
+                              <option value="ENVIADO BRAVE">Enviado Brave</option>
+                              <option value="UAIROX">Uairox</option>
+                              <option value="INDICAÇÃO">Indicação</option>
+                            </select>
+                          ) : (
+                            <button onClick={() => startEdit(o.id, 'origem_lead', o.origem_lead || '')}
+                              className="text-[11px] font-semibold px-2.5 py-1 rounded-full cursor-pointer transition-all hover:ring-1 hover:ring-blue-400/30"
+                              style={{ backgroundColor: o.origem_lead ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.04)' }}>
+                              {o.origem_lead
+                                ? <span className="text-blue-300">{o.origem_lead}</span>
+                                : <span className="text-zinc-600">+ origem</span>}
+                            </button>
+                          )}
+                        </td>
+                        {/* Data */}
+                        <td className="px-3 py-3 text-right text-[11px] text-zinc-500">{data}</td>
+                        {/* Ações */}
+                        <td className="px-4 py-3 text-center">
+                          <button onClick={() => navigate(`/?edit=${o.slug}`)}
+                            className="flex items-center gap-1 text-[10px] font-semibold text-blue-400 hover:text-blue-300 px-2 py-1 rounded-lg hover:bg-blue-500/10 cursor-pointer transition-colors border border-blue-500/20 mx-auto">
+                            <Edit2 className="w-3 h-3" /> Editar proposta
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-dark-700/40 bg-dark-900/20">
+                    <td className="px-4 py-3 text-xs font-bold text-zinc-400">
+                      Total — {vendasAprovadas.length} {vendasAprovadas.length === 1 ? 'venda' : 'vendas'}
+                    </td>
+                    <td className="px-3 py-3 text-right text-xs text-zinc-500">
+                      {formatCurrency(vendasAprovadas.reduce((s, o) => s + (o.payload?.itens || []).reduce((a, i) => a + i.preco * i.quantidade, 0), 0))}
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm font-black text-neon">
+                      {formatCurrency(vendasAprovadas.reduce((s, o) => {
+                        const v = o.valor_fechado != null ? o.valor_fechado : (o.payload?.itens || []).reduce((a, i) => a + i.preco * i.quantidade, 0);
+                        return s + v;
+                      }, 0))}
+                    </td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════
             MARKETING INTELLIGENCE — Painel CFO
