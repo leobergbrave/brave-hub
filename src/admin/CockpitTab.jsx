@@ -43,6 +43,42 @@ function GaugeBar({ pct, label }) {
   );
 }
 
+function Tooltip({ text, position = 'top' }) {
+  const [show, setShow] = useState(false);
+  const posClass = position === 'right'
+    ? 'left-full top-1/2 -translate-y-1/2 ml-2'
+    : 'bottom-full left-1/2 -translate-x-1/2 mb-2';
+  return (
+    <div className="relative inline-flex shrink-0"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onTouchStart={() => setShow(v => !v)}>
+      <span className="w-4 h-4 rounded-full bg-dark-700 border border-dark-600 text-zinc-500 text-[9px] font-black flex items-center justify-center cursor-help hover:bg-neon/20 hover:text-neon hover:border-neon/30 transition-colors select-none">?</span>
+      {show && (
+        <div className={`absolute ${posClass} z-[200] w-64 bg-dark-800 border border-dark-600 rounded-xl p-3 shadow-2xl shadow-black/60 pointer-events-none`}>
+          <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-line">{text}</p>
+          <div className={`absolute w-2 h-2 bg-dark-800 border-dark-600 rotate-45 ${position === 'right' ? 'border-b border-l -left-1 top-1/2 -translate-y-1/2' : 'border-b border-r top-full left-1/2 -translate-x-1/2 -mt-1'}`} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TIPS = {
+  cpl: `Quanto você paga em média para gerar 1 lead via tráfego pago.\n\nEx: R$1.000/mês em anúncios → 20 leads = CPL de R$50.\n\n📌 Quanto menor, mais eficiente seu tráfego.`,
+  cac: `Custo real para adquirir 1 cliente.\nFórmula: CPL × leads necessários por venda.\n\nEx: CPL R$50 × 9 leads = CAC R$450.\n\n✅ Saudável: < 10% do ticket médio\n⚠️ Atenção: 10% a 20%\n🚨 Alto: > 20%`,
+  roi: `Retorno sobre o investimento em marketing.\nFórmula: (Ticket − CAC) ÷ CAC × 100\n\nROI de 1.066% = para cada R$1 investido, você lucra R$10,66 ALÉM do que gastou.\n\n📌 Qualquer ROI positivo já é lucrativo.`,
+  ltvcac: `Quantas vezes o ticket supera o CAC.\nFórmula: Ticket ÷ CAC\n\nLTV:CAC de 11,7x = o cliente vale 11,7x mais do que custou adquiri-lo.\n\n✅ Saudável: acima de 3x\n🏆 Excelente: acima de 5x`,
+  payback: `Em quantos dias a receita da venda paga o custo de aquisição.\nFórmula: (CAC ÷ Ticket) × 30 dias\n\nPayback de 3 dias = o investimento em tráfego já se paga em 3 dias de receita gerada.\n\n📌 Quanto menor, mais rápido o retorno do capital.`,
+  r1: `Mostra a alavancagem do seu canal de tráfego.\n\nSe o número é R$11,66 → cada R$1 investido em anúncios gera R$11,66 em receita bruta.\n\n📌 Use este número para justificar aumento de budget: "Cada real que eu peço de tráfego retorna R$11 de receita."`,
+  sim: `Projeção baseada no CPL informado e na taxa de conversão real do mês atual.\n\n⚠️ É uma estimativa — na prática, volume maior de leads pode diluir a taxa de conversão.`,
+  metaInvest: `Quanto você precisa investir em tráfego pago para atingir a meta de receita definida no topo.\n\nBaseado na taxa de conversão atual e no ticket médio do mês. Assume que a taxa se mantém constante.`,
+  canal: `Compara a eficiência de cada canal de origem.\n\nInforme o CPL de cada canal para ver qual gera mais receita por real investido.\n\n📌 Canais orgânicos (indicação): CPL = R$0 → ROI é tecnicamente infinito. Priorize ações que gerem indicações.`,
+  canCpl: `Custo por lead neste canal específico.\nEx: RD Station → CPL = R$30 (mensalidade ÷ leads gerados).\nIndicação → CPL = R$0.`,
+  canCac: `Custo de aquisição de 1 cliente especificamente através deste canal.\nFórmula: CPL do canal × leads necessários por venda (do canal).`,
+  canRoi: `Retorno sobre investimento deste canal.\n\n🟢 > 500%: canal excelente, escale\n🟡 100%–500%: bom, mantenha\n🔴 < 100%: revise ou pause`,
+};
+
 function calcList(list) {
   const aprovados = list.filter(o => o.payload?.status === 'Aprovado');
   const receita   = aprovados.reduce((s, o) => {
@@ -505,8 +541,8 @@ export default function CockpitTab() {
             {/* ── Inputs ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-                  CPL — Custo por Lead (R$)
+                <label className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  CPL — Custo por Lead (R$) <Tooltip text={TIPS.cpl} />
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
@@ -516,8 +552,8 @@ export default function CockpitTab() {
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-                  Simular orçamento de tráfego (R$)
+                <label className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  Simular orçamento de tráfego (R$) <Tooltip text={TIPS.sim} />
                 </label>
                 <div className="relative">
                   <Calculator className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
@@ -546,6 +582,7 @@ export default function CockpitTab() {
                       value: mkt.cac ? formatCurrency(mkt.cac) : '—',
                       color: mkt.cacHealth === 'green' ? 'text-emerald-400' : mkt.cacHealth === 'amber' ? 'text-amber-400' : 'text-red-400',
                       icon: DollarSign,
+                      tip: TIPS.cac,
                     },
                     {
                       label: 'ROI de Marketing',
@@ -553,6 +590,7 @@ export default function CockpitTab() {
                       value: mkt.roi != null ? `${mkt.roi.toFixed(0)}%` : '—',
                       color: 'text-neon',
                       icon: TrendingUp,
+                      tip: TIPS.roi,
                     },
                     {
                       label: 'LTV:CAC',
@@ -560,6 +598,7 @@ export default function CockpitTab() {
                       value: mkt.ltvCac != null ? `${mkt.ltvCac.toFixed(1)}x` : '—',
                       color: 'text-purple-400',
                       icon: Award,
+                      tip: TIPS.ltvcac,
                     },
                     {
                       label: 'Payback',
@@ -567,12 +606,14 @@ export default function CockpitTab() {
                       value: mkt.paybackDias != null ? `${mkt.paybackDias} dias` : '—',
                       color: 'text-blue-400',
                       icon: Target,
+                      tip: TIPS.payback,
                     },
                   ].map((s, i) => (
                     <div key={i} className="bg-dark-900/60 border border-dark-700/40 rounded-xl p-3">
                       <div className="flex items-center gap-1.5 mb-2">
                         <s.icon className={`w-3.5 h-3.5 ${s.color}`} />
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider leading-tight">{s.label}</p>
+                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider leading-tight flex-1">{s.label}</p>
+                        <Tooltip text={s.tip} />
                       </div>
                       <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
                       <p className="text-[10px] text-zinc-600 mt-0.5">{s.sub}</p>
@@ -610,7 +651,10 @@ export default function CockpitTab() {
               {/* ── Para cada R$1 ── */}
               {mkt.retornoPorReal && (
                 <div className="relative rounded-2xl overflow-hidden border border-neon/20 p-5" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.08) 100%)' }}>
-                  <p className="text-[10px] font-bold text-neon/60 uppercase tracking-widest mb-3 text-center">Eficiência de Tráfego</p>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <p className="text-[10px] font-bold text-neon/60 uppercase tracking-widest">Eficiência de Tráfego</p>
+                    <Tooltip text={TIPS.r1} />
+                  </div>
                   <div className="text-center">
                     <p className="text-zinc-400 text-sm mb-1">Para cada <strong className="text-white">R$ 1,00</strong> investido em tráfego</p>
                     <p className="text-5xl font-black text-neon my-2">{formatCurrency(mkt.retornoPorReal)}</p>
@@ -622,7 +666,10 @@ export default function CockpitTab() {
               {/* ── Simulador de crescimento ── */}
               {mkt.sim && (
                 <div>
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">Simulador — Se você investir {formatCurrency(parseCurrency(orcamentoSim))} em tráfego</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Simulador — Se você investir {formatCurrency(parseCurrency(orcamentoSim))} em tráfego</p>
+                    <Tooltip text={TIPS.sim} />
+                  </div>
                   <div className="grid grid-cols-3 gap-3 mb-3">
                     {[
                       { label: 'Leads estimados',  value: mkt.sim.simLeads,              color: 'text-blue-400' },
@@ -655,6 +702,7 @@ export default function CockpitTab() {
                   <div className="flex items-center gap-2 mb-3">
                     <Target className="w-4 h-4 text-neon" />
                     <p className="text-xs font-bold text-white">Para atingir a meta de {formatCurrency(metaNum)}</p>
+                    <Tooltip text={TIPS.metaInvest} />
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div>
@@ -681,15 +729,18 @@ export default function CockpitTab() {
               {/* ── ROI por Canal ── */}
               {mkt.porCanal.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">ROI por Canal de Origem — informe o CPL de cada canal</p>
+                  <div className="flex items-center gap-2 mb-3">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">ROI por Canal de Origem — informe o CPL de cada canal</p>
+                    <Tooltip text={TIPS.canal} />
+                  </div>
                   <div className="rounded-xl overflow-hidden border border-dark-700/40">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-dark-700/40 bg-dark-900/50">
                           <th className="text-left px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Canal</th>
-                          <th className="text-center px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">CPL (R$)</th>
-                          <th className="text-right px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">CAC</th>
-                          <th className="text-right px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">ROI</th>
+                          <th className="text-center px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider"><span className="flex items-center justify-center gap-1">CPL (R$) <Tooltip text={TIPS.canCpl} /></span></th>
+                          <th className="text-right px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider"><span className="flex items-center justify-end gap-1">CAC <Tooltip text={TIPS.canCac} /></span></th>
+                          <th className="text-right px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider"><span className="flex items-center justify-end gap-1">ROI <Tooltip text={TIPS.canRoi} /></span></th>
                           <th className="text-right px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Vendas</th>
                         </tr>
                       </thead>
