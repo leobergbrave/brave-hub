@@ -87,6 +87,8 @@ export default function OrcamentosTab() {
   const [aprovandoModal, setAprovandoModal] = useState(null);
   const [valorFechado, setValorFechado] = useState('');
   const [filtroSemLead, setFiltroSemLead] = useState(false);
+  const [editandoRapido, setEditandoRapido] = useState(null);
+  const [editRapidoForm, setEditRapidoForm] = useState({ nome_lead: '', produtos_texto: '' });
 
   const navigate = useNavigate();
 
@@ -198,6 +200,16 @@ export default function OrcamentosTab() {
       }
     }
     alert(`${count} de ${semLead.length} leads vinculados.`);
+    load();
+  };
+
+  const handleSaveEditRapido = async () => {
+    if (!editandoRapido) return;
+    await supabase.from('links_rapidos').update({
+      nome_lead: editRapidoForm.nome_lead,
+      produtos_texto: editRapidoForm.produtos_texto,
+    }).eq('id', editandoRapido.id);
+    setEditandoRapido(null);
     load();
   };
 
@@ -347,6 +359,36 @@ export default function OrcamentosTab() {
               <button onClick={confirmarAprovacao} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors cursor-pointer">
                 Confirmar Aprovação
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Link Rápido */}
+      {editandoRapido && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-white font-bold text-base">Editar Link Rápido</h3>
+              <button onClick={() => setEditandoRapido(null)} className="text-zinc-500 hover:text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Nome do lead</label>
+            <input
+              type="text"
+              value={editRapidoForm.nome_lead}
+              onChange={e => setEditRapidoForm(f => ({ ...f, nome_lead: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-dark-800 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50 mb-4"
+            />
+            <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Produtos / interesse</label>
+            <textarea
+              rows={3}
+              value={editRapidoForm.produtos_texto}
+              onChange={e => setEditRapidoForm(f => ({ ...f, produtos_texto: e.target.value }))}
+              className="w-full px-3 py-2.5 bg-dark-800 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50 mb-5 resize-none"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setEditandoRapido(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-zinc-400 hover:text-white bg-dark-800 hover:bg-dark-700 transition-colors cursor-pointer">Cancelar</button>
+              <button onClick={handleSaveEditRapido} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 transition-colors cursor-pointer">Salvar</button>
             </div>
           </div>
         </div>
@@ -659,31 +701,39 @@ export default function OrcamentosTab() {
                           <Link2 className="w-3 h-3" /> Vincular Lead
                         </button>
                       )}
+                      {/* Editar — orçamento gerado se existir, senão o link rápido */}
+                      {l.slug_gerado ? (
+                        <button onClick={() => navigate(`/?edit=${l.slug_gerado}`)} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-lg hover:bg-blue-500/10 cursor-pointer border border-blue-500/20">
+                          <Edit2 className="w-3 h-3" /> Editar
+                        </button>
+                      ) : (
+                        <button onClick={() => { setEditandoRapido(l); setEditRapidoForm({ nome_lead: l.nome_lead || '', produtos_texto: l.produtos_texto || '' }); }} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-lg hover:bg-blue-500/10 cursor-pointer border border-blue-500/20">
+                          <Edit2 className="w-3 h-3" /> Editar
+                        </button>
+                      )}
                       <button onClick={() => handleDuplicateRapido(l)} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 px-2.5 py-1.5 rounded-lg hover:bg-indigo-500/10 cursor-pointer border border-indigo-500/20">
                         <CopyPlus className="w-3 h-3" /> Duplicar
                       </button>
                       {l.slug_gerado && (
                         <>
-                          <button onClick={() => navigate(`/?edit=${l.slug_gerado}`)} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 px-2.5 py-1.5 rounded-lg hover:bg-blue-500/10 cursor-pointer border border-blue-500/20">
-                            <Edit2 className="w-3 h-3" /> Editar
-                          </button>
                           <a href={`/orcamento/${l.slug_gerado}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-neon hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-neon/10 cursor-pointer border border-neon/20">
-                            <Eye className="w-3 h-3" /> Ver Gerado
+                            <Eye className="w-3 h-3" /> Ver Orç.
                           </a>
                           <button onClick={() => handleGerarBlingRapido(l)} className="flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 px-2.5 py-1.5 rounded-lg hover:bg-orange-500/10 cursor-pointer border border-orange-500/20">
                             <Send className="w-3 h-3" /> Bling
                           </button>
-                          {statusGerado === 'Pendente' && (
-                            <button onClick={() => { if (orcGerado) { setAprovandoModal(orcGerado); setValorFechado(''); } }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
-                              <CheckCircle2 className="w-3 h-3" /> Aprovar
-                            </button>
-                          )}
-                          {statusGerado === 'Pendente' && (
-                            <button onClick={() => changeStatusRapido(l, 'Expirado')} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 cursor-pointer border border-red-500/20">
-                              <XCircle className="w-3 h-3" /> Expirar
-                            </button>
-                          )}
                         </>
+                      )}
+                      {/* Aprovar/Expirar — sempre visível quando há orçamento pendente */}
+                      {orcGerado && statusGerado === 'Pendente' && (
+                        <button onClick={() => { setAprovandoModal(orcGerado); setValorFechado(''); }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
+                          <CheckCircle2 className="w-3 h-3" /> Aprovar
+                        </button>
+                      )}
+                      {orcGerado && statusGerado === 'Pendente' && (
+                        <button onClick={() => changeStatusRapido(l, 'Expirado')} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 cursor-pointer border border-red-500/20">
+                          <XCircle className="w-3 h-3" /> Expirar
+                        </button>
                       )}
                       <button onClick={() => handleDeleteRapido(l.id)} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-dark-700 cursor-pointer border border-dark-700/50 ml-auto">
                         <Trash2 className="w-3 h-3" /> Excluir
