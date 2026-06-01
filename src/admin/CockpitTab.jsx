@@ -5,7 +5,13 @@ import {
   Award, TrendingUp, TrendingDown, FileText,
   Users, Zap, ChevronLeft, ChevronRight, Minus,
   Target, RefreshCw, Loader2, Filter,
+  DollarSign, BarChart2, AlertTriangle, CheckCircle2, Calculator, Lightbulb,
 } from 'lucide-react';
+
+function parseCurrency(str) {
+  if (!str) return 0;
+  return parseFloat(String(str).replace(/\./g, '').replace(',', '.')) || 0;
+}
 
 const ORIGENS_FIXAS = ['RD STATION', 'ENVIADO BRAVE', 'UAIROX', 'INDICAÇÃO'];
 
@@ -56,7 +62,19 @@ export default function CockpitTab() {
   const [meta, setMeta] = useState('');
   const [filtroOrigem, setFiltroOrigem] = useState('Todos');
   const [loading, setLoading] = useState(true);
-  const [raw, setRaw] = useState(null); // stores all raw data for client-side filtering
+  const [raw, setRaw] = useState(null);
+
+  // Marketing Intelligence — persiste no localStorage
+  const [cplGlobal, setCplGlobal] = useState(() => localStorage.getItem('cockpit_cpl') || '');
+  const [orcamentoSim, setOrcamentoSim] = useState(() => localStorage.getItem('cockpit_sim') || '');
+  const [cplPorOrigem, setCplPorOrigem] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cockpit_cpl_origem') || '{}'); }
+    catch { return {}; }
+  });
+
+  useEffect(() => { localStorage.setItem('cockpit_cpl', cplGlobal); }, [cplGlobal]);
+  useEffect(() => { localStorage.setItem('cockpit_sim', orcamentoSim); }, [orcamentoSim]);
+  useEffect(() => { localStorage.setItem('cockpit_cpl_origem', JSON.stringify(cplPorOrigem)); }, [cplPorOrigem]); // stores all raw data for client-side filtering
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,6 +175,66 @@ export default function CockpitTab() {
     };
   }, [raw, filtroOrigem]);
 
+  const metaNum = parseCurrency(meta);
+
+  // Métricas de Marketing Intelligence
+  const mkt = useMemo(() => {
+    if (!dados) return null;
+    const cpl       = parseCurrency(cplGlobal);
+    const simBudget = parseCurrency(orcamentoSim);
+    const leadsPerVenda = parseFloat(dados.efic.leadsPorVenda) || 0;
+    const ticket    = dados.total.ticket || 0;
+    const taxa      = dados.total.taxa || 0; // %
+
+    if (!cpl) return { needsCpl: true, porCanal: [] };
+
+    // ── CAC & ROI Global ──
+    const cac = leadsPerVenda > 0 ? cpl * leadsPerVenda : null;
+    const roi = cac && ticket ? ((ticket - cac) / cac) * 100 : null;
+    const ltvCac = cac && ticket ? ticket / cac : null;
+    const retornoPorReal = ltvCac;
+    const paybackDias = cac && ticket ? Math.round((cac / ticket) * 30) : null;
+    const cacPct = cac && ticket ? (cac / ticket) * 100 : 0;
+    const cacHealth = cacPct === 0 ? 'zero' : cacPct < 10 ? 'green' : cacPct < 20 ? 'amber' : 'red';
+
+    // ── Simulador ──
+    let sim = null;
+    if (simBudget > 0 && cpl > 0) {
+      const simLeads  = Math.round(simBudget / cpl);
+      const simVendas = taxa > 0 ? simLeads * (taxa / 100) : 0;
+      const simReceita = simVendas * ticket;
+      const simRoi    = simBudget > 0 ? ((simReceita - simBudget) / simBudget) * 100 : 0;
+      sim = { simLeads, simVendas: simVendas.toFixed(1), simReceita, simRoi };
+    }
+
+    // ── Investimento para a meta ──
+    let metaInvest = null;
+    if (metaNum > 0 && ticket > 0 && taxa > 0 && cpl > 0) {
+      const vendasNecessarias = metaNum / ticket;
+      const leadsNecessarios  = vendasNecessarias / (taxa / 100);
+      const investNecessario  = leadsNecessarios * cpl;
+      metaInvest = {
+        vendasNecessarias: vendasNecessarias.toFixed(1),
+        leadsNecessarios: Math.round(leadsNecessarios),
+        investNecessario,
+        jaTemVendas: dados.total.vendas,
+        falta: Math.max(0, vendasNecessarias - dados.total.vendas),
+      };
+    }
+
+    // ── ROI por canal ──
+    const porCanal = (dados.porOrigem || []).map(canal => {
+      const cplC = parseCurrency(cplPorOrigem[canal.origem] || '');
+      const leadsPerVendaCanal = canal.vendas > 0 ? canal.total / canal.vendas : 0;
+      const cacC = cplC > 0 && leadsPerVendaCanal > 0 ? cplC * leadsPerVendaCanal : null;
+      const roiC = cacC && canal.ticket > 0 ? ((canal.ticket - cacC) / cacC) * 100 : null;
+      const investTotal = cplC > 0 ? cplC * canal.total : null;
+      return { ...canal, cplC, cacC, roiC, investTotal };
+    });
+
+    return { cac, roi, ltvCac, retornoPorReal, paybackDias, cacHealth, cacPct, sim, metaInvest, porCanal, cpl };
+  }, [dados, cplGlobal, orcamentoSim, cplPorOrigem, metaNum]);
+
   const changeMonth = (dir) => {
     const [y, m] = mes.split('-').map(Number);
     const d = new Date(y, m - 1 + dir, 1);
@@ -164,7 +242,6 @@ export default function CockpitTab() {
   };
 
   const mesLabel = new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  const metaNum  = parseFloat(meta.replace(/\./g, '').replace(',', '.')) || 0;
   const pctMeta  = metaNum > 0 && dados ? Math.min((dados.total.receita / metaNum) * 100, 150) : 0;
 
   return (
@@ -410,6 +487,247 @@ export default function CockpitTab() {
                 <p className="text-[10px] text-zinc-600 mt-1">Anterior: {c.fmt(c.ant)}</p>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════
+            MARKETING INTELLIGENCE — Painel CFO
+            ══════════════════════════════════════════ */}
+        <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-700/40 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-neon" />
+            <p className="text-sm font-bold text-white">Marketing Intelligence</p>
+            <span className="ml-auto text-[10px] text-zinc-600 uppercase tracking-wider">Painel CFO</span>
+          </div>
+
+          <div className="p-5 space-y-6">
+
+            {/* ── Inputs ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  CPL — Custo por Lead (R$)
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                  <input type="text" value={cplGlobal} onChange={e => setCplGlobal(e.target.value)}
+                    placeholder="Ex: 45,00"
+                    className="w-full pl-8 pr-3 py-2.5 bg-dark-900 border border-dark-600 rounded-xl text-white placeholder-zinc-600 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  Simular orçamento de tráfego (R$)
+                </label>
+                <div className="relative">
+                  <Calculator className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                  <input type="text" value={orcamentoSim} onChange={e => setOrcamentoSim(e.target.value)}
+                    placeholder="Ex: 5.000,00"
+                    className="w-full pl-8 pr-3 py-2.5 bg-dark-900 border border-dark-600 rounded-xl text-white placeholder-zinc-600 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+              </div>
+            </div>
+
+            {!mkt || mkt.needsCpl ? (
+              <div className="flex items-center gap-3 py-4 px-4 rounded-xl bg-dark-900/50 border border-dark-700/30">
+                <Lightbulb className="w-5 h-5 text-amber-400 shrink-0" />
+                <p className="text-sm text-zinc-400">Informe o <strong className="text-white">CPL (Custo por Lead)</strong> acima para ativar as métricas de Marketing Intelligence.</p>
+              </div>
+            ) : (<>
+
+              {/* ── CAC + ROI + LTV:CAC + Payback ── */}
+              <div>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">Métricas de Aquisição</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    {
+                      label: 'CAC',
+                      sub: 'Custo de aquisição',
+                      value: mkt.cac ? formatCurrency(mkt.cac) : '—',
+                      color: mkt.cacHealth === 'green' ? 'text-emerald-400' : mkt.cacHealth === 'amber' ? 'text-amber-400' : 'text-red-400',
+                      icon: DollarSign,
+                    },
+                    {
+                      label: 'ROI de Marketing',
+                      sub: 'Retorno sobre investimento',
+                      value: mkt.roi != null ? `${mkt.roi.toFixed(0)}%` : '—',
+                      color: 'text-neon',
+                      icon: TrendingUp,
+                    },
+                    {
+                      label: 'LTV:CAC',
+                      sub: 'Ratio de eficiência',
+                      value: mkt.ltvCac != null ? `${mkt.ltvCac.toFixed(1)}x` : '—',
+                      color: 'text-purple-400',
+                      icon: Award,
+                    },
+                    {
+                      label: 'Payback',
+                      sub: 'Recuperação do CAC',
+                      value: mkt.paybackDias != null ? `${mkt.paybackDias} dias` : '—',
+                      color: 'text-blue-400',
+                      icon: Target,
+                    },
+                  ].map((s, i) => (
+                    <div key={i} className="bg-dark-900/60 border border-dark-700/40 rounded-xl p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <s.icon className={`w-3.5 h-3.5 ${s.color}`} />
+                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider leading-tight">{s.label}</p>
+                      </div>
+                      <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                      <p className="text-[10px] text-zinc-600 mt-0.5">{s.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Alerta de CAC */}
+                {mkt.cacHealth === 'red' && (
+                  <div className="mt-3 flex items-start gap-2 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-300">
+                      <strong>CAC elevado:</strong> seu custo de aquisição representa {mkt.cacPct.toFixed(1)}% do ticket médio. O ideal é abaixo de 10%. Revise o CPL ou melhore a taxa de conversão.
+                    </p>
+                  </div>
+                )}
+                {mkt.cacHealth === 'amber' && (
+                  <div className="mt-3 flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-300">
+                      <strong>CAC moderado:</strong> {mkt.cacPct.toFixed(1)}% do ticket. Acompanhe de perto — aumentar a taxa de conversão reduz o CAC sem custo adicional.
+                    </p>
+                  </div>
+                )}
+                {mkt.cacHealth === 'green' && mkt.cac && (
+                  <div className="mt-3 flex items-start gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-emerald-300">
+                      <strong>CAC saudável:</strong> apenas {mkt.cacPct.toFixed(1)}% do ticket. Escalar o investimento em tráfego é altamente recomendável.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Para cada R$1 ── */}
+              {mkt.retornoPorReal && (
+                <div className="relative rounded-2xl overflow-hidden border border-neon/20 p-5" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.08) 100%)' }}>
+                  <p className="text-[10px] font-bold text-neon/60 uppercase tracking-widest mb-3 text-center">Eficiência de Tráfego</p>
+                  <div className="text-center">
+                    <p className="text-zinc-400 text-sm mb-1">Para cada <strong className="text-white">R$ 1,00</strong> investido em tráfego</p>
+                    <p className="text-5xl font-black text-neon my-2">{formatCurrency(mkt.retornoPorReal)}</p>
+                    <p className="text-zinc-500 text-xs">em receita gerada · ROI de <strong className="text-neon">{mkt.roi?.toFixed(0)}%</strong></p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Simulador de crescimento ── */}
+              {mkt.sim && (
+                <div>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">Simulador — Se você investir {formatCurrency(parseCurrency(orcamentoSim))} em tráfego</p>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    {[
+                      { label: 'Leads estimados',  value: mkt.sim.simLeads,              color: 'text-blue-400' },
+                      { label: 'Vendas estimadas', value: mkt.sim.simVendas,             color: 'text-emerald-400' },
+                      { label: 'Receita projetada', value: formatCurrency(mkt.sim.simReceita), color: 'text-neon' },
+                    ].map((s, i) => (
+                      <div key={i} className="bg-dark-900/60 border border-dark-700/40 rounded-xl p-3 text-center">
+                        <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-dark-900/50 rounded-xl p-3 border border-dark-700/30">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-zinc-500">ROI projetado</span>
+                      <span className={`text-sm font-black ${mkt.sim.simRoi > 0 ? 'text-neon' : 'text-red-400'}`}>{mkt.sim.simRoi.toFixed(0)}%</span>
+                    </div>
+                    <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-neon to-emerald-500 rounded-full transition-all duration-700"
+                        style={{ width: `${Math.min(Math.max((mkt.sim.simReceita / (parseCurrency(orcamentoSim) * 20)) * 100, 2), 100)}%` }} />
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mt-1">Break-even: investimento = receita quando ROI = 0%</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Investimento para bater a meta ── */}
+              {mkt.metaInvest && (
+                <div className="bg-dark-900/50 border border-dark-700/30 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-4 h-4 text-neon" />
+                    <p className="text-xs font-bold text-white">Para atingir a meta de {formatCurrency(metaNum)}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <p className="text-lg font-black text-white">{mkt.metaInvest.vendasNecessarias}</p>
+                      <p className="text-[10px] text-zinc-500">vendas necessárias</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-black text-blue-400">{mkt.metaInvest.leadsNecessarios}</p>
+                      <p className="text-[10px] text-zinc-500">leads necessários</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-black text-amber-400">{formatCurrency(mkt.metaInvest.investNecessario)}</p>
+                      <p className="text-[10px] text-zinc-500">investimento em tráfego</p>
+                    </div>
+                  </div>
+                  {mkt.metaInvest.falta > 0 && (
+                    <p className="text-[11px] text-zinc-500 mt-3 text-center">
+                      Você já fez <strong className="text-white">{mkt.metaInvest.jaTemVendas}</strong> {mkt.metaInvest.jaTemVendas === 1 ? 'venda' : 'vendas'} este mês. Faltam <strong className="text-neon">{mkt.metaInvest.falta.toFixed(1)}</strong> para bater a meta.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── ROI por Canal ── */}
+              {mkt.porCanal.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-3">ROI por Canal de Origem — informe o CPL de cada canal</p>
+                  <div className="rounded-xl overflow-hidden border border-dark-700/40">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-dark-700/40 bg-dark-900/50">
+                          <th className="text-left px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Canal</th>
+                          <th className="text-center px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">CPL (R$)</th>
+                          <th className="text-right px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">CAC</th>
+                          <th className="text-right px-3 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">ROI</th>
+                          <th className="text-right px-4 py-2.5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Vendas</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-dark-700/20">
+                        {mkt.porCanal.map((canal, i) => {
+                          const roiColor = canal.roiC == null ? 'text-zinc-500' : canal.roiC > 500 ? 'text-emerald-400' : canal.roiC > 100 ? 'text-amber-400' : 'text-red-400';
+                          return (
+                            <tr key={i} className="hover:bg-dark-700/20 transition-colors">
+                              <td className="px-4 py-3 text-white font-semibold text-xs">{canal.origem}</td>
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="text"
+                                  value={cplPorOrigem[canal.origem] || ''}
+                                  onChange={e => setCplPorOrigem(prev => ({ ...prev, [canal.origem]: e.target.value }))}
+                                  placeholder="0,00"
+                                  className="w-20 text-center text-xs bg-dark-900 border border-dark-600 rounded-lg px-2 py-1.5 text-white placeholder-zinc-600 focus:outline-none focus:border-neon/50"
+                                />
+                              </td>
+                              <td className="px-3 py-3 text-right text-xs text-zinc-300">{canal.cacC ? formatCurrency(canal.cacC) : '—'}</td>
+                              <td className="px-3 py-3 text-right">
+                                {canal.roiC != null ? (
+                                  <span className={`text-xs font-black ${roiColor}`}>{canal.roiC.toFixed(0)}%</span>
+                                ) : (
+                                  <span className="text-xs text-zinc-600">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right text-xs text-emerald-400 font-bold">{canal.vendas}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[10px] text-zinc-600 mt-2 text-center">Digite 0 para canais orgânicos (indicação, etc.) — o ROI será ∞</p>
+                </div>
+              )}
+
+            </>)}
           </div>
         </div>
 
