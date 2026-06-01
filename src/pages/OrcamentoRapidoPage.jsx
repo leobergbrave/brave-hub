@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseMediaUrl } from '../data';
+import { TrustBar, InstitutionalFooter } from '../components/BraveCredentials';
 
 /* ═══════════════════════════════════════════════
    ORÇAMENTO RÁPIDO — Página self-service para leads do WhatsApp
@@ -450,6 +451,9 @@ export default function OrcamentoRapidoPage() {
       {/* Ambient glow */}
       <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-neon/5 rounded-full blur-[120px]" />
 
+      {/* ── Barra de confiança ── */}
+      <TrustBar dark={true} />
+
       {/* Header */}
       <header className="relative z-10 text-center pt-10 pb-6 px-6">
         <img src={LOGO_URL} alt="Brave" className="h-14 mx-auto mb-4 drop-shadow-lg" onError={e => e.target.style.display = 'none'} />
@@ -707,6 +711,9 @@ export default function OrcamentoRapidoPage() {
           </div>
         </section>
       )}
+
+      {/* ── Rodapé institucional ── */}
+      <InstitutionalFooter dark={true} />
 
       {/* Loading overlay while saving */}
       {salvando && (

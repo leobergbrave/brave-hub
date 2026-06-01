@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
 import { supabase } from '../lib/supabase';
+import { TrustBar, InstitutionalFooter } from '../components/BraveCredentials';
 
 /* ═══════════════════════════════════════════════
    VITRINE DO CLIENTE — Orçamento Final
@@ -316,6 +317,9 @@ export default function OrcamentoPage() {
         </div>
       </header>
 
+      {/* ── Barra de confiança ── */}
+      <TrustBar dark={false} />
+
       {/* Divider */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div className="h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
@@ -582,14 +586,8 @@ export default function OrcamentoPage() {
         </div>
       </div>
 
-      {/* ── Footer ── */}
-      <footer className="relative z-10 border-t border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 text-center">
-          <p className="text-[11px] text-gray-400">
-            © 2026 Brave — Equipamentos de Alta Performance
-          </p>
-        </div>
-      </footer>
+      {/* ── Rodapé institucional ── */}
+      <InstitutionalFooter dark={false} />
 
       {/* Saving indicator */}
       {saving && (
