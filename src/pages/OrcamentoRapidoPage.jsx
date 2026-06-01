@@ -456,7 +456,7 @@ export default function OrcamentoRapidoPage() {
       <header className="relative z-10 bg-white border-b border-gray-100 pt-8 pb-6 px-6 text-center">
         <img src="/logo-orcamento.png" alt="Brave" className="h-12 mx-auto mb-3 object-contain"
           onError={e => { e.target.style.display = 'none'; }} />
-        <div className="flex items-center justify-center gap-5 flex-wrap">
+        <div className="flex items-center justify-center gap-5 flex-wrap mb-4">
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
             <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
             CNPJ 33.167.844/0001-80
@@ -468,6 +468,19 @@ export default function OrcamentoRapidoPage() {
             <ExternalLink className="w-3 h-3 opacity-60" />
           </a>
         </div>
+
+        {/* Badge strip — Patrocinador Oficial */}
+        <div className="inline-flex flex-col items-center rounded-2xl bg-gray-50 border border-gray-200 py-3 px-8 mx-auto">
+          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.18em] mb-3">Patrocinador Oficial</p>
+          <div className="flex items-center justify-center gap-6">
+            <img src="/TCB.png" alt="TCB – The CrossFit Games Brasil" className="h-10 object-contain"
+              onError={e => e.target.style.display = 'none'} />
+            <div className="w-px h-8 bg-gray-200" />
+            <img src="/COPASUR.png" alt="Copa SUR de CrossFit" className="h-10 object-contain"
+              onError={e => e.target.style.display = 'none'} />
+          </div>
+        </div>
+
         {nomeUrl && (
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 mt-5">
             Olá, <span className="text-emerald-600">{nomeUrl}</span>! 👋

@@ -71,36 +71,29 @@ export function InstitutionalFooter({ dark = false }) {
   return (
     <footer className={`relative z-10 ${bg}`}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
 
-          {/* Coluna 1 — Identidade */}
+          {/* Coluna 1 — Patrocínios com logos reais */}
           <div>
-            <img src="/logo.png" alt="Brave" className="h-8 object-contain mb-3 brightness-0 invert opacity-80"
-              onError={e => { e.target.style.display = 'none'; }} />
-            <p className="text-zinc-400 text-xs leading-relaxed mb-3">
-              Equipamentos de alta performance para boxes CrossFit, academias e atletas de elite em todo o Brasil.
-            </p>
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <MapPin className="w-3 h-3 text-zinc-600 shrink-0" />
-              {CIDADE} · Desde {DESDE}
-            </div>
-          </div>
-
-          {/* Coluna 2 — Patrocínios */}
-          <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4">
               Patrocinadores oficiais
             </p>
-            <div className="space-y-2.5">
+            <div className="flex items-center gap-6 mb-4">
+              <img src="/TCB.png" alt="TCB – The CrossFit Games Brasil" className="h-12 object-contain"
+                onError={e => e.target.style.display = 'none'} />
+              <img src="/COPASUR.png" alt="Copa SUR de CrossFit" className="h-12 object-contain"
+                onError={e => e.target.style.display = 'none'} />
+            </div>
+            <div className="space-y-1.5">
               <div className="flex items-start gap-2">
-                <Trophy className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-bold text-white">{COMP1}</p>
                   <p className="text-[10px] text-zinc-500">Maior circuito CrossFit do Brasil</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <Trophy className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-bold text-white">{COMP2}</p>
                   <p className="text-[10px] text-zinc-500">Competição de referência sul-americana</p>
@@ -113,7 +106,7 @@ export function InstitutionalFooter({ dark = false }) {
             </div>
           </div>
 
-          {/* Coluna 3 — Dados legais */}
+          {/* Coluna 2 — Dados legais */}
           <div>
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
               Dados da empresa
