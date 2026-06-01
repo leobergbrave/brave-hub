@@ -213,8 +213,23 @@ export default function OrcamentosTab() {
     load();
   };
 
+  // Busca orçamento do link rápido — usa cache local, faz fetch se não encontrado
+  const resolveOrcRapido = async (l) => {
+    const cached = orcs.find(o => o.slug === l.slug_gerado);
+    if (cached) return cached;
+    const { data } = await supabase.from('orcamentos_salvos').select('*').eq('slug', l.slug_gerado).single();
+    return data || null;
+  };
+
+  const handleAprovarRapido = async (l) => {
+    const orc = await resolveOrcRapido(l);
+    if (!orc) return;
+    setAprovandoModal(orc);
+    setValorFechado('');
+  };
+
   const changeStatusRapido = async (l, status) => {
-    const orc = orcs.find(o => o.slug === l.slug_gerado);
+    const orc = await resolveOrcRapido(l);
     if (!orc) return;
     await supabase.from('orcamentos_salvos').update({ payload: { ...orc.payload, status } }).eq('id', orc.id);
     load();
@@ -724,13 +739,13 @@ export default function OrcamentosTab() {
                           </button>
                         </>
                       )}
-                      {/* Aprovar/Expirar — sempre visível quando há orçamento pendente */}
-                      {orcGerado && statusGerado === 'Pendente' && (
-                        <button onClick={() => { setAprovandoModal(orcGerado); setValorFechado(''); }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
+                      {/* Aprovar/Expirar — visível sempre que slug_gerado existe e não está aprovado/expirado */}
+                      {l.slug_gerado && statusGerado !== 'Aprovado' && statusGerado !== 'Expirado' && (
+                        <button onClick={() => handleAprovarRapido(l)} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
                           <CheckCircle2 className="w-3 h-3" /> Aprovar
                         </button>
                       )}
-                      {orcGerado && statusGerado === 'Pendente' && (
+                      {l.slug_gerado && statusGerado !== 'Aprovado' && statusGerado !== 'Expirado' && (
                         <button onClick={() => changeStatusRapido(l, 'Expirado')} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 cursor-pointer border border-red-500/20">
                           <XCircle className="w-3 h-3" /> Expirar
                         </button>
