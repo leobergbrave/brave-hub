@@ -121,7 +121,7 @@ export default function OrcamentosTab() {
     const o = aprovandoModal;
     const valor = parseFloat(valorFechado.replace(',', '.')) || null;
     await supabase.from('orcamentos_salvos')
-      .update({ payload: { ...o.payload, status: 'Aprovado' }, valor_fechado: valor })
+      .update({ payload: { ...o.payload, status: 'Aprovado' }, valor_fechado: valor, aprovado_em: new Date().toISOString() })
       .eq('id', o.id);
     setAprovandoModal(null);
     setValorFechado('');

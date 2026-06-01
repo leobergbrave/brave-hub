@@ -12,9 +12,12 @@ import LeadsTab from '../admin/LeadsTab';
 import EmailsTab from '../admin/EmailsTab';
 import ContatosTab from '../admin/ContatosTab';
 import DisparosTab from '../admin/DisparosTab';
+import CockpitTab from '../admin/CockpitTab';
+import { Award } from 'lucide-react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+  { id: 'cockpit', label: 'Cockpit', icon: Award },
   { id: 'leads', label: 'Leads', icon: Users },
   { id: 'contatos', label: 'Contatos', icon: BookUser },
   { id: 'disparos', label: 'Disparos', icon: Zap },
@@ -46,6 +49,7 @@ export default function AdminPage() {
   const renderTab = () => {
     switch (tab) {
       case 'dashboard': return <DashboardTab />;
+      case 'cockpit': return <CockpitTab />;
       case 'leads': return <LeadsTab />;
       case 'contatos': return <ContatosTab />;
       case 'disparos': return <DisparosTab />;
