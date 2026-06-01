@@ -222,14 +222,44 @@ export default function OrcamentosTab() {
   };
 
   const handleAprovarRapido = async (l) => {
-    const orc = await resolveOrcRapido(l);
-    if (!orc) return;
-    setAprovandoModal(orc);
-    setValorFechado('');
+    let orc = await resolveOrcRapido(l);
+
+    // Se não existe orçamento ainda, cria um registro mínimo para poder registrar a venda
+    if (!orc) {
+      const slugBase = (l.nome_lead || 'rapido').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const slug = `${slugBase}-${Math.random().toString(36).substring(2, 8)}`;
+      const { data } = await supabase.from('orcamentos_salvos').insert({
+        slug,
+        cliente: l.nome_lead || '—',
+        consultor: 'LEO BERG',
+        payload: { itens: [], status: 'Pendente', produtos_texto: l.produtos_texto || '' },
+      }).select().single();
+      if (data) {
+        await supabase.from('links_rapidos').update({ slug_gerado: slug }).eq('id', l.id);
+        orc = data;
+      }
+    }
+
+    if (orc) { setAprovandoModal(orc); setValorFechado(''); }
   };
 
   const changeStatusRapido = async (l, status) => {
-    const orc = await resolveOrcRapido(l);
+    let orc = await resolveOrcRapido(l);
+    if (!orc) {
+      // Cria registro mínimo se não existe
+      const slugBase = (l.nome_lead || 'rapido').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const slug = `${slugBase}-${Math.random().toString(36).substring(2, 8)}`;
+      const { data } = await supabase.from('orcamentos_salvos').insert({
+        slug,
+        cliente: l.nome_lead || '—',
+        consultor: 'LEO BERG',
+        payload: { itens: [], status: 'Pendente' },
+      }).select().single();
+      if (data) {
+        await supabase.from('links_rapidos').update({ slug_gerado: slug }).eq('id', l.id);
+        orc = data;
+      }
+    }
     if (!orc) return;
     await supabase.from('orcamentos_salvos').update({ payload: { ...orc.payload, status } }).eq('id', orc.id);
     load();
@@ -739,13 +769,13 @@ export default function OrcamentosTab() {
                           </button>
                         </>
                       )}
-                      {/* Aprovar/Expirar — visível sempre que slug_gerado existe e não está aprovado/expirado */}
-                      {l.slug_gerado && statusGerado !== 'Aprovado' && statusGerado !== 'Expirado' && (
+                      {/* Aprovar/Expirar — visível para todos os rápidos não finalizados */}
+                      {statusGerado !== 'Aprovado' && statusGerado !== 'Expirado' && (
                         <button onClick={() => handleAprovarRapido(l)} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
                           <CheckCircle2 className="w-3 h-3" /> Aprovar
                         </button>
                       )}
-                      {l.slug_gerado && statusGerado !== 'Aprovado' && statusGerado !== 'Expirado' && (
+                      {statusGerado !== 'Aprovado' && statusGerado !== 'Expirado' && (
                         <button onClick={() => changeStatusRapido(l, 'Expirado')} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 cursor-pointer border border-red-500/20">
                           <XCircle className="w-3 h-3" /> Expirar
                         </button>
