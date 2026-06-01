@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
 import {
   Award, TrendingUp, TrendingDown, FileText,
   Users, Zap, ChevronLeft, ChevronRight, Minus,
-  Target, RefreshCw, Loader2,
+  Target, RefreshCw, Loader2, Filter,
 } from 'lucide-react';
+
+const ORIGENS_FIXAS = ['RD STATION', 'ENVIADO BRAVE', 'UAIROX', 'INDICAÇÃO'];
 
 function Delta({ diff }) {
   if (diff === null || diff === undefined) return <span className="text-xs text-zinc-600">sem dados anteriores</span>;
@@ -35,23 +37,34 @@ function GaugeBar({ pct, label }) {
   );
 }
 
+function calcList(list) {
+  const aprovados = list.filter(o => o.payload?.status === 'Aprovado');
+  const receita   = aprovados.reduce((s, o) => {
+    const v = o.valor_fechado != null ? o.valor_fechado : (o.payload?.itens || []).reduce((a, i) => a + i.preco * i.quantidade, 0);
+    return s + v;
+  }, 0);
+  const ticket = aprovados.length > 0 ? receita / aprovados.length : 0;
+  const taxa   = list.length > 0 ? (aprovados.length / list.length) * 100 : 0;
+  return { total: list.length, vendas: aprovados.length, receita, ticket, taxa };
+}
+
 export default function CockpitTab() {
   const [mes, setMes] = useState(() => {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
   });
   const [meta, setMeta] = useState('');
+  const [filtroOrigem, setFiltroOrigem] = useState('Todos');
   const [loading, setLoading] = useState(true);
-  const [dados, setDados] = useState(null);
+  const [raw, setRaw] = useState(null); // stores all raw data for client-side filtering
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [year, month] = mes.split('-').map(Number);
-      const start    = new Date(year, month - 1, 1).toISOString();
-      const end      = new Date(year, month,     1).toISOString();
+      const start     = new Date(year, month - 1, 1).toISOString();
+      const end       = new Date(year, month,     1).toISOString();
       const prevStart = new Date(year, month - 2, 1).toISOString();
-      const prevEnd   = start;
 
       const [
         { data: orcs },
@@ -61,7 +74,7 @@ export default function CockpitTab() {
         { count: disparosCount },
       ] = await Promise.all([
         supabase.from('orcamentos_salvos').select('*').gte('criado_em', start).lt('criado_em', end),
-        supabase.from('orcamentos_salvos').select('id,payload,valor_fechado,aprovado_em').gte('criado_em', prevStart).lt('criado_em', prevEnd),
+        supabase.from('orcamentos_salvos').select('id,payload,valor_fechado').gte('criado_em', prevStart).lt('criado_em', start),
         supabase.from('links_rapidos').select('slug_gerado').not('slug_gerado', 'is', null),
         supabase.from('leads').select('id').gte('criado_em', start).lt('criado_em', end),
         supabase.from('disparo_fila').select('*', { count: 'exact', head: true })
@@ -69,55 +82,30 @@ export default function CockpitTab() {
       ]);
 
       const rapidoSlugs = new Set((linksAll || []).map(l => l.slug_gerado));
+      const orcsAtual   = orcs || [];
 
-      const calcValor = (o) =>
-        o.valor_fechado != null
-          ? o.valor_fechado
-          : (o.payload?.itens || []).reduce((s, i) => s + i.preco * i.quantidade, 0);
+      // Breakdown por origem (sempre com todos os dados)
+      const origemMap = {};
+      orcsAtual.forEach(o => {
+        const orig = o.origem_lead || 'Não informado';
+        if (!origemMap[orig]) origemMap[orig] = [];
+        origemMap[orig].push(o);
+      });
+      const porOrigem = Object.entries(origemMap)
+        .map(([origem, list]) => ({ origem, ...calcList(list) }))
+        .sort((a, b) => b.receita - a.receita);
 
-      const calcList = (list) => {
-        const aprovados = list.filter(o => o.payload?.status === 'Aprovado');
-        const receita   = aprovados.reduce((s, o) => s + calcValor(o), 0);
-        const ticket    = aprovados.length > 0 ? receita / aprovados.length : 0;
-        const taxa      = list.length > 0 ? (aprovados.length / list.length) * 100 : 0;
-        return { total: list.length, vendas: aprovados.length, receita, ticket, taxa };
-      };
+      // Lista de origens únicas para o filtro
+      const origensUnicas = ['Todos', ...Object.keys(origemMap).sort()];
 
-      const orcsAtual  = orcs || [];
-      const manuais    = orcsAtual.filter(o => !rapidoSlugs.has(o.slug));
-      const rapidos    = orcsAtual.filter(o =>  rapidoSlugs.has(o.slug));
-
-      const dManuais   = calcList(manuais);
-      const dRapidos   = calcList(rapidos);
-      const vendasTotal = dManuais.vendas + dRapidos.vendas;
-      const receitaTotal = dManuais.receita + dRapidos.receita;
-      const ticketTotal = vendasTotal > 0 ? receitaTotal / vendasTotal : 0;
-      const taxaTotal   = orcsAtual.length > 0 ? (vendasTotal / orcsAtual.length) * 100 : 0;
-
-      const leads     = leadsData?.length || 0;
-      const disparos  = disparosCount || 0;
-
-      const dAnt = calcList(orcsAnt || []);
-
-      const pctDiff = (a, b) => (b > 0 ? ((a - b) / b) * 100 : null);
-
-      setDados({
-        manuais:  dManuais,
-        rapidos:  dRapidos,
-        total:    { orcs: orcsAtual.length, vendas: vendasTotal, receita: receitaTotal, ticket: ticketTotal, taxa: taxaTotal },
-        efic:     {
-          leads,
-          disparos,
-          leadsPorVenda:   vendasTotal > 0 ? (leads    / vendasTotal).toFixed(1) : '—',
-          orcsPorVenda:    vendasTotal > 0 ? (orcsAtual.length / vendasTotal).toFixed(1) : '—',
-          disparosPorVenda: vendasTotal > 0 ? (disparos / vendasTotal).toFixed(1) : '—',
-        },
-        anterior: dAnt,
-        diffs: {
-          receita: pctDiff(receitaTotal, dAnt.receita),
-          vendas:  pctDiff(vendasTotal, dAnt.vendas),
-          taxa:    pctDiff(taxaTotal, dAnt.taxa),
-        },
+      setRaw({
+        orcsAtual,
+        rapidoSlugs,
+        leads: leadsData?.length || 0,
+        disparos: disparosCount || 0,
+        anterior: calcList(orcsAnt || []),
+        porOrigem,
+        origensUnicas,
       });
     } finally {
       setLoading(false);
@@ -125,6 +113,49 @@ export default function CockpitTab() {
   }, [mes]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Métricas derivadas — reagem ao filtro de origem sem re-fetch
+  const dados = useMemo(() => {
+    if (!raw) return null;
+    const { orcsAtual, rapidoSlugs, leads, disparos, anterior, porOrigem, origensUnicas } = raw;
+
+    const orcsFiltered = filtroOrigem === 'Todos'
+      ? orcsAtual
+      : orcsAtual.filter(o => (o.origem_lead || 'Não informado') === filtroOrigem);
+
+    const manuais = orcsFiltered.filter(o => !rapidoSlugs.has(o.slug));
+    const rapidos  = orcsFiltered.filter(o =>  rapidoSlugs.has(o.slug));
+
+    const dManuais = calcList(manuais);
+    const dRapidos = calcList(rapidos);
+    const vendasTotal  = dManuais.vendas + dRapidos.vendas;
+    const receitaTotal = dManuais.receita + dRapidos.receita;
+    const ticketTotal  = vendasTotal > 0 ? receitaTotal / vendasTotal : 0;
+    const taxaTotal    = orcsFiltered.length > 0 ? (vendasTotal / orcsFiltered.length) * 100 : 0;
+
+    const pctDiff = (a, b) => (b > 0 ? ((a - b) / b) * 100 : null);
+
+    return {
+      manuais: dManuais,
+      rapidos: dRapidos,
+      total:   { orcs: orcsFiltered.length, vendas: vendasTotal, receita: receitaTotal, ticket: ticketTotal, taxa: taxaTotal },
+      efic:    {
+        leads,
+        disparos,
+        leadsPorVenda:    vendasTotal > 0 ? (leads               / vendasTotal).toFixed(1) : '—',
+        orcsPorVenda:     vendasTotal > 0 ? (orcsFiltered.length  / vendasTotal).toFixed(1) : '—',
+        disparosPorVenda: vendasTotal > 0 ? (disparos             / vendasTotal).toFixed(1) : '—',
+      },
+      anterior,
+      diffs: {
+        receita: pctDiff(receitaTotal, anterior.receita),
+        vendas:  pctDiff(vendasTotal,  anterior.vendas),
+        taxa:    pctDiff(taxaTotal,    anterior.taxa),
+      },
+      porOrigem,
+      origensUnicas,
+    };
+  }, [raw, filtroOrigem]);
 
   const changeMonth = (dir) => {
     const [y, m] = mes.split('-').map(Number);
@@ -147,10 +178,26 @@ export default function CockpitTab() {
           </h1>
           <p className="text-zinc-500 text-sm mt-0.5">Sua eficiência comercial em números</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button onClick={load} className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-800 transition-colors cursor-pointer">
             <RefreshCw className="w-4 h-4" />
           </button>
+          {/* Filtro de origem */}
+          {dados?.origensUnicas?.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-dark-800 border border-dark-700 rounded-xl px-3 py-2">
+              <Filter className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              <select
+                value={filtroOrigem}
+                onChange={e => setFiltroOrigem(e.target.value)}
+                className="bg-transparent text-sm font-semibold text-white focus:outline-none cursor-pointer"
+              >
+                {dados.origensUnicas.map(o => (
+                  <option key={o} value={o} className="bg-dark-900">{o}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* Navegador de mês */}
           <div className="flex items-center gap-1 bg-dark-800 border border-dark-700 rounded-xl p-1">
             <button onClick={() => changeMonth(-1)} className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-dark-700 cursor-pointer transition-colors">
               <ChevronLeft className="w-4 h-4" />
@@ -168,6 +215,19 @@ export default function CockpitTab() {
           <Loader2 className="w-5 h-5 animate-spin" /> Carregando métricas...
         </div>
       ) : !dados ? null : (<>
+
+        {/* ── Badge de filtro ativo ── */}
+        {filtroOrigem !== 'Todos' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">Filtrando por:</span>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-neon/10 text-neon border border-neon/20">
+              {filtroOrigem}
+            </span>
+            <button onClick={() => setFiltroOrigem('Todos')} className="text-xs text-zinc-500 hover:text-white underline cursor-pointer">
+              Limpar
+            </button>
+          </div>
+        )}
 
         {/* ── Meta + Atingimento ── */}
         <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-5">
@@ -203,10 +263,10 @@ export default function CockpitTab() {
         {/* ── KPIs principais ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Orçamentos gerados', value: dados.total.orcs,                      color: 'text-blue-400',   icon: FileText },
-            { label: 'Vendas fechadas',    value: dados.total.vendas,                    color: 'text-emerald-400', icon: Target },
-            { label: 'Ticket médio',       value: formatCurrency(dados.total.ticket),    color: 'text-purple-400', icon: TrendingUp },
-            { label: 'Taxa de fechamento', value: `${dados.total.taxa.toFixed(1)}%`,     color: 'text-neon',       icon: Award },
+            { label: 'Orçamentos gerados', value: dados.total.orcs,                   color: 'text-blue-400',    icon: FileText },
+            { label: 'Vendas fechadas',    value: dados.total.vendas,                 color: 'text-emerald-400', icon: Target },
+            { label: 'Ticket médio',       value: formatCurrency(dados.total.ticket), color: 'text-purple-400',  icon: TrendingUp },
+            { label: 'Taxa de fechamento', value: `${dados.total.taxa.toFixed(1)}%`,  color: 'text-neon',        icon: Award },
           ].map((s, i) => (
             <div key={i} className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -221,7 +281,7 @@ export default function CockpitTab() {
         {/* ── Para fechar 1 venda ── */}
         <div className="bg-gradient-to-br from-neon/5 via-dark-800/60 to-emerald-900/10 border border-neon/20 rounded-2xl p-6">
           <p className="text-[10px] font-bold text-neon/70 uppercase tracking-widest mb-6 text-center">
-            Para fechar 1 venda em {mesLabel} você precisou de...
+            Para fechar 1 venda em {mesLabel}{filtroOrigem !== 'Todos' ? ` · ${filtroOrigem}` : ''} você precisou de...
           </p>
           <div className="grid grid-cols-3 gap-6">
             {[
@@ -284,14 +344,64 @@ export default function CockpitTab() {
           </div>
         </div>
 
+        {/* ── Breakdown por Origem ── */}
+        {dados.porOrigem.length > 0 && (
+          <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-dark-700/40 flex items-center justify-between">
+              <p className="text-sm font-bold text-white">Performance por Origem</p>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">todos os canais · {mesLabel}</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-700/30">
+                    <th className="text-left px-5 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Origem</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Orç.</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Vendas</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Receita</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Ticket</th>
+                    <th className="text-right px-5 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Taxa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-700/20">
+                  {dados.porOrigem.map((row, i) => {
+                    const isActive = filtroOrigem === row.origem;
+                    return (
+                      <tr key={i}
+                        onClick={() => setFiltroOrigem(isActive ? 'Todos' : row.origem)}
+                        className={`transition-colors cursor-pointer ${isActive ? 'bg-neon/5 border-l-2 border-l-neon' : 'hover:bg-dark-700/20'}`}>
+                        <td className="px-5 py-3.5">
+                          <span className={`text-sm font-bold ${isActive ? 'text-neon' : 'text-white'}`}>{row.origem}</span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right text-zinc-300 font-medium">{row.total}</td>
+                        <td className="px-4 py-3.5 text-right text-emerald-400 font-bold">{row.vendas}</td>
+                        <td className="px-4 py-3.5 text-right text-white font-bold">{formatCurrency(row.receita)}</td>
+                        <td className="px-4 py-3.5 text-right text-purple-400 font-medium">{formatCurrency(row.ticket)}</td>
+                        <td className="px-5 py-3.5 text-right">
+                          <span className={`text-xs font-black px-2 py-0.5 rounded-full ${row.taxa >= 10 ? 'bg-emerald-500/20 text-emerald-400' : row.taxa >= 5 ? 'bg-amber-500/20 text-amber-400' : 'bg-dark-700 text-zinc-400'}`}>
+                            {row.taxa.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-zinc-600 px-5 py-3 border-t border-dark-700/30">
+              Clique em uma linha para filtrar todas as métricas por essa origem
+            </p>
+          </div>
+        )}
+
         {/* ── Comparativo mês anterior ── */}
         <div className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-5">
           <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-4">Comparativo com mês anterior</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: 'Receita',          atual: dados.total.receita,       ant: dados.anterior.receita, fmt: formatCurrency, diff: dados.diffs.receita },
-              { label: 'Vendas fechadas',  atual: dados.total.vendas,        ant: dados.anterior.vendas,  fmt: v => v,         diff: dados.diffs.vendas },
-              { label: 'Taxa conversão',   atual: dados.total.taxa.toFixed(1) + '%', ant: dados.anterior.taxa?.toFixed(1) + '%', fmt: v => v, diff: dados.diffs.taxa },
+              { label: 'Receita',         atual: dados.total.receita,                     ant: dados.anterior.receita,              fmt: formatCurrency, diff: dados.diffs.receita },
+              { label: 'Vendas fechadas', atual: dados.total.vendas,                      ant: dados.anterior.vendas,               fmt: v => v,         diff: dados.diffs.vendas },
+              { label: 'Taxa conversão',  atual: dados.total.taxa.toFixed(1) + '%',       ant: (dados.anterior.taxa || 0).toFixed(1) + '%', fmt: v => v, diff: dados.diffs.taxa },
             ].map((c, i) => (
               <div key={i} className="bg-dark-900/50 rounded-xl p-4">
                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">{c.label}</p>

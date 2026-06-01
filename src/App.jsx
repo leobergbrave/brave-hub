@@ -45,7 +45,9 @@ export default function App() {
   const [cep, setCep] = useState('');
   const [cepInfo, setCepInfo] = useState(null); // { localidade, uf, logradouro, bairro }
   const [buscandoCep, setBuscandoCep] = useState(false);
-  const [nomeConsultor, setNomeConsultor] = useState('');
+  const [nomeConsultor, setNomeConsultor] = useState('LEO BERG');
+  const [origemLead, setOrigemLead] = useState('');
+  const [origemCustom, setOrigemCustom] = useState('');
   const [dataCriacaoCustom, setDataCriacaoCustom] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
@@ -169,7 +171,12 @@ export default function App() {
 
         setEditingSlug(editSlug);
         setNomeCliente(orc.cliente || '');
-        setNomeConsultor(orc.consultor || '');
+        setNomeConsultor(orc.consultor || 'LEO BERG');
+        const orig = orc.origem_lead || '';
+        const ORIGENS_FIXAS = ['RD STATION', 'ENVIADO BRAVE', 'UAIROX', 'INDICAÇÃO'];
+        if (ORIGENS_FIXAS.includes(orig)) { setOrigemLead(orig); setOrigemCustom(''); }
+        else if (orig) { setOrigemLead('PERSONALIZADO'); setOrigemCustom(orig); }
+        else { setOrigemLead(''); setOrigemCustom(''); }
         
         // Formatar data para o input datetime-local (yyyy-MM-ddThh:mm)
         if (orc.criado_em) {
@@ -558,10 +565,12 @@ export default function App() {
         frete: freteFinal
       };
 
+      const origemFinal = origemLead === 'PERSONALIZADO' ? (origemCustom.trim() || 'PERSONALIZADO') : origemLead;
       const novoOrcamento = {
         slug,
         cliente: nomeCliente || 'Cliente Brave',
-        consultor: nomeConsultor || 'Consultor Oficial',
+        consultor: nomeConsultor || 'LEO BERG',
+        origem_lead: origemFinal || null,
         payload
       };
 
@@ -1370,7 +1379,7 @@ export default function App() {
                   <label className="block">
                     <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
                     <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
-                      placeholder="Ex: Rafael Mendes"
+                      placeholder="Ex: Leo Berg"
                       className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
                   </label>
                   <label className="block">
@@ -1379,6 +1388,26 @@ export default function App() {
                       className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all [color-scheme:dark]" />
                   </label>
                 </div>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Origem do Lead</span>
+                  <select value={origemLead} onChange={e => setOrigemLead(e.target.value)}
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all">
+                    <option value="">Selecione a origem...</option>
+                    <option value="RD STATION">RD Station</option>
+                    <option value="ENVIADO BRAVE">Enviado Brave</option>
+                    <option value="UAIROX">Uairox</option>
+                    <option value="INDICAÇÃO">Indicação</option>
+                    <option value="PERSONALIZADO">Personalizado</option>
+                  </select>
+                </label>
+                {origemLead === 'PERSONALIZADO' && (
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Descreva a origem</span>
+                    <input type="text" value={origemCustom} onChange={e => setOrigemCustom(e.target.value)}
+                      placeholder="Ex: Instagram, Evento, Parceiro..."
+                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                  </label>
+                )}
               </div>
             </section>
 
