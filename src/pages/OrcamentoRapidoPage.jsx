@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   MapPin, Loader2, Truck, Package, CreditCard, Banknote,
-  ChevronRight, Sparkles, Shield, CheckCircle2, Weight, FolderOpen, Flame, Tag, Zap
+  ChevronRight, Sparkles, Shield, CheckCircle2, Weight, FolderOpen, Flame, Tag, Zap,
+  Building2, ExternalLink,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseMediaUrl } from '../data';
-import { TrustBar, InstitutionalFooter } from '../components/BraveCredentials';
+import { InstitutionalFooter } from '../components/BraveCredentials';
 
 /* ═══════════════════════════════════════════════
    ORÇAMENTO RÁPIDO — Página self-service para leads do WhatsApp
@@ -451,14 +452,24 @@ export default function OrcamentoRapidoPage() {
       {/* Ambient glow */}
       <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-emerald-100/40 rounded-full blur-[160px]" />
 
-      {/* ── Barra de confiança ── */}
-      <TrustBar dark={false} />
-
-      {/* Header */}
-      <header className="relative z-10 text-center pt-10 pb-6 px-6">
-        <img src={LOGO_URL} alt="Brave" className="h-14 mx-auto mb-4 drop-shadow-lg" onError={e => e.target.style.display = 'none'} />
+      {/* ── Header unificado: Logo + Dados + Saudação ── */}
+      <header className="relative z-10 bg-white border-b border-gray-100 pt-8 pb-6 px-6 text-center">
+        <img src="/logo-orcamento.png" alt="Brave" className="h-12 mx-auto mb-3 object-contain"
+          onError={e => { e.target.style.display = 'none'; }} />
+        <div className="flex items-center justify-center gap-5 flex-wrap">
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+            CNPJ 33.167.844/0001-80
+          </span>
+          <a href="https://instagram.com/bravefitnessbr" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs font-semibold text-pink-500 hover:text-pink-600 transition-colors">
+            <span className="text-[11px] font-black">IG</span>
+            @bravefitnessbr
+            <ExternalLink className="w-3 h-3 opacity-60" />
+          </a>
+        </div>
         {nomeUrl && (
-          <h1 className="text-2xl md:text-3xl font-black text-gray-900">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 mt-5">
             Olá, <span className="text-emerald-600">{nomeUrl}</span>! 👋
           </h1>
         )}
@@ -484,7 +495,7 @@ export default function OrcamentoRapidoPage() {
             <div key={prod.id} className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden relative">
               {/* Selo exclusivo */}
               {descAvista > 0 && (
-                <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
+                <div className="absolute top-0 right-0 bg-emerald-700 text-white text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
                   <Zap className="w-2.5 h-2.5" /> OFERTA EXCLUSIVA
                 </div>
               )}
@@ -536,14 +547,14 @@ export default function OrcamentoRapidoPage() {
                   </div>
 
                 {/* Tier 3: À Vista — Destaque máximo */}
-                <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-neon/30" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
+                <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-emerald-700/25 bg-emerald-50/60">
                     <div>
-                      <span className="text-[10px] text-neon/80 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
-                      <p className="text-lg font-black text-neon mt-0.5">{fmt(pAvista)}</p>
-                      {economiaUnit > 0 && <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economiaUnit)}</p>}
+                      <span className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
+                      <p className="text-lg font-black mt-0.5" style={{ color: '#047857' }}>{fmt(pAvista)}</p>
+                      {economiaUnit > 0 && <p className="text-[10px] text-emerald-600 font-medium">Economia de {fmt(economiaUnit)}</p>}
                     </div>
                     {descAvista > 0 && (
-                      <span className="text-[10px] font-bold text-dark-950 bg-gradient-to-r from-neon to-emerald-400 px-2.5 py-1 rounded-full shadow-lg shadow-neon/25 animate-pulse whitespace-nowrap">
+                      <span className="text-[10px] font-bold text-white bg-emerald-700 px-2.5 py-1 rounded-full whitespace-nowrap">
                         {descAvista}% off
                       </span>
                     )}
@@ -681,17 +692,17 @@ export default function OrcamentoRapidoPage() {
             </div>
 
             {/* À Vista Total — Destaque */}
-            <div className="rounded-xl p-4 border border-neon/25 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(57,255,20,0.04) 0%, rgba(16,185,129,0.06) 100%)' }}>
-              <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-lg flex items-center gap-0.5">
+            <div className="rounded-xl p-4 border border-emerald-700/25 bg-emerald-50/60 relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-emerald-700 text-white text-[9px] font-black px-2.5 py-0.5 rounded-bl-lg flex items-center gap-0.5">
                 <Zap className="w-2.5 h-2.5" /> MELHOR OFERTA
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-neon flex items-center gap-1"><Banknote className="w-3 h-3" /> À VISTA (PIX)</p>
-                  {economia > 0 && <p className="text-[10px] text-emerald-400 font-medium">Economia de {fmt(economia)}</p>}
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1"><Banknote className="w-3 h-3" /> À VISTA (PIX)</p>
+                  {economia > 0 && <p className="text-[10px] text-emerald-600 font-medium">Economia de {fmt(economia)}</p>}
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-black text-neon">{fmt(precoAvista)}</p>
+                  <p className="text-2xl font-black" style={{ color: '#047857' }}>{fmt(precoAvista)}</p>
                 </div>
               </div>
             </div>
