@@ -447,22 +447,22 @@ export default function OrcamentoRapidoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 relative overflow-hidden">
+    <div className="min-h-screen bg-white relative overflow-hidden">
       {/* Ambient glow */}
-      <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-neon/5 rounded-full blur-[120px]" />
+      <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-emerald-100/40 rounded-full blur-[160px]" />
 
       {/* ── Barra de confiança ── */}
-      <TrustBar dark={true} />
+      <TrustBar dark={false} />
 
       {/* Header */}
       <header className="relative z-10 text-center pt-10 pb-6 px-6">
         <img src={LOGO_URL} alt="Brave" className="h-14 mx-auto mb-4 drop-shadow-lg" onError={e => e.target.style.display = 'none'} />
         {nomeUrl && (
-          <h1 className="text-2xl md:text-3xl font-black text-white">
-            Olá, <span className="text-neon">{nomeUrl}</span>! 👋
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900">
+            Olá, <span className="text-emerald-600">{nomeUrl}</span>! 👋
           </h1>
         )}
-        <p className="text-zinc-400 text-sm mt-2">
+        <p className="text-gray-500 text-sm mt-2">
           {produtos.length === 1 ? 'Seu orçamento personalizado está a um passo' : `${produtos.length} equipamentos selecionados para você`}
         </p>
       </header>
@@ -481,7 +481,7 @@ export default function OrcamentoRapidoPage() {
           const economiaUnit = precoTabela - pAvista;
           const unidsDisp = ((prod.id.charCodeAt(0) || 3) % 4) + 2; // 2-5 pseudo-random
           return (
-            <div key={prod.id} className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl overflow-hidden relative">
+            <div key={prod.id} className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden relative">
               {/* Selo exclusivo */}
               {descAvista > 0 && (
                 <div className="absolute top-0 right-0 bg-gradient-to-l from-neon to-emerald-500 text-dark-950 text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
@@ -491,7 +491,7 @@ export default function OrcamentoRapidoPage() {
 
               {/* Header: Image + Name + Qty */}
               <div className="flex items-center gap-4 p-4 pb-2">
-                <div className="w-16 h-16 rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
                   {media && media.type === 'image' ? (
                     <img src={media.url} alt={prod.nome} className="max-h-full max-w-full object-contain" />
                   ) : media && media.type === 'folder' ? (
@@ -501,32 +501,32 @@ export default function OrcamentoRapidoPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white leading-tight pr-20">{prod.nome}</h3>
+                  <h3 className="text-sm font-bold text-gray-900 leading-tight pr-20">{prod.nome}</h3>
                   {prod.peso_kg > 0 && (
-                    <span className="text-[10px] text-zinc-500 flex items-center gap-0.5 mt-0.5"><Weight className="w-3 h-3" /> {prod.peso_kg}kg</span>
+                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5 mt-0.5"><Weight className="w-3 h-3" /> {prod.peso_kg}kg</span>
                   )}
                 </div>
-                <div className="flex items-center bg-dark-900 rounded-lg border border-dark-600 shrink-0">
-                  <button onClick={() => updateQtd(prod.id, -1)} className="px-2.5 py-1.5 text-zinc-400 hover:text-white text-xs font-bold cursor-pointer">−</button>
-                  <span className="px-2 py-1.5 text-white font-bold text-xs min-w-[1.5rem] text-center">{qty}</span>
-                  <button onClick={() => updateQtd(prod.id, 1)} className="px-2.5 py-1.5 text-zinc-400 hover:text-white text-xs font-bold cursor-pointer">+</button>
+                <div className="flex items-center bg-gray-100 rounded-lg border border-gray-200 shrink-0">
+                  <button onClick={() => updateQtd(prod.id, -1)} className="px-2.5 py-1.5 text-gray-400 hover:text-gray-900 text-xs font-bold cursor-pointer">−</button>
+                  <span className="px-2 py-1.5 text-gray-900 font-bold text-xs min-w-[1.5rem] text-center">{qty}</span>
+                  <button onClick={() => updateQtd(prod.id, 1)} className="px-2.5 py-1.5 text-gray-400 hover:text-gray-900 text-xs font-bold cursor-pointer">+</button>
                 </div>
               </div>
 
               {/* 3 Price Tiers */}
               <div className="px-4 pb-2 space-y-1.5">
                 {/* Tier 1: Preço de Tabela */}
-                <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-dark-900/50">
-                  <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium">Preço de tabela</span>
-                  <span className="text-sm text-zinc-600 line-through font-medium">{fmt(precoTabela)}</span>
+                <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-gray-50">
+                  <span className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">Preço de tabela</span>
+                  <span className="text-sm text-gray-400 line-through font-medium">{fmt(precoTabela)}</span>
                 </div>
 
                 {/* Tier 2: Cartão Parcelado */}
                 <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/20">
                     <div>
                       <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão 10x</span>
-                      <p className="text-base font-black text-white mt-0.5">10x {fmt(parcelaMensal)}</p>
-                      <p className="text-[10px] text-zinc-500">Total: {fmt(pPrazo)}</p>
+                      <p className="text-base font-black text-gray-900 mt-0.5">10x {fmt(parcelaMensal)}</p>
+                      <p className="text-[10px] text-gray-400">Total: {fmt(pPrazo)}</p>
                     </div>
                     {descPrazo > 0 && (
                       <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
@@ -551,10 +551,10 @@ export default function OrcamentoRapidoPage() {
               </div>
 
               {/* Urgency Bar */}
-              <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-500/[0.05] border border-red-500/15">
+              <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-50 border border-red-100">
                 <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
-                <span className="text-[11px] text-red-400 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
-                <div className="flex-1 h-1.5 bg-dark-700 rounded-full overflow-hidden ml-auto max-w-[50px]">
+                <span className="text-[11px] text-red-500 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
+                <div className="flex-1 h-1.5 bg-red-100 rounded-full overflow-hidden ml-auto max-w-[50px]">
                   <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
                 </div>
               </div>
@@ -566,14 +566,14 @@ export default function OrcamentoRapidoPage() {
       {/* CEP Input */}
       {!orcamentoGerado && (
         <section className="relative z-10 max-w-lg mx-auto px-4 sm:px-6 mb-8">
-          <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
+          <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-orange-accent/10 flex items-center justify-center">
-                <MapPin className="w-4 h-4 text-orange-accent" />
+              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
+                <MapPin className="w-4 h-4 text-orange-500" />
               </div>
-              <h3 className="text-sm font-semibold text-white uppercase tracking-wider">Calcular Frete</h3>
+              <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wider">Calcular Frete</h3>
             </div>
-            <p className="text-xs text-zinc-400 mb-4">Digite seu CEP para calcularmos o frete e montar seu orçamento completo.</p>
+            <p className="text-xs text-gray-500 mb-4">Digite seu CEP para calcularmos o frete e montar seu orçamento completo.</p>
 
             <div className="relative">
               <input
@@ -589,7 +589,7 @@ export default function OrcamentoRapidoPage() {
                 }}
                 placeholder="00000-000"
                 autoFocus
-                className="w-full bg-dark-900 border border-dark-600 text-white text-lg font-mono rounded-xl px-4 py-4 focus:outline-none focus:border-neon/50 focus:ring-2 focus:ring-neon/20 transition-all placeholder:text-dark-500 text-center tracking-[0.3em]"
+                className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg font-mono rounded-xl px-4 py-4 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all placeholder:text-gray-400 text-center tracking-[0.3em]"
               />
               {buscandoCep && (
                 <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -599,7 +599,7 @@ export default function OrcamentoRapidoPage() {
             </div>
 
             {cepInfo && (
-              <div className="mt-3 flex items-center gap-2 text-xs text-zinc-400 animate-fade-in-up">
+              <div className="mt-3 flex items-center gap-2 text-xs text-gray-500 animate-fade-in-up">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{cepInfo.localidade}, {cepInfo.uf}</span>
               </div>
@@ -610,18 +610,18 @@ export default function OrcamentoRapidoPage() {
             )}
 
             {estadoLead && !cepInfo && (
-              <div className="mt-4 p-3 bg-dark-900/70 border border-dark-600/50 rounded-xl">
-                <p className="text-xs text-zinc-400 mb-2 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-neon" />
-                  Localização identificada: <span className="text-white font-semibold ml-1">{cidadeLead ? `${cidadeLead}, ${estadoLead}` : estadoLead}</span>
+              <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-emerald-500" />
+                  Localização identificada: <span className="text-gray-900 font-semibold ml-1">{cidadeLead ? `${cidadeLead}, ${estadoLead}` : estadoLead}</span>
                 </p>
                 <button
                   onClick={() => usarLocalizacaoPreenchida(estadoLead, cidadeLead)}
-                  className="w-full text-xs font-bold text-dark-950 bg-neon hover:bg-neon/90 rounded-lg py-2.5 transition-colors"
+                  className="w-full text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg py-2.5 transition-colors"
                 >
                   Usar essa localização →
                 </button>
-                <p className="text-[10px] text-zinc-600 mt-1.5 text-center">ou digite seu CEP acima para maior precisão no frete</p>
+                <p className="text-[10px] text-gray-400 mt-1.5 text-center">ou digite seu CEP acima para maior precisão no frete</p>
               </div>
             )}
 
@@ -640,9 +640,9 @@ export default function OrcamentoRapidoPage() {
       {/* Quote Result — Dual Totals */}
       {orcamentoGerado && (
         <section className="relative z-10 max-w-lg mx-auto px-4 sm:px-6 pb-12 animate-fade-in-up">
-          <div className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-neon" /> Resumo do Investimento
+          <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 space-y-4">
+            <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-500" /> Resumo do Investimento
             </h3>
 
             <div className="space-y-2 text-sm">
@@ -650,13 +650,13 @@ export default function OrcamentoRapidoPage() {
                 const qty = quantidades[p.id] || 1;
                 return (
                   <div key={p.id} className="flex justify-between items-center">
-                    <span className="text-zinc-400">{qty}x {p.nome}</span>
-                    <span className="text-zinc-600 line-through text-xs">{fmt(p.preco * qty)}</span>
+                    <span className="text-gray-600">{qty}x {p.nome}</span>
+                    <span className="text-gray-400 line-through text-xs">{fmt(p.preco * qty)}</span>
                   </div>
                 );
               })}
-              <div className="flex justify-between pt-1 border-t border-dark-700/30">
-                <span className="text-zinc-400 flex items-center gap-1"><Truck className="w-3.5 h-3.5" /> Frete ({estado} · {zona})</span>
+              <div className="flex justify-between pt-1 border-t border-gray-200">
+                <span className="text-gray-500 flex items-center gap-1"><Truck className="w-3.5 h-3.5" /> Frete ({estado} · {zona})</span>
                 <span className="text-orange-accent font-semibold">{fmt(frete)}</span>
               </div>
               {cepInfo && (
@@ -674,8 +674,8 @@ export default function OrcamentoRapidoPage() {
                   <p className="text-[10px] text-zinc-500">Crédito sem juros</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xl font-black text-white">10x {fmt(precoPrazo / 10)}</p>
-                  <p className="text-[10px] text-zinc-500">Total: {fmt(precoPrazo)}</p>
+                  <p className="text-xl font-black text-gray-900">10x {fmt(precoPrazo / 10)}</p>
+                  <p className="text-[10px] text-gray-400">Total: {fmt(precoPrazo)}</p>
                 </div>
               </div>
             </div>
@@ -704,7 +704,7 @@ export default function OrcamentoRapidoPage() {
           </div>
 
           {/* Trust badges */}
-          <div className="mt-6 flex items-center justify-center gap-6 text-[10px] text-zinc-500">
+          <div className="mt-6 flex items-center justify-center gap-6 text-[10px] text-gray-400">
             <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Frete garantido</span>
             <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Preços oficiais</span>
             <span className="flex items-center gap-1"><Tag className="w-3 h-3" /> Preço exclusivo</span>
@@ -713,7 +713,7 @@ export default function OrcamentoRapidoPage() {
       )}
 
       {/* ── Rodapé institucional ── */}
-      <InstitutionalFooter dark={true} />
+      <InstitutionalFooter dark={false} />
 
       {/* Loading overlay while saving */}
       {salvando && (
