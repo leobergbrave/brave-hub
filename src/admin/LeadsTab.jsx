@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-  Loader2, Plus, Phone, User, Search, ChevronDown,
+  Loader2, Plus, Phone, User, Search, ChevronDown, ChevronLeft, ChevronRight,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
   CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine, Trash2,
   ThumbsUp, ArrowRight, Edit2,
@@ -70,13 +70,16 @@ function atingiuEstagio(status, target) {
 }
 
 /* ─── Funnel metrics ─── */
-function FunnelBar({ leads }) {
+function FunnelBar({ leads, useBaseline = false }) {
   const counts = STATUS_PIPELINE
     .filter(s => FUNNEL_STAGES.includes(s.value))
-    .map(s => ({
-      ...s,
-      count: Math.max(FUNNEL_BASELINE[s.value] ?? 0, leads.filter(l => atingiuEstagio(l.status, s.value)).length),
-    }));
+    .map(s => {
+      const real = leads.filter(l => atingiuEstagio(l.status, s.value)).length;
+      return {
+        ...s,
+        count: useBaseline ? Math.max(FUNNEL_BASELINE[s.value] ?? 0, real) : real,
+      };
+    });
 
   // Taxa de conversão: count[i] / count[i-1] (do estágio anterior com pelo menos 1 lead)
   function taxa(i) {
@@ -487,6 +490,19 @@ export default function LeadsTab() {
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [busca, setBusca] = useState('');
   const [atualizandoStatus, setAtualizandoStatus] = useState(null);
+  const [mes, setMes] = useState('todos');
+
+  const changeMonth = (dir) => {
+    const base = mes === 'todos'
+      ? new Date()
+      : new Date(mes + '-15');
+    const d = new Date(base.getFullYear(), base.getMonth() + dir, 1);
+    setMes(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  const mesLabel = mes === 'todos'
+    ? 'Todos os meses'
+    : new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -526,7 +542,13 @@ export default function LeadsTab() {
     setAtualizandoStatus(null);
   };
 
-  const leadsFiltrados = leads.filter(l => {
+  const leadsPorMes = leads.filter(l => {
+    if (mes === 'todos') return true;
+    const criado = l.criado_em?.slice(0, 7); // 'YYYY-MM'
+    return criado === mes;
+  });
+
+  const leadsFiltrados = leadsPorMes.filter(l => {
     const matchStatus = filtroStatus === 'todos' || l.status === filtroStatus;
     const matchBusca = !busca || l.nome.toLowerCase().includes(busca.toLowerCase()) || l.telefone.includes(busca);
     return matchStatus && matchBusca;
@@ -535,21 +557,40 @@ export default function LeadsTab() {
   return (
     <div className="max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Gestão de Leads</h1>
-          <p className="text-sm text-zinc-400">{leads.length} leads cadastrados</p>
+          <p className="text-sm text-zinc-400">
+            {mes === 'todos' ? `${leads.length} leads cadastrados` : `${leadsPorMes.length} leads em ${mesLabel}`}
+          </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-neon text-dark-950 font-black text-sm rounded-xl hover:bg-neon/90 transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> Novo Lead
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Seletor de mês */}
+          <div className="flex items-center gap-1 bg-dark-800 border border-dark-700 rounded-xl p-1">
+            <button onClick={() => changeMonth(-1)} className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-dark-700 cursor-pointer transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setMes('todos')}
+              className={`text-sm font-semibold px-3 py-1 rounded-lg min-w-[150px] text-center capitalize transition-colors cursor-pointer ${mes === 'todos' ? 'text-neon' : 'text-white hover:text-neon'}`}
+            >
+              {mesLabel}
+            </button>
+            <button onClick={() => changeMonth(1)} className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-dark-700 cursor-pointer transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-neon text-dark-950 font-black text-sm rounded-xl hover:bg-neon/90 transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> Novo Lead
+          </button>
+        </div>
       </div>
 
       {/* Funil */}
-      {!loading && leads.length > 0 && <FunnelBar leads={leads} />}
+      {!loading && leads.length > 0 && <FunnelBar leads={leadsPorMes} useBaseline={mes === 'todos'} />}
 
       {/* Filtros */}
       <div className="flex gap-3 mb-4">
