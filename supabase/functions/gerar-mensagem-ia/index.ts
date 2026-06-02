@@ -98,7 +98,7 @@ Regras:
 
     // ── 4. Chama Gemini ──
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,6 +110,13 @@ Regras:
     );
 
     const geminiData = await geminiRes.json();
+
+    if (!geminiRes.ok || geminiData.error) {
+      const errMsg = geminiData?.error?.message || `HTTP ${geminiRes.status}`;
+      console.error('Gemini error:', JSON.stringify(geminiData));
+      throw new Error(`Gemini: ${errMsg}`);
+    }
+
     const mensagemGerada =
       geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
       'Não foi possível gerar a mensagem. Tente novamente.';
