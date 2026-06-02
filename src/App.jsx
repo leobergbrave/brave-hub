@@ -227,6 +227,53 @@ export default function App() {
     })();
   }, [searchParams, produtos]);
 
+  // ── Pré-carregar a partir de lead (?nome=X&produtos=remo,bike&telefone=Y) ──
+  useEffect(() => {
+    const nomeParam    = searchParams.get('nome');
+    const produtosParam = searchParams.get('produtos');
+    const telefoneParam = searchParams.get('telefone');
+
+    if (!nomeParam && !produtosParam) return;
+    if (searchParams.get('edit')) return; // não conflita com modo edição
+    if (!produtos.length) return;
+
+    if (nomeParam)    setNomeCliente(nomeParam);
+    if (telefoneParam) setTelefoneCliente(telefoneParam);
+
+    if (produtosParam) {
+      const ALIASES = {
+        remo: 'Remo Indoor Profissional',    rower: 'Remo Indoor Profissional',
+        estcv: 'Esteira Curva Brave 2.0',    esteira: 'Esteira Curva Brave 2.0',
+        skierg: 'SkiErg com Plataforma',     ski: 'SkiErg com Plataforma',
+        bikeerg: 'Bike Erg Brave',           bike: 'Bike Erg Brave', bikerg: 'Bike Erg Brave',
+        storm: 'STORM Bike Brave',           stormbike: 'STORM Bike Brave',
+        escada: 'Escada Ergométrica - Painel de LED + Botões',
+      };
+      const termos = produtosParam.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      const novosItens = [];
+      for (const termo of termos) {
+        const nomeAlias = ALIASES[termo];
+        const prod = nomeAlias
+          ? produtos.find(p => p.nome.toLowerCase().includes(nomeAlias.toLowerCase()))
+          : produtos.find(p => p.nome.toLowerCase().includes(termo) || p.codigo_sku?.toLowerCase() === termo);
+        if (prod && !novosItens.find(i => i.id === prod.id)) {
+          novosItens.push({
+            id: prod.id, nome: prod.nome, preco: prod.preco,
+            preco_avista: prod.preco_avista ?? null,
+            preco_prazo: prod.preco_prazo ?? null,
+            peso_kg: prod.peso_kg ?? 0,
+            url_imagem: prod.url_imagem ?? '',
+            codigo_sku: prod.codigo_sku ?? '',
+            quantidade: 1, descontoAvistaItem: 0, descontoCartaoItem: 0,
+          });
+        }
+      }
+      if (novosItens.length > 0) setItens(novosItens);
+    }
+
+    setSearchParams({}, { replace: true });
+  }, [searchParams, produtos]);
+
   // ── Derived calculations ──
   const pesoTotal = useMemo(
     () => itens.reduce((acc, i) => acc + (i.peso_kg || 0) * i.quantidade, 0),

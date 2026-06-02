@@ -4,7 +4,7 @@ import {
   Loader2, Plus, Phone, User, Search, ChevronDown,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
   CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine, Trash2,
-  ThumbsUp, ArrowRight
+  ThumbsUp, ArrowRight, Edit2,
 } from 'lucide-react';
 
 /* ─── Constantes ─── */
@@ -639,6 +639,19 @@ export default function LeadsTab() {
                     className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 border border-dark-600 transition-all"
                   >
                     <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+
+                {/* Editar orçamento no Gerador */}
+                {lead.produtos_interesse?.length > 0 && (
+                  <a
+                    href={`/?nome=${encodeURIComponent(lead.nome)}&produtos=${lead.produtos_interesse.join(',')}&telefone=${encodeURIComponent(lead.telefone || '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Editar orçamento"
+                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-neon hover:bg-neon/10 border border-dark-600 transition-all"
+                  >
+                    <Edit2 className="w-4 h-4" />
                   </a>
                 )}
 
