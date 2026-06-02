@@ -59,6 +59,10 @@ const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link
 // Ordem de progressão do funil — usada para contagem cumulativa
 const FUNNEL_ORDER = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link_aberto', 'qualificando', 'convertido', 'aprovado'];
 
+// Baseline histórico (leads que passaram pelo estágio antes do sistema rastrear automaticamente)
+// Incrementado pelo count cumulativo real do banco a partir desta data
+const FUNNEL_BASELINE = { fluxo_disparado: 175, respondeu: 115, orcamento_gerado: 101, link_aberto: 82 };
+
 function atingiuEstagio(status, target) {
   const si = FUNNEL_ORDER.indexOf(status);
   const ti = FUNNEL_ORDER.indexOf(target);
@@ -71,8 +75,7 @@ function FunnelBar({ leads }) {
     .filter(s => FUNNEL_STAGES.includes(s.value))
     .map(s => ({
       ...s,
-      // Cumulativo: conta todos os leads que chegaram neste estágio OU avançaram além
-      count: leads.filter(l => atingiuEstagio(l.status, s.value)).length,
+      count: Math.max(FUNNEL_BASELINE[s.value] ?? 0, leads.filter(l => atingiuEstagio(l.status, s.value)).length),
     }));
 
   // Taxa de conversão: count[i] / count[i-1] (do estágio anterior com pelo menos 1 lead)
