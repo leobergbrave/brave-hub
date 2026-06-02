@@ -28,7 +28,7 @@ const NAV_SECTIONS = [
     label: 'COMUNICAÇÃO',
     items: [
       { id: 'disparos',  label: 'Disparos WhatsApp', icon: Zap },
-      { id: 'marketing', label: 'Automações',         icon: Megaphone },
+      { id: 'marketing', label: 'Follow Up WhatsApp',  icon: Megaphone },
       { id: 'emails',    label: 'Emails',              icon: Mail },
     ],
   },

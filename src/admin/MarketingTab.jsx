@@ -238,7 +238,7 @@ export default function MarketingTab() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-2">Automações de Marketing</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">Follow Up Inteligente</h1>
         <p className="text-sm text-zinc-400">Configure as mensagens de follow-up que serão enviadas para clientes com orçamentos pendentes.</p>
       </div>
 
