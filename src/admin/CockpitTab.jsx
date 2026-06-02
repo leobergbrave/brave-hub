@@ -292,6 +292,7 @@ export default function CockpitTab() {
     if (field === 'valor_fechado') update.valor_fechado = parseCurrency(val) || null;
     if (field === 'origem_lead')   update.origem_lead   = val || null;
     if (field === 'cliente')       update.cliente       = val.trim() || null;
+    if (field === 'aprovado_em')   update.aprovado_em   = val ? new Date(val).toISOString() : null;
     await supabase.from('orcamentos_salvos').update(update).eq('id', id);
     setEditCell({ id: null, field: null, val: '' });
     setSavingCell(false);
@@ -567,7 +568,7 @@ export default function CockpitTab() {
                 <p className="text-sm font-bold text-white">Vendas Fechadas</p>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">{vendasAprovadas.length}</span>
               </div>
-              <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Clique nos campos coloridos para editar</p>
+              <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Clique nos campos coloridos para editar · Enter salva · Esc cancela</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -577,7 +578,7 @@ export default function CockpitTab() {
                     <th className="text-right px-3 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Valor Orçado</th>
                     <th className="text-right px-3 py-3 text-[10px] font-bold text-emerald-500/70 uppercase tracking-wider">Valor Fechado ✎</th>
                     <th className="text-center px-3 py-3 text-[10px] font-bold text-blue-400/70 uppercase tracking-wider">Origem ✎</th>
-                    <th className="text-right px-3 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Data</th>
+                    <th className="text-right px-3 py-3 text-[10px] font-bold text-amber-400/70 uppercase tracking-wider">Data ✎</th>
                     <th className="text-center px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Proposta</th>
                   </tr>
                 </thead>
@@ -585,9 +586,11 @@ export default function CockpitTab() {
                   {vendasAprovadas.map(o => {
                     const subtotal = (o.payload?.itens || []).reduce((acc, i) => acc + i.preco * i.quantidade, 0);
                     const data = new Date(o.aprovado_em || o.criado_em).toLocaleDateString('pt-BR');
-                    const isEditValor  = editCell.id === o.id && editCell.field === 'valor_fechado';
-                    const isEditOrigem = editCell.id === o.id && editCell.field === 'origem_lead';
+                    const isEditValor   = editCell.id === o.id && editCell.field === 'valor_fechado';
+                    const isEditOrigem  = editCell.id === o.id && editCell.field === 'origem_lead';
                     const isEditCliente = editCell.id === o.id && editCell.field === 'cliente';
+                    const isEditData    = editCell.id === o.id && editCell.field === 'aprovado_em';
+                    const dataIso = (o.aprovado_em || o.criado_em)?.split('T')[0] || '';
                     const onKey = (e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); };
 
                     return (
@@ -650,8 +653,20 @@ export default function CockpitTab() {
                             </button>
                           )}
                         </td>
-                        {/* Data */}
-                        <td className="px-3 py-3 text-right text-[11px] text-zinc-500">{data}</td>
+                        {/* Data — editável */}
+                        <td className="px-3 py-3 text-right">
+                          {isEditData ? (
+                            <input autoFocus type="date" value={editCell.val}
+                              onChange={e => setEditCell(c => ({ ...c, val: e.target.value }))}
+                              onBlur={saveEdit} onKeyDown={onKey}
+                              className="text-xs bg-dark-900 border border-neon/50 rounded-lg px-2 py-1 text-white focus:outline-none" />
+                          ) : (
+                            <button onClick={() => startEdit(o.id, 'aprovado_em', dataIso)}
+                              className="text-[11px] font-semibold text-amber-300 hover:text-amber-200 cursor-pointer hover:underline decoration-amber-400/50 transition-colors">
+                              {data}
+                            </button>
+                          )}
+                        </td>
                         {/* Ações */}
                         <td className="px-4 py-3 text-center">
                           <button onClick={() => navigate(`/?edit=${o.slug}`)}
