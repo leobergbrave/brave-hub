@@ -2,8 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Shield, Package, Weight,
-  Truck, MessageCircle, ChevronRight,
-  Star, Award, Loader2, X, FolderOpen, CreditCard, Banknote,
+  Truck, Star, Award, Loader2, X, FolderOpen, CreditCard, Banknote,
   Flame, Zap, CheckCircle2, Building2, ExternalLink,
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
@@ -379,7 +378,7 @@ export default function OrcamentoPage() {
             return (
               <div
                 key={item.id}
-                className={`bg-white border border-gray-200 rounded-xl overflow-hidden relative animate-fade-in-up transition-opacity shadow-sm hover:shadow-md transition-shadow ${removed ? 'opacity-40' : ''}`}
+                className={`bg-white border border-gray-200 rounded-xl overflow-hidden relative animate-fade-in-up shadow-sm ${removed ? 'opacity-40' : ''}`}
                 style={{ animationDelay: `${idx * 0.08}s` }}
               >
                 {/* Selo exclusivo */}
@@ -389,38 +388,28 @@ export default function OrcamentoPage() {
                   </div>
                 )}
 
-                {/* Main Row — Horizontal Layout */}
-                <div className="flex flex-col sm:flex-row sm:items-stretch">
-                  {/* Image column */}
-                  <div
-                    className={`shrink-0 w-full sm:w-24 h-24 sm:h-auto bg-gray-50 flex items-center justify-center overflow-hidden ${item.url_imagem && !removed ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}
-                    onClick={() => item.url_imagem && !removed && setExpandedImage(item.url_imagem)}
-                  >
-                    {media && media.type === 'image' ? (
-                      <img src={media.url} alt={item.nome} className="max-h-20 sm:max-h-full max-w-full object-contain p-2" />
-                    ) : media && media.type === 'folder' ? (
-                      <FolderOpen className="w-6 h-6 text-blue-400" />
-                    ) : (
-                      <Package className="w-6 h-6 text-gray-300" />
-                    )}
-                  </div>
+                {/* ── ZONA SUPERIOR: infos (esq) + imagem (dir) ── */}
+                <div className="flex items-stretch min-h-[148px]">
 
-                  {/* Content area */}
-                  <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4">
-                    {/* Product info */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className={`text-sm font-bold leading-tight ${removed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                  {/* Coluna esquerda — infos + stepper */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between p-3 pr-2">
+                    <div>
+                      {/* Nome */}
+                      <h3 className={`text-[13px] font-bold leading-tight ${removed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                         {item.nome}
                       </h3>
-                      <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
+                      {/* SKU + Peso */}
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         {item.codigo_sku && (
-                          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{item.codigo_sku}</span>
+                          <span className="font-mono text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{item.codigo_sku}</span>
                         )}
                         {item.peso > 0 && (
-                          <span className="flex items-center gap-0.5"><Weight className="w-3 h-3" /> {item.peso}kg</span>
+                          <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                            <Weight className="w-3 h-3" /> {item.peso}kg
+                          </span>
                         )}
                       </div>
-                      {/* Scarcity inline */}
+                      {/* Escassez */}
                       {!removed && (
                         <div className="flex items-center gap-1.5 mt-2">
                           <Flame className="w-3 h-3 text-red-400 animate-pulse shrink-0" />
@@ -435,62 +424,74 @@ export default function OrcamentoPage() {
                       )}
                     </div>
 
-                    {/* Quantity stepper */}
-                    <div className="shrink-0 flex items-center sm:flex-col sm:items-center gap-2">
-                      <span className="text-[9px] text-gray-400 uppercase tracking-wider font-bold hidden sm:block">Qtd</span>
-                      <div className="flex items-center">
-                        <button
-                          onClick={() => changeQty(item.id, -1)}
-                          disabled={qty === 0}
-                          className="w-7 h-7 flex items-center justify-center rounded-l-lg bg-gray-100 border border-gray-300 text-gray-500 hover:text-gray-900 hover:bg-gray-200 disabled:opacity-30 transition-colors cursor-pointer text-base font-bold select-none"
-                        >−</button>
-                        <span className="w-9 h-7 flex items-center justify-center bg-white border-t border-b border-gray-300 text-xs font-black text-gray-900">
-                          {qty}
-                        </span>
-                        <button
-                          onClick={() => changeQty(item.id, 1)}
-                          className="w-7 h-7 flex items-center justify-center rounded-r-lg bg-gray-100 border border-gray-300 text-gray-500 hover:text-emerald-600 hover:bg-gray-200 transition-colors cursor-pointer text-base font-bold select-none"
-                        >+</button>
-                      </div>
+                    {/* Stepper */}
+                    <div className="flex items-center mt-3">
+                      <button
+                        onClick={() => changeQty(item.id, -1)}
+                        disabled={qty === 0}
+                        className="w-8 h-8 flex items-center justify-center rounded-l-lg bg-gray-100 border border-gray-300 text-gray-500 hover:text-gray-900 hover:bg-gray-200 disabled:opacity-30 transition-colors cursor-pointer text-base font-bold select-none"
+                      >−</button>
+                      <span className="w-10 h-8 flex items-center justify-center bg-white border-t border-b border-gray-300 text-sm font-black text-gray-900">
+                        {qty}
+                      </span>
+                      <button
+                        onClick={() => changeQty(item.id, 1)}
+                        className="w-8 h-8 flex items-center justify-center rounded-r-lg bg-gray-100 border border-gray-300 text-gray-500 hover:text-emerald-600 hover:bg-gray-200 transition-colors cursor-pointer text-base font-bold select-none"
+                      >+</button>
                     </div>
+                  </div>
 
-                    {/* Prices column — inline */}
-                    {!removed && (
-                      <div className="shrink-0 sm:min-w-[220px] space-y-1.5 sm:text-right border-t sm:border-t-0 sm:border-l border-gray-200 pt-3 sm:pt-0 sm:pl-4">
-                        {/* Tabela riscado */}
-                        <div className="flex items-center sm:justify-end gap-2">
-                          <span className="text-[10px] text-gray-400 uppercase tracking-wider">Tabela</span>
-                          <span className="text-xs text-gray-400 line-through">{fmt(totalTabela)}</span>
-                        </div>
-                        {/* Cartão parcelado */}
-                        <div className="flex items-center sm:justify-end gap-2 flex-wrap">
-                          <CreditCard className="w-3 h-3 text-amber-500 shrink-0" />
-                          <span className="text-xs text-gray-800 font-bold">{activeOrcamento.parcelas}x {fmt(parcelaMensal)}</span>
-                          {descPrazoP > 0 && (
-                            <span className="text-[9px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-1.5 py-0.5 rounded-full whitespace-nowrap">{descPrazoP}% off</span>
-                          )}
-                        </div>
-                        {/* À Vista PIX — destaque */}
-                        <div className="flex items-center sm:justify-end gap-2 flex-wrap">
-                          <Banknote className="w-3 h-3 text-emerald-600 shrink-0" />
-                          <span className="text-sm text-emerald-600 font-black">{fmt(totalAvistaItem)}</span>
-                          {descAvistaP > 0 && (
-                            <span className="text-[9px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 px-1.5 py-0.5 rounded-full shadow-sm shadow-emerald-200 animate-pulse whitespace-nowrap">{descAvistaP}% off</span>
-                          )}
-                        </div>
-                        {/* Economia */}
-                        {economiaTotal > 0 && (
-                          <p className="text-[10px] text-emerald-600 font-medium">Economia de {fmt(economiaTotal)}</p>
-                        )}
-                      </div>
+                  {/* Coluna direita — imagem */}
+                  <div
+                    className={`shrink-0 w-[42%] bg-gray-50 flex items-center justify-center overflow-hidden ${item.url_imagem && !removed ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''}`}
+                    onClick={() => item.url_imagem && !removed && setExpandedImage(item.url_imagem)}
+                  >
+                    {media && media.type === 'image' ? (
+                      <img src={media.url} alt={item.nome} className="w-full h-full object-contain p-2" />
+                    ) : media && media.type === 'folder' ? (
+                      <FolderOpen className="w-6 h-6 text-blue-400" />
+                    ) : (
+                      <Package className="w-10 h-10 text-gray-200" />
                     )}
                   </div>
                 </div>
+
+                {/* ── ZONA INFERIOR: preços — largura total ── */}
+                {!removed && (
+                  <div className="border-t border-gray-100 px-3 py-3 space-y-1.5">
+                    {/* Tabela riscado */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Tabela</span>
+                      <span className="text-[11px] text-gray-400 line-through">{fmt(totalTabela)}</span>
+                    </div>
+                    {/* Cartão parcelado */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CreditCard className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="text-sm font-bold text-gray-800">{activeOrcamento.parcelas}x {fmt(parcelaMensal)}</span>
+                      {descPrazoP > 0 && (
+                        <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2 py-0.5 rounded-full whitespace-nowrap">{descPrazoP}% off</span>
+                      )}
+                    </div>
+                    {/* À Vista — destaque */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Banknote className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="text-[17px] font-black text-emerald-600 leading-none">{fmt(totalAvistaItem)}</span>
+                      {descAvistaP > 0 && (
+                        <span className="text-[10px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 px-2 py-0.5 rounded-full shadow-sm shadow-emerald-200 whitespace-nowrap">{descAvistaP}% off</span>
+                      )}
+                    </div>
+                    {/* Economia */}
+                    {economiaTotal > 0 && (
+                      <p className="text-[11px] text-emerald-600 font-semibold">Economia de {fmt(economiaTotal)}</p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </section>
+
 
       {/* ══════════════════════════════════════════
           3. RESUMO FINANCEIRO
@@ -573,30 +574,7 @@ export default function OrcamentoPage() {
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════
-          4. CTAs — ÁREA DE AÇÃO
-          ══════════════════════════════════════════ */}
-      <section className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-        {/* Escassez */}
-        <div className="flex items-start gap-2.5 bg-orange-50 border border-orange-200 rounded-xl px-5 py-3.5 mb-5">
-          <Shield className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
-          <p className="text-xs text-orange-700 leading-relaxed font-medium">
-            <span className="font-bold">Atenção:</span> A aprovação garante a reserva do estoque e 
-            congela os valores de tabela.
-          </p>
-        </div>
 
-        {/* Botão Negociar */}
-        <button
-          id="btn-negociar"
-          onClick={handleNegociarProjeto}
-          className="w-full flex items-center justify-center gap-3 text-lg font-black py-5 rounded-2xl transition-all duration-300 cursor-pointer bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:shadow-2xl hover:shadow-emerald-200 hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <MessageCircle className="w-6 h-6" />
-          Negociar Projeto
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </section>
 
       {/* ── Selo de confiança ── */}
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 pb-8">

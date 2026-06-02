@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     return res.status(400).send('Slug is required');
   }
 
-  // Fetch orcamento
+  // Busca o nome do cliente no Supabase
   const { data: orcamento } = await supabase
     .from('orcamentos_salvos')
     .select('cliente')
@@ -20,11 +20,10 @@ export default async function handler(req, res) {
     .single();
 
   const cliente = orcamento?.cliente || 'Cliente';
-  
-  // Apenas o primeiro nome ou abreviação para não quebrar a imagem
-  const nomeCurto = cliente.split(' ').slice(0, 2).join(' ').substring(0, 30);
-  const encodedClient = encodeURIComponent(nomeCurto);
-  
+
+  // Primeiro nome em maiúsculas para o preview do WhatsApp
+  const nomeCurto = cliente.split(' ')[0].toUpperCase();
+
   const baseUrl = `https://${req.headers.host}`;
   const ogImageUrl = `${baseUrl}/logo-orcamento.png`;
   const redirectUrl = `${baseUrl}/orcamento/${slug}`;
@@ -35,49 +34,46 @@ export default async function handler(req, res) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>BRAVE — Orçamento para ${nomeCurto}</title>
-      
+      <title>Orçamento Exclusivo — ${nomeCurto}</title>
+
       <!-- Open Graph / WhatsApp / Facebook -->
       <meta property="og:title" content="Orçamento Exclusivo — ${nomeCurto}" />
       <meta property="og:description" content="Confira agora a proposta de equipamentos de alta performance preparada para você." />
       <meta property="og:image" content="${ogImageUrl}" />
+      <meta property="og:url" content="${baseUrl}/proposta/${slug}" />
       <meta property="og:type" content="website" />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
       <meta property="og:image:alt" content="Orçamento BRAVE" />
-      <meta property="og:site_name" content="Brave" />
-      
-      <!-- Twitter -->
+      <meta property="og:site_name" content="Brave Fitness" />
+
+      <!-- Twitter Card -->
       <meta name="twitter:card" content="summary_large_image">
       <meta name="twitter:title" content="Orçamento Exclusivo — ${nomeCurto}">
       <meta name="twitter:description" content="Confira agora a proposta de equipamentos de alta performance preparada para você.">
       <meta name="twitter:image" content="${ogImageUrl}">
 
-      <!-- Fallback Redirects -->
+      <!-- Redirect imediato para o app React -->
       <meta http-equiv="refresh" content="0; url=${redirectUrl}">
-      <script>
-        // Redireciona imediatamente sem deixar rastros no histórico do botão voltar
-        window.location.replace("${redirectUrl}");
-      </script>
-      
+      <script>window.location.replace("${redirectUrl}");</script>
+
       <style>
-        body { background-color: #09090b; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .loader { border: 4px solid #1c1c1c; border-top: 4px solid #f97316; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { background:#fff; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; font-family:sans-serif; }
+        .loader { border:3px solid #e5e7eb; border-top:3px solid #059669; border-radius:50%; width:36px; height:36px; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
       </style>
     </head>
     <body>
-      <div style="text-align: center;">
-        <div class="loader" style="margin: 0 auto 20px;"></div>
-        <p>Abrindo orçamento seguro...</p>
-        <p style="font-size: 12px; color: #666; margin-top: 10px;">Se não for redirecionado, <a href="${redirectUrl}" style="color: #f97316; text-decoration: none;">clique aqui</a>.</p>
+      <div style="text-align:center;">
+        <div class="loader" style="margin:0 auto 16px;"></div>
+        <p style="color:#374151;font-size:14px;">Abrindo proposta...</p>
+        <p style="font-size:11px;color:#9ca3af;margin-top:8px;">Se não redirecionar, <a href="${redirectUrl}" style="color:#059669;text-decoration:none;">clique aqui</a>.</p>
       </div>
     </body>
     </html>
   `;
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  // Cache control for WhatsApp scrapers
   res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
   res.status(200).send(html);
 }

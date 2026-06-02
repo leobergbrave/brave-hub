@@ -20,14 +20,36 @@
       "Bash(node -e ' *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Novo UAIROX\\\\src\\\\pages\" -Recurse | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"Folder\"}else{\"File\"}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Novo UAIROX\\\\api\" -Recurse | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"Folder\"}else{\"File\"}}} | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Novo UAIROX\\\\src\" -Depth 1 | Select-Object Name, @{Name=\"Type\";Expression={if\\($_.PSIsContainer\\){\"Folder\"}else{\"File\"}}} | Format-Table -AutoSize)",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\" -X POST \"https://brave-hub-two.vercel.app/api/disparo-sender\" -H \"Content-Type: application/json\" -d \"{}\")",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\" -X POST \"https://brave-hub-two-uairoxminas-projects.vercel.app/api/disparo-sender\" -H \"Content-Type: application/json\" -d \"{}\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(find \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\" -type f -name \"*.sql\" -o -name \"*migration*\" -o -name \"*schema*\" 2>/dev/null | head -20)",
+      "Read(//c/Users/Team WOD Brasil/Desktop/**)",
+      "Bash(Get-ChildItem -Recurse -Depth 3 -Name)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Brave HUB\"; ls -Recurse -Directory | Select-Object -First 50 | % { $_.FullName })",
+      "Bash(dir \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\")",
+      "Bash(npm create *)",
+      "Bash(curl -I https://github.com)",
+      "Bash(ping github.com -n 3)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)",
+      "Bash(node -e \"const l = require\\('./node_modules/lucide-react/dist/cjs/lucide-react.js'\\); console.log\\(Object.keys\\(l\\).filter\\(k => /instagram/i.test\\(k\\)\\)\\)\")",
+      "Bash(grep -n \"footer\\\\|</div>$\\\\|pb-\\\\|</section>\" \"C:\\\\Users\\\\Team WOD Brasil\\\\Desktop\\\\Brave HUB\\\\src\\\\pages\\\\OrcamentoRapidoPage.jsx\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\src\\pages\\admin",
       "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\api",
       "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\src\\pages",
       "c:\\Users\\Team WOD Brasil\\Desktop\\Revenda Profit\\src\\components\\stock",
-      "C:\\Users\\Team WOD Brasil\\Desktop\\Brave HUB"
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Brave HUB",
+      "c:\\Users\\Team WOD Brasil\\Desktop\\Revenda Profit\\src\\pages",
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Revenda Profit\\src\\components\\consignment-bags",
+      "C:\\Users\\Team WOD Brasil\\Desktop\\LinkRun HUB",
+      "C:\\Users\\Team WOD Brasil\\Desktop\\Novo UAIROX\\src"
     ]
   }
 }

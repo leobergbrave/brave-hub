@@ -384,6 +384,7 @@ export default function OrcamentoRapidoPage() {
         slug,
         cliente: nomeCliente,
         consultor: 'Léo Berg',
+        origem_lead: 'RD STATION',
         payload,
       });
 
@@ -508,79 +509,87 @@ export default function OrcamentoRapidoPage() {
             <div key={prod.id} className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden relative">
               {/* Selo exclusivo */}
               {descAvista > 0 && (
-                <div className="absolute top-0 right-0 bg-emerald-700 text-white text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
+                <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-emerald-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-bl-xl z-10 flex items-center gap-1">
                   <Zap className="w-2.5 h-2.5" /> OFERTA EXCLUSIVA
                 </div>
               )}
 
-              {/* Header: Image + Name + Qty */}
-              <div className="flex items-center gap-4 p-4 pb-2">
-                <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+              {/* ── ZONA SUPERIOR: infos (esq) + imagem (dir) ── */}
+              <div className="flex items-stretch min-h-[148px]">
+
+                {/* Coluna esquerda — infos + stepper */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between p-3 pr-2">
+                  <div>
+                    {/* Nome */}
+                    <h3 className="text-[13px] font-bold text-gray-900 leading-tight">{prod.nome}</h3>
+                    {/* SKU + Peso */}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {prod.codigo_sku && (
+                        <span className="font-mono text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">{prod.codigo_sku}</span>
+                      )}
+                      {prod.peso_kg > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                          <Weight className="w-3 h-3" /> {prod.peso_kg}kg
+                        </span>
+                      )}
+                    </div>
+                    {/* Escassez */}
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Flame className="w-3 h-3 text-red-400 animate-pulse shrink-0" />
+                      <span className="text-[10px] text-red-400 font-semibold">{unidsDisp} unid. disponíveis</span>
+                      <div className="h-1 w-8 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stepper */}
+                  <div className="flex items-center mt-3">
+                    <button onClick={() => updateQtd(prod.id, -1)} className="w-8 h-8 flex items-center justify-center rounded-l-lg bg-gray-100 border border-gray-300 text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition-colors cursor-pointer text-base font-bold select-none">−</button>
+                    <span className="w-10 h-8 flex items-center justify-center bg-white border-t border-b border-gray-300 text-sm font-black text-gray-900">{qty}</span>
+                    <button onClick={() => updateQtd(prod.id, 1)} className="w-8 h-8 flex items-center justify-center rounded-r-lg bg-gray-100 border border-gray-300 text-gray-500 hover:text-emerald-600 hover:bg-gray-200 transition-colors cursor-pointer text-base font-bold select-none">+</button>
+                  </div>
+                </div>
+
+                {/* Coluna direita — imagem */}
+                <div className="shrink-0 w-[42%] bg-gray-50 flex items-center justify-center overflow-hidden">
                   {media && media.type === 'image' ? (
-                    <img src={media.url} alt={prod.nome} className="max-h-full max-w-full object-contain" />
+                    <img src={media.url} alt={prod.nome} className="w-full h-full object-contain p-2" />
                   ) : media && media.type === 'folder' ? (
                     <FolderOpen className="w-6 h-6 text-blue-400" />
                   ) : (
-                    <Package className="w-6 h-6 text-dark-600" />
+                    <Package className="w-10 h-10 text-gray-200" />
                   )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-gray-900 leading-tight pr-20">{prod.nome}</h3>
-                  {prod.peso_kg > 0 && (
-                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5 mt-0.5"><Weight className="w-3 h-3" /> {prod.peso_kg}kg</span>
-                  )}
-                </div>
-                <div className="flex items-center bg-gray-100 rounded-lg border border-gray-200 shrink-0">
-                  <button onClick={() => updateQtd(prod.id, -1)} className="px-2.5 py-1.5 text-gray-400 hover:text-gray-900 text-xs font-bold cursor-pointer">−</button>
-                  <span className="px-2 py-1.5 text-gray-900 font-bold text-xs min-w-[1.5rem] text-center">{qty}</span>
-                  <button onClick={() => updateQtd(prod.id, 1)} className="px-2.5 py-1.5 text-gray-400 hover:text-gray-900 text-xs font-bold cursor-pointer">+</button>
                 </div>
               </div>
 
-              {/* 3 Price Tiers */}
-              <div className="px-4 pb-2 space-y-1.5">
-                {/* Tier 1: Preço de Tabela */}
-                <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-gray-50">
-                  <span className="text-[11px] text-gray-400 uppercase tracking-wider font-medium">Preço de tabela</span>
-                  <span className="text-sm text-gray-400 line-through font-medium">{fmt(precoTabela)}</span>
+              {/* ── ZONA INFERIOR: preços — largura total ── */}
+              <div className="border-t border-gray-100 px-3 py-3 space-y-1.5">
+                {/* Tabela riscado */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Tabela</span>
+                  <span className="text-[11px] text-gray-400 line-through">{fmt(precoTabela)}</span>
                 </div>
-
-                {/* Tier 2: Cartão Parcelado */}
-                <div className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/20">
-                    <div>
-                      <span className="text-[10px] text-amber-400/70 uppercase tracking-wider font-semibold flex items-center gap-1"><CreditCard className="w-3 h-3" /> Cartão 10x</span>
-                      <p className="text-base font-black text-gray-900 mt-0.5">10x {fmt(parcelaMensal)}</p>
-                      <p className="text-[10px] text-gray-400">Total: {fmt(pPrazo)}</p>
-                    </div>
-                    {descPrazo > 0 && (
-                      <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2.5 py-1 rounded-full shadow-sm shadow-amber-500/20 whitespace-nowrap">
-                        {descPrazo}% off
-                      </span>
-                    )}
-                  </div>
-
-                {/* Tier 3: À Vista — Destaque máximo */}
-                <div className="relative flex items-center justify-between py-2.5 px-3 rounded-xl border border-emerald-700/25 bg-emerald-50/60">
-                    <div>
-                      <span className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold flex items-center gap-1"><Banknote className="w-3 h-3" /> À Vista (PIX)</span>
-                      <p className="text-lg font-black mt-0.5" style={{ color: '#047857' }}>{fmt(pAvista)}</p>
-                      {economiaUnit > 0 && <p className="text-[10px] text-emerald-600 font-medium">Economia de {fmt(economiaUnit)}</p>}
-                    </div>
-                    {descAvista > 0 && (
-                      <span className="text-[10px] font-bold text-white bg-emerald-700 px-2.5 py-1 rounded-full whitespace-nowrap">
-                        {descAvista}% off
-                      </span>
-                    )}
-                  </div>
-              </div>
-
-              {/* Urgency Bar */}
-              <div className="mx-4 mb-3 mt-1 flex items-center gap-2 py-2 px-3 rounded-xl bg-red-50 border border-red-100">
-                <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
-                <span className="text-[11px] text-red-500 font-semibold">Apenas {unidsDisp} unidades disponíveis</span>
-                <div className="flex-1 h-1.5 bg-red-100 rounded-full overflow-hidden ml-auto max-w-[50px]">
-                  <div className="h-full bg-gradient-to-r from-red-500 to-orange-400 rounded-full animate-pulse" style={{ width: `${unidsDisp * 15}%` }} />
+                {/* Cartão parcelado */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CreditCard className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span className="text-sm font-bold text-gray-800">10x {fmt(parcelaMensal)}</span>
+                  {descPrazo > 0 && (
+                    <span className="text-[10px] font-bold text-amber-950 bg-gradient-to-r from-amber-400 to-yellow-300 px-2 py-0.5 rounded-full whitespace-nowrap">{descPrazo}% off</span>
+                  )}
                 </div>
+                {/* À Vista — destaque */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Banknote className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="text-[17px] font-black text-emerald-600 leading-none">{fmt(pAvista)}</span>
+                  {descAvista > 0 && (
+                    <span className="text-[10px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 px-2 py-0.5 rounded-full shadow-sm shadow-emerald-200 whitespace-nowrap">{descAvista}% off</span>
+                  )}
+                </div>
+                {/* Economia */}
+                {economiaUnit > 0 && (
+                  <p className="text-[11px] text-emerald-600 font-semibold">Economia de {fmt(economiaUnit)}</p>
+                )}
               </div>
             </div>
           );

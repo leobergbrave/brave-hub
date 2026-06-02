@@ -1,8 +1,8 @@
 {
-
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/proposta/:slug", "destination": "/api/share?slug=:slug" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/proposta/(?<slug>[^/]+)", "dest": "/api/share?slug=$slug" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

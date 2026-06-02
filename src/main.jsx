@@ -13,6 +13,7 @@ createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/orcamento/:slug" element={<OrcamentoPage />} />
+        <Route path="/proposta/:slug" element={<OrcamentoPage />} />
         <Route path="/orcamento-rapido/:alias" element={<OrcamentoRapidoPage />} />
         <Route path="/orcamento-rapido" element={<OrcamentoRapidoPage />} />
         <Route path="/q/:codigo" element={<OrcamentoRapidoPage />} />
