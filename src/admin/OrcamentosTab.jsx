@@ -4,6 +4,7 @@ import { formatCurrency } from '../data';
 import {
   Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle,
   Edit2, Search, Send, CopyPlus, ChevronRight, MapPin, RefreshCw, Link2, X,
+  SlidersHorizontal, ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -75,9 +76,13 @@ export default function OrcamentosTab() {
   const [leadsRapidos, setLeadsRapidos] = useState([]);
   const [primeiroContato, setPrimeiroContato] = useState(0);
 
-  const [filter, setFilter] = useState('Todos');
-  const [searchManuais, setSearchManuais] = useState('');
-  const [searchRapidos, setSearchRapidos] = useState('');
+  const [filtroAberto, setFiltroAberto] = useState(false);
+  const [filtros, setFiltros] = useState({
+    busca: '', produto: '', dataInicio: '', dataFim: '', status: 'Todos', origem: 'Todos',
+  });
+  const setFiltro = (campo, val) => setFiltros(f => ({ ...f, [campo]: val }));
+  const limparFiltros = () => setFiltros({ busca: '', produto: '', dataInicio: '', dataFim: '', status: 'Todos', origem: 'Todos' });
+  const filtrosAtivos = Object.entries(filtros).filter(([k, v]) => v && v !== 'Todos').length;
   const [detail, setDetail] = useState(null);
   const [detailRapido, setDetailRapido] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -347,24 +352,47 @@ export default function OrcamentosTab() {
     { label: 'Convertido',   value: `${txConv}%`,     color: 'text-emerald-400' },
   ];
 
+  // ── Origens únicas para o filtro ──
+  const origensUnicas = ['Todos', ...Array.from(new Set(orcs.map(o => o.origem_lead).filter(Boolean))).sort()];
+
   // ── Filtered lists ──
   const filteredManuais = orcs.filter(o => {
-    const statusOk = filter === 'Todos' || (o.payload?.status || 'Pendente') === filter;
-    if (!searchManuais) return statusOk;
-    const t = searchManuais.toLowerCase();
-    return statusOk && (o.cliente?.toLowerCase().includes(t) || new Date(o.criado_em).toLocaleDateString('pt-BR').includes(t));
+    if (filtros.busca) {
+      const t = filtros.busca.toLowerCase();
+      const matchNome = o.cliente?.toLowerCase().includes(t);
+      const matchTel  = o.payload?.telefoneCliente?.includes(t);
+      if (!matchNome && !matchTel) return false;
+    }
+    if (filtros.produto) {
+      const t = filtros.produto.toLowerCase();
+      const itens = o.payload?.itens || [];
+      if (!itens.some(i => i.nome?.toLowerCase().includes(t))) return false;
+    }
+    if (filtros.dataInicio && new Date(o.criado_em) < new Date(filtros.dataInicio)) return false;
+    if (filtros.dataFim   && new Date(o.criado_em) > new Date(filtros.dataFim + 'T23:59:59')) return false;
+    if (filtros.status !== 'Todos' && (o.payload?.status || 'Pendente') !== filtros.status) return false;
+    if (filtros.origem !== 'Todos' && (o.origem_lead || '') !== filtros.origem) return false;
+    return true;
   });
 
   const semLeadCount = links.filter(l => !leadMap[l.codigo]).length;
 
   const filteredRapidos = links.filter(l => {
     if (filtroSemLead && leadMap[l.codigo]) return false;
-    if (!searchRapidos) return true;
-    const t = searchRapidos.toLowerCase();
-    const ld = leadMap[l.codigo];
-    return l.nome_lead?.toLowerCase().includes(t)
-      || l.produtos_texto?.toLowerCase().includes(t)
-      || ld?.nome?.toLowerCase().includes(t);
+    const lead = leadMap[l.codigo];
+    if (filtros.busca) {
+      const t = filtros.busca.toLowerCase();
+      const matchNome = l.nome_lead?.toLowerCase().includes(t) || lead?.nome?.toLowerCase().includes(t);
+      const matchTel  = l.telefone_lead?.includes(filtros.busca) || lead?.telefone?.includes(filtros.busca);
+      if (!matchNome && !matchTel) return false;
+    }
+    if (filtros.produto) {
+      const t = filtros.produto.toLowerCase();
+      if (!l.produtos_texto?.toLowerCase().includes(t)) return false;
+    }
+    if (filtros.dataInicio && new Date(l.criado_em) < new Date(filtros.dataInicio)) return false;
+    if (filtros.dataFim   && new Date(l.criado_em) > new Date(filtros.dataFim + 'T23:59:59')) return false;
+    return true;
   });
 
   const leadsVincularFiltrados = leadsDisponiveis.filter(ld => {
@@ -512,31 +540,62 @@ export default function OrcamentosTab() {
 
         /* ══════════════ MANUAIS ══════════════ */
         <div>
-          {/* Funil */}
-          <div className="bg-dark-800/40 border border-dark-700/40 rounded-2xl p-4 mb-5">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Funil de conversão</p>
-            <FunnelBar stages={manuaisFunnel} />
-          </div>
-
-          {/* Stats */}
-          <StatRow items={manuaisStats} />
-
-          {/* Filter tabs */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4 no-scrollbar">
-            {['Todos', 'Pendente', 'Aprovado', 'Expirado'].map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${filter === f ? 'bg-neon/10 text-neon' : 'text-zinc-500 hover:text-white'}`}>
-                {f}
+          {/* Painel de filtros */}
+          <div className="mb-5">
+            <div className="flex gap-2 items-center flex-wrap">
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
+                <input type="text" value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)}
+                  placeholder="Buscar por nome ou telefone..."
+                  className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 text-sm" />
+              </div>
+              <button onClick={() => setFiltroAberto(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-semibold cursor-pointer transition-all whitespace-nowrap ${filtroAberto || filtrosAtivos > 0 ? 'bg-neon/10 text-neon border-neon/30' : 'bg-dark-800 text-zinc-400 hover:text-white border-dark-600'}`}>
+                <SlidersHorizontal className="w-4 h-4" />
+                Filtros
+                {filtrosAtivos > 0 && <span className="bg-neon text-dark-950 text-[10px] font-black px-1.5 py-0.5 rounded-full">{filtrosAtivos}</span>}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filtroAberto ? 'rotate-180' : ''}`} />
               </button>
-            ))}
-          </div>
-
-          {/* Search */}
-          <div className="mb-5 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-            <input type="text" value={searchManuais} onChange={e => setSearchManuais(e.target.value)}
-              placeholder="Buscar por cliente ou data..."
-              className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 text-sm transition-all" />
+              {filtrosAtivos > 0 && (
+                <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-white px-2.5 py-2.5 rounded-xl border border-dark-600 hover:border-dark-500 cursor-pointer transition-colors">
+                  <X className="w-3.5 h-3.5" /> Limpar
+                </button>
+              )}
+            </div>
+            {filtroAberto && (
+              <div className="mt-3 p-4 bg-dark-800/60 border border-dark-700/40 rounded-2xl grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Produto</label>
+                  <input type="text" value={filtros.produto} onChange={e => setFiltro('produto', e.target.value)}
+                    placeholder="Ex: Remo, Bike..."
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 placeholder-zinc-600 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Data início</label>
+                  <input type="date" value={filtros.dataInicio} onChange={e => setFiltro('dataInicio', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Data fim</label>
+                  <input type="date" value={filtros.dataFim} onChange={e => setFiltro('dataFim', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Status</label>
+                  <select value={filtros.status} onChange={e => setFiltro('status', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50 cursor-pointer">
+                    {['Todos', 'Pendente', 'Aprovado', 'Expirado'].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Origem</label>
+                  <select value={filtros.origem} onChange={e => setFiltro('origem', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50 cursor-pointer">
+                    {origensUnicas.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
 
           {filteredManuais.length === 0 ? (
@@ -634,31 +693,56 @@ export default function OrcamentosTab() {
 
         /* ══════════════ RÁPIDOS ══════════════ */
         <div>
-          {/* Funil */}
-          <div className="bg-dark-800/40 border border-dark-700/40 rounded-2xl p-4 mb-5">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Funil de conversão</p>
-            <FunnelBar stages={rapidosFunnel} />
-          </div>
-
-          {/* Stats */}
-          <StatRow items={rapidosStats} />
-
-          {/* Search + filtros */}
-          <div className="flex gap-2 mb-5 flex-wrap">
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-              <input type="text" value={searchRapidos} onChange={e => setSearchRapidos(e.target.value)}
-                placeholder="Buscar por lead ou produto..."
-                className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 text-sm transition-all" />
+          {/* Painel de filtros */}
+          <div className="mb-5">
+            <div className="flex gap-2 items-center flex-wrap">
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
+                <input type="text" value={filtros.busca} onChange={e => setFiltro('busca', e.target.value)}
+                  placeholder="Buscar por lead ou telefone..."
+                  className="block w-full pl-10 pr-3 py-2.5 border border-dark-600 rounded-xl bg-dark-900 text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-neon/50 text-sm" />
+              </div>
+              <button onClick={() => setFiltroAberto(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-semibold cursor-pointer transition-all whitespace-nowrap ${filtroAberto || filtrosAtivos > 0 ? 'bg-neon/10 text-neon border-neon/30' : 'bg-dark-800 text-zinc-400 hover:text-white border-dark-600'}`}>
+                <SlidersHorizontal className="w-4 h-4" />
+                Filtros
+                {filtrosAtivos > 0 && <span className="bg-neon text-dark-950 text-[10px] font-black px-1.5 py-0.5 rounded-full">{filtrosAtivos}</span>}
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${filtroAberto ? 'rotate-180' : ''}`} />
+              </button>
+              <button onClick={() => setFiltroSemLead(v => !v)}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl border cursor-pointer whitespace-nowrap transition-colors ${filtroSemLead ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-dark-800 text-zinc-400 hover:text-white border-dark-600'}`}>
+                Sem lead {semLeadCount > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${filtroSemLead ? 'bg-red-500/30' : 'bg-dark-700'}`}>{semLeadCount}</span>}
+              </button>
+              <button onClick={handleVincularHistorico}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 cursor-pointer whitespace-nowrap transition-colors">
+                <Link2 className="w-3.5 h-3.5" /> Vincular histórico
+              </button>
+              {filtrosAtivos > 0 && (
+                <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-white px-2.5 py-2.5 rounded-xl border border-dark-600 hover:border-dark-500 cursor-pointer transition-colors">
+                  <X className="w-3.5 h-3.5" /> Limpar
+                </button>
+              )}
             </div>
-            <button onClick={() => setFiltroSemLead(v => !v)}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl border cursor-pointer whitespace-nowrap transition-colors ${filtroSemLead ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-dark-800 text-zinc-400 hover:text-white border-dark-600'}`}>
-              Sem lead {semLeadCount > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${filtroSemLead ? 'bg-red-500/30' : 'bg-dark-700'}`}>{semLeadCount}</span>}
-            </button>
-            <button onClick={handleVincularHistorico}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2.5 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 cursor-pointer whitespace-nowrap transition-colors">
-              <Link2 className="w-3.5 h-3.5" /> Vincular histórico
-            </button>
+            {filtroAberto && (
+              <div className="mt-3 p-4 bg-dark-800/60 border border-dark-700/40 rounded-2xl grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Produto</label>
+                  <input type="text" value={filtros.produto} onChange={e => setFiltro('produto', e.target.value)}
+                    placeholder="Ex: Remo, Bike..."
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 placeholder-zinc-600 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Data início</label>
+                  <input type="date" value={filtros.dataInicio} onChange={e => setFiltro('dataInicio', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Data fim</label>
+                  <input type="date" value={filtros.dataFim} onChange={e => setFiltro('dataFim', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-xl text-zinc-300 text-sm focus:outline-none focus:border-neon/50" />
+                </div>
+              </div>
+            )}
           </div>
 
           {filteredRapidos.length === 0 ? (
