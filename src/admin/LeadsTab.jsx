@@ -56,13 +56,23 @@ function MomentoBadge({ momento }) {
 
 const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link_aberto'];
 
+// Ordem de progressão do funil — usada para contagem cumulativa
+const FUNNEL_ORDER = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link_aberto', 'qualificando', 'convertido', 'aprovado'];
+
+function atingiuEstagio(status, target) {
+  const si = FUNNEL_ORDER.indexOf(status);
+  const ti = FUNNEL_ORDER.indexOf(target);
+  return si !== -1 && ti !== -1 && si >= ti;
+}
+
 /* ─── Funnel metrics ─── */
 function FunnelBar({ leads }) {
   const counts = STATUS_PIPELINE
     .filter(s => FUNNEL_STAGES.includes(s.value))
     .map(s => ({
       ...s,
-      count: leads.filter(l => l.status === s.value).length,
+      // Cumulativo: conta todos os leads que chegaram neste estágio OU avançaram além
+      count: leads.filter(l => atingiuEstagio(l.status, s.value)).length,
     }));
 
   // Taxa de conversão: count[i] / count[i-1] (do estágio anterior com pelo menos 1 lead)
