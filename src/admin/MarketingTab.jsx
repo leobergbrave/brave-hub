@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban } from 'lucide-react';
+import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag } from 'lucide-react';
 
 export default function MarketingTab() {
   const [templates, setTemplates] = useState([]);
@@ -114,7 +114,33 @@ export default function MarketingTab() {
   };
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingDisparo, setEditingDisparo] = useState(null); // The one currently being edited/viewed
+  const [editingDisparo, setEditingDisparo] = useState(null); // { id, templateId, message, contexto? }
+  const [gerandoIA, setGerandoIA] = useState(null); // key = `${orcId}-${templateId}`
+
+  const handleGerarIA = async (d) => {
+    const key = `${d.orcamento.id}-${d.template.id}`;
+    setGerandoIA(key);
+    try {
+      const { data, error } = await supabase.functions.invoke('gerar-mensagem-ia', {
+        body: {
+          telefone: d.orcamento.payload?.telefoneCliente || '',
+          orcamento: d.orcamento,
+          campanha: d.template.nome,
+        },
+      });
+      if (error) throw new Error(error.message);
+      setEditingDisparo({
+        id: d.orcamento.id,
+        templateId: d.template.id,
+        message: data.mensagem,
+        contexto: data.contexto || null,
+      });
+    } catch (err) {
+      alert('Erro ao gerar com IA: ' + err.message);
+    } finally {
+      setGerandoIA(null);
+    }
+  };
 
   const handleOpenDisparos = () => {
     setIsModalOpen(true);
@@ -349,9 +375,12 @@ export default function MarketingTab() {
                   const defaultMessage = d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente);
                   const isEditing = editingDisparo?.id === d.orcamento.id && editingDisparo?.templateId === d.template.id;
                   
+                  const iaKey = `${d.orcamento.id}-${d.template.id}`;
+                  const isGerandoEste = gerandoIA === iaKey;
+
                   return (
-                    <div key={`${d.orcamento.id}-${d.template.id}`} className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-5">
-                      <div className="flex items-start justify-between mb-3">
+                    <div key={iaKey} className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-5">
+                      <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
                         <div>
                           <h4 className="font-bold text-white">{d.orcamento.cliente}</h4>
                           <p className="text-sm text-zinc-400">📲 {d.orcamento.payload.telefoneCliente}</p>
@@ -359,16 +388,27 @@ export default function MarketingTab() {
                             {d.template.nome}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
                           <button
                             onClick={() => handleIgnorar(d)}
-                            disabled={sending}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm border border-dark-600 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={sending || isGerandoEste}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold text-sm border border-dark-600 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Ignorar este envio permanentemente"
                           >
-                            <Ban className="w-4 h-4" />
-                            Ignorar
+                            <Ban className="w-4 h-4" /> Ignorar
                           </button>
+                          {/* Botão IA */}
+                          <button
+                            onClick={() => handleGerarIA(d)}
+                            disabled={sending || isGerandoEste}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold text-sm bg-purple-600/20 text-purple-300 hover:bg-purple-600/40 border border-purple-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Gerar mensagem personalizada com IA"
+                          >
+                            {isGerandoEste
+                              ? <><Loader2 className="w-4 h-4 animate-spin" /> Gerando...</>
+                              : <><Sparkles className="w-4 h-4" /> ✨ IA</>}
+                          </button>
+                          {/* Botão Revisar/Enviar */}
                           <button
                             onClick={() => {
                               if (isEditing) {
@@ -377,7 +417,7 @@ export default function MarketingTab() {
                                 setEditingDisparo({ id: d.orcamento.id, templateId: d.template.id, message: defaultMessage });
                               }
                             }}
-                            disabled={sending}
+                            disabled={sending || isGerandoEste}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-colors ${
                               isEditing ? 'bg-neon text-dark-950 hover:bg-neon/90' : 'bg-blue-600 text-white hover:bg-blue-500'
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -387,14 +427,39 @@ export default function MarketingTab() {
                           </button>
                         </div>
                       </div>
-                      
+
                       {isEditing ? (
-                        <textarea
-                          value={editingDisparo.message}
-                          onChange={(e) => setEditingDisparo({ ...editingDisparo, message: e.target.value })}
-                          rows={4}
-                          className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/20 transition-all mt-3"
-                        />
+                        <>
+                          {/* Contexto BotConversa usado pela IA */}
+                          {editingDisparo.contexto && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {editingDisparo.contexto.tags && editingDisparo.contexto.tags !== 'nenhuma' && (
+                                <span className="flex items-center gap-1 text-[10px] bg-purple-500/10 text-purple-300 px-2 py-1 rounded-full border border-purple-500/20">
+                                  <Tag className="w-3 h-3" /> {editingDisparo.contexto.tags}
+                                </span>
+                              )}
+                              {editingDisparo.contexto.sequencias && editingDisparo.contexto.sequencias !== 'nenhuma' && (
+                                <span className="text-[10px] bg-blue-500/10 text-blue-300 px-2 py-1 rounded-full border border-blue-500/20">
+                                  Sequência: {editingDisparo.contexto.sequencias}
+                                </span>
+                              )}
+                              {editingDisparo.contexto.diasDesde !== undefined && (
+                                <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-1 rounded-full border border-amber-500/20">
+                                  {editingDisparo.contexto.diasDesde}d sem resposta
+                                </span>
+                              )}
+                              <span className="text-[10px] text-purple-400/60 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" /> gerado por IA
+                              </span>
+                            </div>
+                          )}
+                          <textarea
+                            value={editingDisparo.message}
+                            onChange={(e) => setEditingDisparo({ ...editingDisparo, message: e.target.value })}
+                            rows={5}
+                            className="w-full bg-dark-900 border border-purple-500/30 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/20 transition-all"
+                          />
+                        </>
                       ) : (
                         <div className="bg-dark-900/50 border border-dark-700 rounded-lg p-3 mt-3">
                           <p className="text-sm text-zinc-300 whitespace-pre-wrap">{defaultMessage}</p>
