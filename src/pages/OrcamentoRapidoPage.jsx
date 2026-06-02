@@ -455,7 +455,7 @@ export default function OrcamentoRapidoPage() {
 
       {/* ── Header unificado: Logo + Dados + Saudação ── */}
       <header className="relative z-10 bg-white border-b border-gray-100 pt-8 pb-6 px-6 text-center">
-        <img src="/logo-orcamento.png" alt="Brave" className="h-12 mx-auto mb-3 object-contain"
+        <img src="/logo-orcamento.png" alt="Brave" className="h-24 sm:h-12 mx-auto mb-3 object-contain"
           onError={e => { e.target.style.display = 'none'; }} />
         <div className="flex items-center justify-center gap-5 flex-wrap mb-4">
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
