@@ -54,7 +54,7 @@ function MomentoBadge({ momento }) {
   );
 }
 
-const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link_aberto', 'aprovado'];
+const FUNNEL_STAGES = ['fluxo_disparado', 'respondeu', 'orcamento_gerado', 'link_aberto'];
 
 /* ─── Funnel metrics ─── */
 function FunnelBar({ leads }) {
