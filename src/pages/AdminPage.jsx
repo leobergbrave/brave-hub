@@ -55,6 +55,7 @@ const ALL_TABS = NAV_SECTIONS.flatMap(s => s.items);
 export default function AdminPage() {
   const [tab, setTab] = useState('leads');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [followUpBadge, setFollowUpBadge] = useState(0);
 
   const currentTab = ALL_TABS.find(t => t.id === tab);
 
@@ -80,7 +81,7 @@ export default function AdminPage() {
       case 'descontos':  return <DescontosTab />;
       case 'frete':      return <FreteTab />;
       case 'orcamentos': return <OrcamentosTab />;
-      case 'marketing':  return <MarketingTab />;
+      case 'marketing':  return <MarketingTab onBadgeUpdate={setFollowUpBadge} />;
       case 'emails':     return <EmailsTab />;
       default: return null;
     }
@@ -131,7 +132,12 @@ export default function AdminPage() {
                         : 'text-zinc-400 hover:text-white hover:bg-dark-800'
                   }`}>
                   <t.icon className="w-4 h-4 shrink-0" />
-                  {t.label}
+                  <span className="flex-1 text-left">{t.label}</span>
+                  {t.id === 'marketing' && followUpBadge > 0 && (
+                    <span className="ml-auto text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-dark-950 min-w-[18px] text-center">
+                      {followUpBadge > 99 ? '99+' : followUpBadge}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

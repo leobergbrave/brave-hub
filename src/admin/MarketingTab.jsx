@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag, ExternalLink, Clock, X } from 'lucide-react';
 
-export default function MarketingTab() {
+export default function MarketingTab({ onBadgeUpdate }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
@@ -43,13 +43,18 @@ export default function MarketingTab() {
 
         for (const t of activeTemplates) {
           if (diffDays >= t.dias_delay && !marketingSent.includes(t.id)) {
-            disparos.push({ orcamento: o, template: t });
+            // Detecta se retornou de um adiamento (adiado_ate existe e já passou, nas últimas 48h)
+            const adiado = o.payload?.follow_up_adiado_ate;
+            const retornou = adiado && new Date(adiado) <= now &&
+              (now - new Date(adiado)) < 48 * 60 * 60 * 1000;
+            disparos.push({ orcamento: o, template: t, retornou: !!retornou });
             telefonesVistos.add(telNorm);
             break;
           }
         }
       }
       setPendingDisparos(disparos);
+      onBadgeUpdate?.(disparos.length);
     }
     setLoading(false);
   }, []);
@@ -421,9 +426,16 @@ export default function MarketingTab() {
                             </a>
                           </div>
                           <p className="text-xs text-zinc-500 mt-0.5">{d.orcamento.payload.telefoneCliente}</p>
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 mt-2">
-                            {d.template.nome}
-                          </span>
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400">
+                              {d.template.nome}
+                            </span>
+                            {d.retornou && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                                🔔 Retornou
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap justify-end">
                           {/* Cancelar */}
