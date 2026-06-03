@@ -424,6 +424,16 @@ export default function MarketingTab({ onBadgeUpdate }) {
                             >
                               <ExternalLink className="w-3 h-3" /> WhatsApp
                             </a>
+                            {d.orcamento.slug && (
+                              <a
+                                href={`/orcamento/${d.orcamento.slug}`}
+                                target="_blank" rel="noreferrer"
+                                title="Ver última proposta enviada"
+                                className="flex items-center gap-1 text-[10px] font-bold text-blue-400 hover:text-blue-300 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 transition-colors"
+                              >
+                                <ExternalLink className="w-3 h-3" /> Proposta
+                              </a>
+                            )}
                           </div>
                           <p className="text-xs text-zinc-500 mt-0.5">{d.orcamento.payload.telefoneCliente}</p>
                           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
