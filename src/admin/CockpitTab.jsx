@@ -81,15 +81,19 @@ const TIPS = {
   canRoi: `Retorno sobre investimento deste canal.\n\n🟢 > 500%: canal excelente, escale\n🟡 100%–500%: bom, mantenha\n🔴 < 100%: revise ou pause`,
 };
 
-function calcList(list) {
-  const aprovados = list.filter(o => o.payload?.status === 'Aprovado');
+// gerados = orçamentos criados no período (criado_em) → para total e taxa
+// vendidos = orçamentos aprovados no período (aprovado_em) → para vendas e receita
+// Se vendidos não for passado, usa gerados como fonte (retrocompatível)
+function calcList(gerados, vendidos = null) {
+  const src = vendidos ?? gerados;
+  const aprovados = src.filter(o => o.payload?.status === 'Aprovado');
   const receita   = aprovados.reduce((s, o) => {
     const v = o.valor_fechado != null ? o.valor_fechado : (o.payload?.itens || []).reduce((a, i) => a + i.preco * i.quantidade, 0);
     return s + v;
   }, 0);
   const ticket = aprovados.length > 0 ? receita / aprovados.length : 0;
-  const taxa   = list.length > 0 ? (aprovados.length / list.length) * 100 : 0;
-  return { total: list.length, vendas: aprovados.length, receita, ticket, taxa };
+  const taxa   = gerados.length > 0 ? (aprovados.length / gerados.length) * 100 : 0;
+  return { total: gerados.length, vendas: aprovados.length, receita, ticket, taxa };
 }
 
 export default function CockpitTab() {
@@ -127,13 +131,19 @@ export default function CockpitTab() {
 
       const [
         { data: orcs },
+        { data: orcsVendidos },
         { data: orcsAnt },
+        { data: orcsAntVendidos },
         { data: linksAll },
         { data: leadsData },
         { count: disparosCount },
       ] = await Promise.all([
+        // Orçamentos CRIADOS no mês → contagem de gerados e taxa
         supabase.from('orcamentos_salvos').select('*').gte('criado_em', start).lt('criado_em', end),
+        // Orçamentos APROVADOS no mês → vendas fechadas e receita
+        supabase.from('orcamentos_salvos').select('*').gte('aprovado_em', start).lt('aprovado_em', end),
         supabase.from('orcamentos_salvos').select('id,payload,valor_fechado').gte('criado_em', prevStart).lt('criado_em', start),
+        supabase.from('orcamentos_salvos').select('id,payload,valor_fechado').gte('aprovado_em', prevStart).lt('aprovado_em', start),
         supabase.from('links_rapidos').select('slug_gerado').not('slug_gerado', 'is', null),
         supabase.from('leads').select('id').gte('criado_em', start).lt('criado_em', end),
         supabase.from('disparo_fila').select('*', { count: 'exact', head: true })
@@ -142,27 +152,36 @@ export default function CockpitTab() {
 
       const rapidoSlugs = new Set((linksAll || []).map(l => l.slug_gerado));
       const orcsAtual   = orcs || [];
+      const vendidosMes = (orcsVendidos || []).filter(o => o.payload?.status === 'Aprovado');
 
-      // Breakdown por origem (sempre com todos os dados)
-      const origemMap = {};
+      // Breakdown por origem — gerados por criado_em, vendidos por aprovado_em
+      const origemMap       = {};
+      const origemVendidos  = {};
       orcsAtual.forEach(o => {
         const orig = o.origem_lead || 'Não informado';
         if (!origemMap[orig]) origemMap[orig] = [];
         origemMap[orig].push(o);
       });
-      const porOrigem = Object.entries(origemMap)
-        .map(([origem, list]) => ({ origem, ...calcList(list) }))
+      vendidosMes.forEach(o => {
+        const orig = o.origem_lead || 'Não informado';
+        if (!origemVendidos[orig]) origemVendidos[orig] = [];
+        origemVendidos[orig].push(o);
+      });
+
+      const todasOrigems = new Set([...Object.keys(origemMap), ...Object.keys(origemVendidos)]);
+      const porOrigem = [...todasOrigems]
+        .map(origem => ({ origem, ...calcList(origemMap[origem] || [], origemVendidos[origem] || []) }))
         .sort((a, b) => b.receita - a.receita);
 
-      // Lista de origens únicas para o filtro
-      const origensUnicas = ['Todos', ...Object.keys(origemMap).sort()];
+      const origensUnicas = ['Todos', ...[...todasOrigems].sort()];
 
       setRaw({
         orcsAtual,
+        vendidosMes,
         rapidoSlugs,
         leads: leadsData?.length || 0,
         disparos: disparosCount || 0,
-        anterior: calcList(orcsAnt || []),
+        anterior: calcList(orcsAnt || [], (orcsAntVendidos || []).filter(o => o.payload?.status === 'Aprovado')),
         porOrigem,
         origensUnicas,
       });
@@ -176,17 +195,23 @@ export default function CockpitTab() {
   // Métricas derivadas — reagem ao filtro de origem sem re-fetch
   const dados = useMemo(() => {
     if (!raw) return null;
-    const { orcsAtual, rapidoSlugs, leads, disparos, anterior, porOrigem, origensUnicas } = raw;
+    const { orcsAtual, vendidosMes, rapidoSlugs, leads, disparos, anterior, porOrigem, origensUnicas } = raw;
 
     const orcsFiltered = filtroOrigem === 'Todos'
       ? orcsAtual
       : orcsAtual.filter(o => (o.origem_lead || 'Não informado') === filtroOrigem);
 
-    const manuais = orcsFiltered.filter(o => !rapidoSlugs.has(o.slug));
-    const rapidos  = orcsFiltered.filter(o =>  rapidoSlugs.has(o.slug));
+    const vendidosFiltered = filtroOrigem === 'Todos'
+      ? vendidosMes
+      : (vendidosMes || []).filter(o => (o.origem_lead || 'Não informado') === filtroOrigem);
 
-    const dManuais = calcList(manuais);
-    const dRapidos = calcList(rapidos);
+    const manuais         = orcsFiltered.filter(o => !rapidoSlugs.has(o.slug));
+    const rapidos         = orcsFiltered.filter(o =>  rapidoSlugs.has(o.slug));
+    const vendidosManuais = (vendidosFiltered || []).filter(o => !rapidoSlugs.has(o.slug));
+    const vendidosRapidos = (vendidosFiltered || []).filter(o =>  rapidoSlugs.has(o.slug));
+
+    const dManuais = calcList(manuais, vendidosManuais);
+    const dRapidos = calcList(rapidos, vendidosRapidos);
     const vendasTotal  = dManuais.vendas + dRapidos.vendas;
     const receitaTotal = dManuais.receita + dRapidos.receita;
     const ticketTotal  = vendasTotal > 0 ? receitaTotal / vendasTotal : 0;
@@ -276,11 +301,10 @@ export default function CockpitTab() {
     return { cac, roi, ltvCac, retornoPorReal, paybackDias, cacHealth, cacPct, sim, metaInvest, porCanal, cpl };
   }, [dados, cplGlobal, orcamentoSim, cplPorOrigem, metaNum]);
 
-  // Vendas aprovadas do mês (sem filtro de origem — mostra todas)
+  // Vendas aprovadas do mês — usa aprovado_em como critério
   const vendasAprovadas = useMemo(() => {
     if (!raw) return [];
-    return raw.orcsAtual
-      .filter(o => o.payload?.status === 'Aprovado')
+    return (raw.vendidosMes || [])
       .sort((a, b) => new Date(b.aprovado_em || b.criado_em) - new Date(a.aprovado_em || a.criado_em));
   }, [raw]);
 
