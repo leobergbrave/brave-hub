@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag } from 'lucide-react';
+import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag, ExternalLink } from 'lucide-react';
 
 export default function MarketingTab() {
   const [templates, setTemplates] = useState([]);
@@ -18,24 +18,30 @@ export default function MarketingTab() {
       setTemplates(tData);
       
       // Calculate Disparos
-      const { data: orcs } = await supabase.from('orcamentos_salvos').select('*');
+      const { data: orcs } = await supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false });
       const activeTemplates = tData.filter(t => t.ativo).sort((a, b) => b.dias_delay - a.dias_delay);
       const now = new Date();
       const disparos = [];
+      const telefonesVistos = new Set(); // 1-A: deduplicar por telefone
 
       for (const o of (orcs || [])) {
         if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
         if (!o.payload?.telefoneCliente) continue;
 
+        // 1-A: pula se já existe um disparo para esse telefone (mantém o mais recente)
+        const telNorm = o.payload.telefoneCliente.replace(/\D/g, '');
+        if (telefonesVistos.has(telNorm)) continue;
+
         const dateCreated = new Date(o.criado_em);
         const diffTime = Math.abs(now - dateCreated);
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        
+
         const marketingSent = o.payload?.marketing_sent || [];
-        
+
         for (const t of activeTemplates) {
           if (diffDays >= t.dias_delay && !marketingSent.includes(t.id)) {
             disparos.push({ orcamento: o, template: t });
+            telefonesVistos.add(telNorm);
             break;
           }
         }
@@ -147,10 +153,14 @@ export default function MarketingTab() {
   };
 
   const handleIgnorar = async (d) => {
+    // 3-A: marca TODOS os templates ativos como enviados — cliente sai da lista permanentemente
+    const allTemplateIds = templates.filter(t => t.ativo).map(t => t.id);
     const sent = d.orcamento.payload.marketing_sent || [];
-    const newPayload = { ...d.orcamento.payload, marketing_sent: [...sent, d.template.id] };
-    await supabase.from('orcamentos_salvos').update({ payload: newPayload }).eq('id', d.orcamento.id);
-    setPendingDisparos(prev => prev.filter(p => !(p.orcamento.id === d.orcamento.id && p.template.id === d.template.id)));
+    const newSent = [...new Set([...sent, ...allTemplateIds])];
+    await supabase.from('orcamentos_salvos').update({
+      payload: { ...d.orcamento.payload, marketing_sent: newSent },
+    }).eq('id', d.orcamento.id);
+    setPendingDisparos(prev => prev.filter(p => p.orcamento.id !== d.orcamento.id));
   };
 
   const handleSendIndividual = async (d, customMessage) => {
@@ -382,8 +392,19 @@ export default function MarketingTab() {
                     <div key={iaKey} className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-5">
                       <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
                         <div>
-                          <h4 className="font-bold text-white">{d.orcamento.cliente}</h4>
-                          <p className="text-sm text-zinc-400">📲 {d.orcamento.payload.telefoneCliente}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-bold text-white">{d.orcamento.cliente}</h4>
+                            {/* 2-C: botão abrir WhatsApp */}
+                            <a
+                              href={`https://wa.me/55${d.orcamento.payload.telefoneCliente?.replace(/\D/g, '')}`}
+                              target="_blank" rel="noreferrer"
+                              title="Abrir conversa no WhatsApp"
+                              className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" /> WhatsApp
+                            </a>
+                          </div>
+                          <p className="text-xs text-zinc-500 mt-0.5">{d.orcamento.payload.telefoneCliente}</p>
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 mt-2">
                             {d.template.nome}
                           </span>
