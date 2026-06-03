@@ -153,19 +153,25 @@ async function run(req) {
         await dbPatch('disparo_campanhas', `id=eq.${campanha.id}`, { status: 'concluida' });
         results.push({ campanha_id: campanha.id, completed: true });
       } else {
-        // Recovery: se a campanha nunca enviou/falhou, o primeiro item provavelmente ficou
-        // preso com send_after = FAR_FUTURE (bug no create). Ativa imediatamente.
-        if (!campanha.enviados_total && !campanha.falhas_total) {
-          const firstPending = await dbSelect(
-            'disparo_fila',
-            `campanha_id=eq.${campanha.id}&status=eq.pending&order=criado_em.asc&limit=1`,
-            'id,send_after'
-          );
-          if (firstPending?.length) {
-            await dbPatch('disparo_fila', `id=eq.${firstPending[0].id}`, { send_after: nowIso });
-            results.push({ campanha_id: campanha.id, skipped: 'primeiro item ativado — aguardar próximo ciclo', send_after_era: firstPending[0].send_after });
+        // Recovery universal: se o próximo item está agendado para mais de 2× o delay
+        // máximo no futuro (ex: foi empurrado para amanhã ao passar da janela), reseta
+        // para agora. Resolve tanto campanhas novas quanto campanhas travadas.
+        const nextPending = await dbSelect(
+          'disparo_fila',
+          `campanha_id=eq.${campanha.id}&status=eq.pending&order=send_after.asc&limit=1`,
+          'id,send_after'
+        );
+        if (nextPending?.length) {
+          const nextTime   = new Date(nextPending[0].send_after).getTime();
+          const maxDelayMs = (cfg.delay_max_min || 30) * 60 * 1000;
+          const stuckLimit = Date.now() + maxDelayMs * 2; // 2× delay máximo
+          if (nextTime > stuckLimit) {
+            // Item travado: reseta para agora dentro da janela
+            const recoveredAt = nextWindowSlot(cfg, Date.now());
+            await dbPatch('disparo_fila', `id=eq.${nextPending[0].id}`, { send_after: recoveredAt });
+            results.push({ campanha_id: campanha.id, recovered: true, era: nextPending[0].send_after, agora: recoveredAt });
           } else {
-            results.push({ campanha_id: campanha.id, skipped: 'próximo envio agendado no futuro' });
+            results.push({ campanha_id: campanha.id, skipped: 'próximo envio agendado no futuro', send_after: nextPending[0].send_after });
           }
         } else {
           results.push({ campanha_id: campanha.id, skipped: 'próximo envio agendado no futuro' });
