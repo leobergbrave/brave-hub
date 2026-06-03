@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag, ExternalLink } from 'lucide-react';
+import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag, ExternalLink, Clock, X } from 'lucide-react';
 
 export default function MarketingTab() {
   const [templates, setTemplates] = useState([]);
@@ -27,6 +27,9 @@ export default function MarketingTab() {
       for (const o of (orcs || [])) {
         if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
         if (!o.payload?.telefoneCliente) continue;
+
+        // Pula orçamentos adiados que ainda não chegaram na data
+        if (o.payload?.follow_up_adiado_ate && new Date(o.payload.follow_up_adiado_ate) > now) continue;
 
         // 1-A: pula se já existe um disparo para esse telefone (mantém o mais recente)
         const telNorm = o.payload.telefoneCliente.replace(/\D/g, '');
@@ -120,8 +123,21 @@ export default function MarketingTab() {
   };
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingDisparo, setEditingDisparo] = useState(null); // { id, templateId, message, contexto? }
-  const [gerandoIA, setGerandoIA] = useState(null); // key = `${orcId}-${templateId}`
+  const [editingDisparo, setEditingDisparo] = useState(null);
+  const [gerandoIA, setGerandoIA] = useState(null);
+  const [adiandoId, setAdiandoId] = useState(null);   // key do card com chips abertos
+  const [dataCustom, setDataCustom] = useState({});   // { [key]: 'YYYY-MM-DD' }
+
+  const handleAdiar = async (d, dias, dataEspecifica) => {
+    const ate = dataEspecifica
+      ? new Date(dataEspecifica + 'T08:00:00').toISOString()
+      : new Date(Date.now() + dias * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from('orcamentos_salvos').update({
+      payload: { ...d.orcamento.payload, follow_up_adiado_ate: ate },
+    }).eq('id', d.orcamento.id);
+    setPendingDisparos(prev => prev.filter(p => p.orcamento.id !== d.orcamento.id));
+    setAdiandoId(null);
+  };
 
   const handleGerarIA = async (d) => {
     const key = `${d.orcamento.id}-${d.template.id}`;
@@ -387,6 +403,7 @@ export default function MarketingTab() {
                   
                   const iaKey = `${d.orcamento.id}-${d.template.id}`;
                   const isGerandoEste = gerandoIA === iaKey;
+                  const isAdiando = adiandoId === iaKey;
 
                   return (
                     <div key={iaKey} className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-5">
@@ -394,7 +411,6 @@ export default function MarketingTab() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-white">{d.orcamento.cliente}</h4>
-                            {/* 2-C: botão abrir WhatsApp */}
                             <a
                               href={`https://wa.me/55${d.orcamento.payload.telefoneCliente?.replace(/\D/g, '')}`}
                               target="_blank" rel="noreferrer"
@@ -410,13 +426,22 @@ export default function MarketingTab() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap justify-end">
+                          {/* Cancelar */}
                           <button
                             onClick={() => handleIgnorar(d)}
                             disabled={sending || isGerandoEste}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg font-bold text-sm border border-dark-600 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Ignorar este envio permanentemente"
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-sm border border-dark-600 text-zinc-400 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Cancelar este follow-up permanentemente"
                           >
-                            <Ban className="w-4 h-4" /> Ignorar
+                            <Ban className="w-4 h-4" /> Cancelar
+                          </button>
+                          {/* Adiar */}
+                          <button
+                            onClick={() => setAdiandoId(isAdiando ? null : iaKey)}
+                            disabled={sending || isGerandoEste}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-bold text-sm border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isAdiando ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'border-dark-600 text-zinc-400 hover:text-amber-300 hover:border-amber-500/30'}`}
+                          >
+                            <Clock className="w-4 h-4" /> Adiar
                           </button>
                           {/* Botão IA */}
                           <button
@@ -448,6 +473,49 @@ export default function MarketingTab() {
                           </button>
                         </div>
                       </div>
+
+                      {/* Chips de adiar — expandem abaixo dos botões */}
+                      {isAdiando && (
+                        <div className="mt-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                          <p className="text-[10px] text-amber-400/70 uppercase tracking-wider font-bold mb-2.5 flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Lembrar deste cliente em:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { label: '+1 dia',   dias: 1  },
+                              { label: '+3 dias',  dias: 3  },
+                              { label: '+5 dias',  dias: 5  },
+                              { label: '+10 dias', dias: 10 },
+                              { label: '+30 dias', dias: 30 },
+                            ].map(({ label, dias }) => (
+                              <button
+                                key={dias}
+                                onClick={() => handleAdiar(d, dias)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                              >
+                                {label}
+                              </button>
+                            ))}
+                            {/* Data personalizada */}
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="date"
+                                value={dataCustom[iaKey] || ''}
+                                onChange={e => setDataCustom(prev => ({ ...prev, [iaKey]: e.target.value }))}
+                                className="bg-dark-900 border border-amber-500/25 text-amber-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-400/50 [color-scheme:dark]"
+                              />
+                              {dataCustom[iaKey] && (
+                                <button
+                                  onClick={() => handleAdiar(d, null, dataCustom[iaKey])}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/35 transition-colors cursor-pointer"
+                                >
+                                  Confirmar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {isEditing ? (
                         <>
