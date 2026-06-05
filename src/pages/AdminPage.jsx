@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap } from 'lucide-react';
+import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap, Heart, Award, Layers, Users, Mail, BookUser } from 'lucide-react';
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
 import DescontosTab from '../admin/DescontosTab';
@@ -7,13 +7,12 @@ import OrcamentosTab from '../admin/OrcamentosTab';
 import DashboardTab from '../admin/DashboardTab';
 import MarketingTab from '../admin/MarketingTab';
 import CategoriasTab from '../admin/CategoriasTab';
-import { Layers, Users, Mail, BookUser } from 'lucide-react';
 import LeadsTab from '../admin/LeadsTab';
 import EmailsTab from '../admin/EmailsTab';
 import ContatosTab from '../admin/ContatosTab';
 import DisparosTab from '../admin/DisparosTab';
 import CockpitTab from '../admin/CockpitTab';
-import { Award } from 'lucide-react';
+import PosVendaTab from '../admin/PosVendaTab';
 
 const NAV_SECTIONS = [
   {
@@ -27,9 +26,10 @@ const NAV_SECTIONS = [
   {
     label: 'COMUNICAÇÃO',
     items: [
-      { id: 'disparos',  label: 'Disparos WhatsApp', icon: Zap },
-      { id: 'marketing', label: 'Follow Up WhatsApp',  icon: Megaphone },
-      { id: 'emails',    label: 'Emails',              icon: Mail },
+      { id: 'disparos',  label: 'Disparos WhatsApp',    icon: Zap },
+      { id: 'marketing', label: 'Follow Up WhatsApp',   icon: Megaphone },
+      { id: 'posvendas', label: 'Pós-Venda & Fidelização', icon: Heart },
+      { id: 'emails',    label: 'Emails',               icon: Mail },
     ],
   },
   {
@@ -76,6 +76,7 @@ export default function AdminPage() {
       case 'leads':      return <LeadsTab />;
       case 'contatos':   return <ContatosTab />;
       case 'disparos':   return <DisparosTab />;
+      case 'posvendas':  return <PosVendaTab />;
       case 'produtos':   return <ProdutosTab />;
       case 'categorias': return <CategoriasTab />;
       case 'descontos':  return <DescontosTab />;
