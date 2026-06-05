@@ -4,7 +4,7 @@ import { formatCurrency } from '../data';
 import {
   Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle,
   Edit2, Search, Send, CopyPlus, ChevronRight, MapPin, RefreshCw, Link2, X,
-  SlidersHorizontal, ChevronDown,
+  SlidersHorizontal, ChevronDown, ArrowDownToLine, User,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -94,13 +94,23 @@ export default function OrcamentosTab() {
   const [filtroSemLead, setFiltroSemLead] = useState(false);
   const [editandoRapido, setEditandoRapido] = useState(null);
   const [editRapidoForm, setEditRapidoForm] = useState({ nome_lead: '', produtos_texto: '' });
+  const [syncBling, setSyncBling] = useState(false);
+  const [syncBlingResult, setSyncBlingResult] = useState(null);
+  const [blingModal, setBlingModal] = useState(false);
+  const [blingPedidos, setBlingPedidos] = useState([]);
+  const [blingCarregando, setBlingCarregando] = useState(false);
+  const [blingSelecionados, setBlingSelecionados] = useState(new Set());
+  const [blingFiltroStatus, setBlingFiltroStatus] = useState('todos');
+  const [blingImportando, setBlingImportando] = useState(false);
+  const [blingImportResult, setBlingImportResult] = useState(null);
+  const [blingTelefones, setBlingTelefones] = useState({}); // { [pedidoId]: telefone } para edicao manual
 
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: orcsData }, { data: linksData }, { data: leadsData }, { count: contatoCount }, { data: dispData }] = await Promise.all([
-      supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false }),
+      supabase.from('orcamentos_salvos').select('id, slug, cliente, consultor, criado_em, aprovado_em, aberto, payload, bling_origem, bling_pedido_id, formulario_fiscal_token, dados_fiscais_recebidos_em').order('criado_em', { ascending: false }),
       supabase.from('links_rapidos').select('*').order('criado_em', { ascending: false }),
       supabase.from('leads').select('id, nome, status, link_rapido_codigo, telefone').not('link_rapido_codigo', 'is', null),
       supabase.from('leads').select('*', { count: 'exact', head: true }).neq('status', 'novo'),
@@ -127,9 +137,42 @@ export default function OrcamentosTab() {
     if (!aprovandoModal) return;
     const o = aprovandoModal;
     const valor = parseFloat(valorFechado.replace(',', '.')) || null;
+    const itens = o.payload?.itens || [];
+    const subtotal = itens.reduce((acc, i) => acc + i.preco * i.quantidade, 0);
+    const valorTotal = valor || subtotal + parseFloat(o.payload?.frete || 0);
+
     await supabase.from('orcamentos_salvos')
       .update({ payload: { ...o.payload, status: 'Aprovado' }, valor_fechado: valor, aprovado_em: new Date().toISOString() })
       .eq('id', o.id);
+
+    // Upsert na tabela clientes ao aprovar
+    const telCliente = (o.payload?.telefoneCliente || '').replace(/\D/g, '');
+    if (o.cliente) {
+      // Tenta por telefone se disponível, senão cria novo
+      const { data: existente } = await supabase.from('clientes').select('id, total_compras, total_gasto').eq('telefone', telCliente).maybeSingle();
+      if (existente) {
+        await supabase.from('clientes').update({
+          nome: o.cliente,
+          data_ultima_compra: new Date().toISOString(),
+          total_compras: (existente.total_compras || 0) + 1,
+          total_gasto: (parseFloat(existente.total_gasto) || 0) + valorTotal,
+          atualizado_em: new Date().toISOString(),
+        }).eq('id', existente.id).catch(() => null);
+      } else if (telCliente) {
+        await supabase.from('clientes').insert({
+          nome: o.cliente,
+          telefone: telCliente,
+          origem: 'orcamento_aprovado',
+          total_compras: 1,
+          total_gasto: valorTotal,
+          data_primeira_compra: new Date().toISOString(),
+          data_ultima_compra: new Date().toISOString(),
+          criado_em: new Date().toISOString(),
+          atualizado_em: new Date().toISOString(),
+        }).catch(() => null);
+      }
+    }
+
     setAprovandoModal(null);
     setValorFechado('');
     load();
@@ -218,6 +261,138 @@ export default function OrcamentosTab() {
     load();
   };
 
+  // ── Bling: abre modal e carrega lista de pedidos (preview com detalhes completos) ──
+  const handleSyncBling = async () => {
+    setBlingModal(true);
+    setBlingCarregando(true);
+    setBlingPedidos([]);
+    setBlingSelecionados(new Set());
+    setBlingTelefones({});
+    setBlingImportResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-bling-orders`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ mode: 'preview', dias_atras: 60 }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setBlingPedidos(result.pedidos || []);
+        // Pre-preencher telefones com os que vieram do Bling
+        const tels = {};
+        (result.pedidos || []).forEach(p => { if (p.telefone) tels[p.id] = p.telefone; });
+        setBlingTelefones(tels);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBlingCarregando(false);
+    }
+  };
+
+  // ── Bling: importa pedidos selecionados com telefones editados ──
+  const handleBlingImportar = async () => {
+    if (!blingSelecionados.size) return;
+    setBlingImportando(true);
+    setBlingImportResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-bling-orders`;
+      // Montar overrides de telefone para os pedidos selecionados
+      const phoneOverrides = {};
+      blingSelecionados.forEach(id => {
+        if (blingTelefones[id]) phoneOverrides[id] = blingTelefones[id];
+      });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ mode: 'import', pedido_ids: [...blingSelecionados], phone_overrides: phoneOverrides }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setBlingImportResult(`✅ ${result.importados} importado(s) · ${result.atualizados} atualizado(s)`);
+        setBlingPedidos(prev => prev.map(p =>
+          blingSelecionados.has(p.id) ? { ...p, jaImportado: true } : p
+        ));
+
+        // Upsert automático na tabela clientes
+        const pedidosImportados = blingPedidos.filter(p => blingSelecionados.has(p.id));
+        for (const pedido of pedidosImportados) {
+          const tel = (blingTelefones[pedido.id] || pedido.telefone || '').replace(/\D/g, '');
+          const nome = pedido.cliente || pedido.contato || '';
+          if (!nome && !tel) continue;
+          try {
+            // Buscar cliente existente por telefone
+            const { data: existente } = await supabase.from('clientes')
+              .select('id, total_compras, total_gasto')
+              .eq('telefone', tel)
+              .maybeSingle();
+            const agora = new Date().toISOString();
+            const valor = parseFloat(pedido.valor || 0);
+            if (existente) {
+              await supabase.from('clientes').update({
+                nome: nome || existente.nome,
+                data_ultima_compra: agora,
+                total_compras: (existente.total_compras || 0) + 1,
+                total_gasto: (parseFloat(existente.total_gasto) || 0) + valor,
+                atualizado_em: agora,
+                origem: 'bling',
+              }).eq('id', existente.id);
+            } else if (tel || nome) {
+              await supabase.from('clientes').insert({
+                nome: nome || 'Cliente Bling',
+                telefone: tel || null,
+                origem: 'bling',
+                total_compras: 1,
+                total_gasto: valor,
+                data_primeira_compra: agora,
+                data_ultima_compra: agora,
+                criado_em: agora,
+                atualizado_em: agora,
+              });
+            }
+          } catch (e) { /* silencia erro individual */ }
+        }
+
+        setBlingSelecionados(new Set());
+        load();
+      } else {
+        setBlingImportResult(`❌ ${result.error}`);
+      }
+    } catch (e) {
+      setBlingImportResult(`❌ ${e.message}`);
+    } finally {
+      setBlingImportando(false);
+    }
+  };
+
+  // ── Gerar link para formulário fiscal NF-e ──
+  const handleGerarLinkFiscal = async (orc) => {
+    let token = orc.formulario_fiscal_token;
+    if (!token) {
+      // Gerar UUID único
+      token = crypto.randomUUID();
+      const { error } = await supabase
+        .from('orcamentos_salvos')
+        .update({ formulario_fiscal_token: token })
+        .eq('id', orc.id);
+      if (error) { alert('Erro ao gerar link: ' + error.message); return; }
+    }
+    const link = `${window.location.origin}/fiscal/${token}`;
+    await navigator.clipboard.writeText(link);
+    alert(`✅ Link copiado!\n\nEnvie este link ao cliente no WhatsApp:\n${link}`);
+    load(); // Atualiza lista para mostrar badge de status
+  };
   // Busca orçamento do link rápido — usa cache local, faz fetch se não encontrado
   const resolveOrcRapido = async (l) => {
     const cached = orcs.find(o => o.slug === l.slug_gerado);
@@ -512,24 +687,195 @@ export default function OrcamentosTab() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-5">
+      {/* ── Modal Importar do Bling ── */}
+      {blingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.75)'}}>
+          <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-zinc-800">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <ArrowDownToLine className="w-5 h-5 text-orange-400" /> Importar Pedidos do Bling
+                </h2>
+                <p className="text-xs text-zinc-500 mt-0.5">Últimos 60 dias · Selecione os pedidos para importar</p>
+              </div>
+              <button onClick={() => setBlingModal(false)} className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+
+            {/* Filtro */}
+            <div className="px-5 pt-4 flex items-center gap-2 flex-wrap">
+              {['todos', 'em andamento', 'em aberto', 'atendido'].map(s => (
+                <button key={s} onClick={() => setBlingFiltroStatus(s)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                    blingFiltroStatus === s ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                  }`}>
+                  {s === 'todos' ? 'Todos' : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+              {blingPedidos.length > 0 && (
+                <span className="ml-auto text-xs text-zinc-500">{blingSelecionados.size} selecionado(s)</span>
+              )}
+            </div>
+
+            {/* Lista */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-2">
+              {blingCarregando ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-orange-400" />
+                  <p className="text-sm">Buscando detalhes dos pedidos no Bling...</p>
+                  <p className="text-xs text-zinc-600">Isso pode levar alguns segundos (1 pedido a cada 0,4s)</p>
+                </div>
+              ) : blingPedidos.filter(p => blingFiltroStatus === 'todos' || p.status.toLowerCase().includes(blingFiltroStatus)).length === 0 ? (
+                <p className="text-zinc-500 text-sm text-center py-10">Nenhum pedido encontrado.</p>
+              ) : blingPedidos
+                  .filter(p => blingFiltroStatus === 'todos' || p.status.toLowerCase().includes(blingFiltroStatus))
+                  .map(p => {
+                    const sel = blingSelecionados.has(p.id);
+                    const toggleSel = () => setBlingSelecionados(prev => {
+                      const n = new Set(prev);
+                      sel ? n.delete(p.id) : n.add(p.id);
+                      return n;
+                    });
+                    return (
+                      <div key={p.id}
+                        onClick={() => !p.jaImportado && toggleSel()}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                          p.jaImportado
+                            ? 'border-zinc-800 bg-zinc-900/30 opacity-50 cursor-not-allowed'
+                            : sel
+                            ? 'border-orange-500/40 bg-orange-500/5 cursor-pointer'
+                            : 'border-zinc-800 bg-dark-800 hover:border-zinc-700 cursor-pointer'
+                        }`}>
+                        <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center ${
+                          p.jaImportado ? 'border-zinc-700 bg-zinc-700' : sel ? 'border-orange-400 bg-orange-400' : 'border-zinc-600'
+                        }`}>
+                          {(sel || p.jaImportado) && <span className="text-white text-[9px] font-bold">{p.jaImportado ? '✓' : '✓'}</span>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-white truncate">{p.cliente}</p>
+                            {p.jaImportado && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 font-bold flex-shrink-0">Importado</span>}
+                            {p.elegivel && !p.jaImportado && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 font-bold flex-shrink-0">Elegível</span>}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-xs text-zinc-500">#{p.numero}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{p.status}</span>
+                            <span className="text-xs text-zinc-600">{p.data}</span>
+                          </div>
+                          {/* Campo telefone editável */}
+                          {!p.jaImportado && (
+                            <div className="mt-1.5 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                placeholder="Telefone (WhatsApp)"
+                                value={blingTelefones[p.id] || ''}
+                                onChange={e => setBlingTelefones(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                className={`text-xs px-2 py-1 rounded-lg border w-44 outline-none transition-colors ${
+                                  blingTelefones[p.id]
+                                    ? 'border-green-500/30 bg-green-500/5 text-green-400'
+                                    : 'border-zinc-700 bg-zinc-800 text-zinc-400'
+                                }`}
+                              />
+                              {!blingTelefones[p.id] && (
+                                <span className="text-[10px] text-amber-500">Sem telefone</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-green-400">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.valor)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-zinc-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {blingPedidos.length > 0 && !blingCarregando && (
+                  <button
+                    onClick={() => {
+                      const elegiveis = blingPedidos.filter(p => !p.jaImportado && p.elegivel).map(p => p.id);
+                      setBlingSelecionados(new Set(elegiveis));
+                    }}
+                    className="text-xs text-orange-400 hover:text-orange-300 underline cursor-pointer"
+                  >Selecionar elegíveis</button>
+                )}
+                {blingImportResult && <span className="text-xs text-zinc-300">{blingImportResult}</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setBlingModal(false)} className="px-4 py-2 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer">Fechar</button>
+                <button
+                  onClick={handleBlingImportar}
+                  disabled={!blingSelecionados.size || blingImportando}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-orange-500 hover:bg-orange-400 text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {blingImportando ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />}
+                  {blingImportando ? 'Importando...' : `Importar ${blingSelecionados.size > 0 ? `(${blingSelecionados.size})` : ''}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <h1 className="text-xl sm:text-2xl font-bold text-white">Orçamentos</h1>
-        <button onClick={load} className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-800 transition-colors cursor-pointer">
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const link = `${window.location.origin}/cadastro`;
+              navigator.clipboard.writeText(link);
+              alert(`✅ Link copiado!\n\nEnvie para o cliente:\n${link}`);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 transition-colors cursor-pointer"
+          >
+            <User className="w-3.5 h-3.5" />
+            Link Cadastro
+          </button>
+          <button
+            onClick={handleSyncBling}
+            disabled={syncBling}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 border border-orange-500/20 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {syncBling
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <ArrowDownToLine className="w-3.5 h-3.5" />
+            }
+            {syncBling ? 'Importando...' : 'Importar do Bling'}
+          </button>
+          <button onClick={load} className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-800 transition-colors cursor-pointer">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
       </div>
 
-      {/* Main tabs */}
-      <div className="flex gap-1 mb-6 bg-dark-800/40 p-1 rounded-xl w-fit">
-        {[['manuais', 'Manuais'], ['rapidos', 'Rápidos']].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${tab === id ? 'bg-dark-700 text-white' : 'text-zinc-500 hover:text-white'}`}>
-            {label}
-            <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? 'bg-neon/20 text-neon' : 'bg-dark-700 text-zinc-500'}`}>
-              {id === 'manuais' ? orcs.length : links.length}
-            </span>
-          </button>
-        ))}
+      {/* Main tabs + Importar do Bling */}
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div className="flex gap-1 bg-dark-800/40 p-1 rounded-xl w-fit">
+          {[['manuais', 'Manuais'], ['rapidos', 'Rápidos']].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${tab === id ? 'bg-dark-700 text-white' : 'text-zinc-500 hover:text-white'}`}>
+              {label}
+              <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? 'bg-neon/20 text-neon' : 'bg-dark-700 text-zinc-500'}`}>
+                {id === 'manuais' ? orcs.length : links.length}
+              </span>
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={handleSyncBling}
+          disabled={syncBling}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 border border-orange-500/20 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          <ArrowDownToLine className="w-4 h-4" />
+          Importar do Bling
+        </button>
       </div>
 
       {loading ? (
@@ -609,6 +955,8 @@ export default function OrcamentosTab() {
                 const subtotal = items.reduce((acc, i) => acc + i.preco * i.quantidade, 0);
                 const peso = items.reduce((acc, i) => acc + (i.peso_kg || 0) * i.quantidade, 0);
                 const dateStr = `${new Date(o.criado_em).toLocaleDateString('pt-BR')} ${new Date(o.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                const temDadosFiscais = !!o.dados_fiscais_recebidos_em;
+                const linkFiscalGerado = !!o.formulario_fiscal_token;
 
                 return (
                   <div key={o.id} className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-4">
@@ -618,8 +966,29 @@ export default function OrcamentosTab() {
                           <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 ${st.bg} ${st.color}`}>
                             <st.icon className="w-3 h-3" /> {statusStr}
                           </span>
+                          {o.bling_origem && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 font-bold shrink-0 flex items-center gap-1">
+                              <ArrowDownToLine className="w-2.5 h-2.5" /> Bling
+                            </span>
+                          )}
+                          {o.bling_pedido_id && !o.bling_origem && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 font-bold shrink-0">
+                              #{o.bling_pedido_id}
+                            </span>
+                          )}
                           {o.aberto && (
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 font-semibold shrink-0">Visualizado</span>
+                          )}
+                          {/* Badge dados fiscais */}
+                          {statusStr === 'Aprovado' && temDadosFiscais && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 font-bold shrink-0 flex items-center gap-1">
+                              📋 NF-e Recebido
+                            </span>
+                          )}
+                          {statusStr === 'Aprovado' && linkFiscalGerado && !temDadosFiscais && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-bold shrink-0 flex items-center gap-1">
+                              ⏳ Aguardando NF-e
+                            </span>
                           )}
                           <span className="text-xs text-zinc-500 shrink-0">{dateStr}</span>
                         </div>
@@ -668,6 +1037,12 @@ export default function OrcamentosTab() {
                       <button onClick={() => handleGerarBling(o)} className="flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 px-2.5 py-1.5 rounded-lg hover:bg-orange-500/10 cursor-pointer border border-orange-500/20">
                         <Send className="w-3 h-3" /> Bling
                       </button>
+                      {statusStr === 'Aprovado' && (
+                        <button onClick={() => handleGerarLinkFiscal(o)}
+                          className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 px-2.5 py-1.5 rounded-lg hover:bg-purple-500/10 cursor-pointer border border-purple-500/20">
+                          📋 {temDadosFiscais ? 'Ver NF-e' : linkFiscalGerado ? 'Copiar Link NF-e' : 'Gerar Link NF-e'}
+                        </button>
+                      )}
                       {statusStr === 'Pendente' && (
                         <button onClick={() => { setAprovandoModal(o); setValorFechado(''); }} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/10 cursor-pointer border border-emerald-500/20">
                           <CheckCircle2 className="w-3 h-3" /> Aprovar
