@@ -87,6 +87,7 @@ export default function App() {
   const mediaRecorderRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const touchStartYRef = useRef(null);
 
   // ── History State ──
   const [historico, setHistorico] = useState([]);
@@ -1360,20 +1361,35 @@ export default function App() {
 
                     {/* Dropdown Options */}
                     {dropdownAberto && (
-                      <div className="absolute z-50 w-full mt-2 bg-dark-800 border border-dark-600 rounded-xl shadow-xl shadow-dark-950/50 max-h-60 overflow-y-auto">
+                      <div className="absolute z-50 w-full mt-2 bg-dark-800 border border-dark-600 rounded-xl shadow-xl shadow-dark-950/50 max-h-72 overflow-y-auto">
                         {produtos
                           .filter(p => p.nome.toLowerCase().includes(buscaProduto.toLowerCase()) || (p.codigo_sku && p.codigo_sku.toLowerCase().includes(buscaProduto.toLowerCase())))
                           .slice(0, 50)
                           .map(p => (
                           <div
                             key={p.id}
-                            onPointerDown={(e) => {
-                              e.preventDefault(); // prevents input blur before selection fires
+                            onMouseDown={(e) => {
+                              // Desktop: prevent input blur so onClick can fire
+                              e.preventDefault();
+                            }}
+                            onClick={() => {
                               setProdutoId(p.id);
                               setDropdownAberto(false);
                               setBuscaProduto('');
                             }}
-                            className="px-4 py-2.5 hover:bg-dark-700 cursor-pointer flex justify-between items-center border-b border-dark-700/50 last:border-0"
+                            onTouchStart={(e) => {
+                              touchStartYRef.current = e.touches[0].clientY;
+                            }}
+                            onTouchEnd={(e) => {
+                              const dy = Math.abs(e.changedTouches[0].clientY - (touchStartYRef.current ?? e.changedTouches[0].clientY));
+                              if (dy < 8) {
+                                e.preventDefault();
+                                setProdutoId(p.id);
+                                setDropdownAberto(false);
+                                setBuscaProduto('');
+                              }
+                            }}
+                            className="px-4 py-4 active:bg-dark-600 hover:bg-dark-700 cursor-pointer flex justify-between items-center border-b border-dark-700/50 last:border-0 select-none"
                           >
                             <span className="text-sm text-white truncate pr-4">{p.nome}</span>
                             <span className="text-sm text-neon font-medium shrink-0">{formatCurrency(p.preco)}</span>
