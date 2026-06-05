@@ -13,12 +13,14 @@ import ContatosTab from '../admin/ContatosTab';
 import DisparosTab from '../admin/DisparosTab';
 import CockpitTab from '../admin/CockpitTab';
 import PosVendaTab from '../admin/PosVendaTab';
+import ClientesTab from '../admin/ClientesTab';
 
 const NAV_SECTIONS = [
   {
     label: 'COMERCIAL',
     items: [
       { id: 'leads',     label: 'Leads',       icon: Users },
+      { id: 'clientes',  label: 'Clientes',    icon: BookUser },
       { id: 'contatos',  label: 'Contatos',    icon: BookUser },
       { id: 'orcamentos',label: 'Orçamentos',  icon: Receipt },
     ],
@@ -26,9 +28,9 @@ const NAV_SECTIONS = [
   {
     label: 'COMUNICAÇÃO',
     items: [
-      { id: 'disparos',  label: 'Disparos WhatsApp',    icon: Zap },
-      { id: 'marketing', label: 'Follow Up WhatsApp',   icon: Megaphone },
-      { id: 'posvendas', label: 'Pós-Venda & Fidelização', icon: Heart },
+      { id: 'disparos',  label: 'Disparos WhatsApp',  icon: Zap },
+      { id: 'marketing', label: 'Follow Up LEADS',      icon: Megaphone },
+      { id: 'posvendas', label: 'Follow Up CLIENTES',   icon: Heart },
       { id: 'emails',    label: 'Emails',               icon: Mail },
     ],
   },
@@ -74,6 +76,7 @@ export default function AdminPage() {
       case 'dashboard':  return <DashboardTab />;
       case 'cockpit':    return <CockpitTab />;
       case 'leads':      return <LeadsTab />;
+      case 'clientes':   return <ClientesTab onNavigate={handleTabChange} />;
       case 'contatos':   return <ContatosTab />;
       case 'disparos':   return <DisparosTab />;
       case 'posvendas':  return <PosVendaTab />;

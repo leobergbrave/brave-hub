@@ -4,9 +4,80 @@ import {
   Loader2, ChevronDown, ChevronUp, MessageSquare, Gift, TrendingUp,
   Users, Zap, BarChart3, Settings, X, Check, Edit3, ExternalLink,
   Smile, Package, ThumbsUp, Bell, Repeat, Info, Copy, Phone, Truck,
+  Wrench, ChevronRight,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
+
+// ─── Mapa de Equipamentos para Montagem ──────────────────────────────────────
+
+export const EQUIPAMENTOS_MONTAGEM = [
+  {
+    id: 'remo',
+    label: 'Remo',
+    icon: '🚣',
+    keywords: ['remo', 'rowing', 'concept2', 'waterrower'],
+    linkKey: 'link_montagem_remo',
+    linkVideosKey: 'link_videos_remo',
+    linkManutencaoKey: 'link_manutencao_remo',
+  },
+  {
+    id: 'esteira',
+    label: 'Esteira Curva',
+    icon: '🏃',
+    keywords: ['esteira', 'curva', 'treadmill', 'skillmill', 'woodway'],
+    linkKey: 'link_montagem_esteira',
+    linkVideosKey: 'link_videos_esteira',
+    linkManutencaoKey: 'link_manutencao_esteira',
+  },
+  {
+    id: 'skierg',
+    label: 'SkiErg',
+    icon: '⛷️',
+    keywords: ['skierg', 'ski erg', 'ski-erg'],
+    linkKey: 'link_montagem_skierg',
+    linkVideosKey: 'link_videos_skierg',
+    linkManutencaoKey: 'link_manutencao_skierg',
+  },
+  {
+    id: 'stormbike',
+    label: 'Storm Bike',
+    icon: '🌪️',
+    keywords: ['storm bike', 'stormbike', 'assault bike', 'echo bike', 'air bike'],
+    linkKey: 'link_montagem_stormbike',
+    linkVideosKey: 'link_videos_stormbike',
+    linkManutencaoKey: 'link_manutencao_stormbike',
+  },
+  {
+    id: 'bikeerg',
+    label: 'Bike Erg',
+    icon: '🚴',
+    keywords: ['bike erg', 'bikeerg', 'ergometer', 'concept2 bike'],
+    linkKey: 'link_montagem_bikeerg',
+    linkVideosKey: 'link_videos_bikeerg',
+    linkManutencaoKey: 'link_manutencao_bikeerg',
+  },
+  {
+    id: 'escada',
+    label: 'Escada Ergométrica',
+    icon: '🪜',
+    keywords: ['escada', 'stairmaster', 'stepmill', 'ergométrica', 'ergometrica'],
+    linkKey: 'link_montagem_escada',
+    linkVideosKey: 'link_videos_escada',
+    linkManutencaoKey: 'link_manutencao_escada',
+  },
+];
+
+/**
+ * Detecta quais equipamentos o cliente comprou com base nos nomes dos itens.
+ * Retorna array de EQUIPAMENTOS_MONTAGEM que tiveram match.
+ */
+export function detectarEquipamentos(itens = []) {
+  const nomes = itens.map(i => (i.nome || '').toLowerCase());
+  return EQUIPAMENTOS_MONTAGEM.filter(eq =>
+    eq.keywords.some(kw => nomes.some(n => n.includes(kw)))
+  );
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -308,12 +379,10 @@ function ModalConfig({ onClose }) {
     try { return JSON.parse(localStorage.getItem('posv_links') || '{}'); }
     catch { return {}; }
   });
+  const [abaAtiva, setAbaAtiva] = useState('geral');
 
-  const campos = [
-    { id: 'link_montagem',   label: 'Link Guia de Montagem', placeholder: 'https://...' },
-    { id: 'link_videos',     label: 'Link Vídeos de Uso',    placeholder: 'https://youtube.com/...' },
-    { id: 'link_manutencao', label: 'Link Manutenção',       placeholder: 'https://...' },
-    { id: 'link_google',     label: 'Link Google Reviews',   placeholder: 'https://g.page/...' },
+  const camposGerais = [
+    { id: 'link_google', label: 'Link Google Reviews', placeholder: 'https://g.page/...' },
   ];
 
   function handleSave() {
@@ -321,9 +390,14 @@ function ModalConfig({ onClose }) {
     onClose();
   }
 
+  // Conta quantos equipamentos têm TODOS os 3 links configurados
+  const totalCompletos = EQUIPAMENTOS_MONTAGEM.filter(
+    e => links[e.linkKey] && links[e.linkVideosKey] && links[e.linkManutencaoKey]
+  ).length;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-lg shadow-2xl">
+      <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700/40">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-neon/10 border border-neon/20 flex items-center justify-center">
@@ -339,25 +413,93 @@ function ModalConfig({ onClose }) {
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          {campos.map(c => (
-            <div key={c.id}>
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1.5">{c.label}</label>
-              <input
-                type="url"
-                value={links[c.id] || ''}
-                onChange={e => setLinks(p => ({ ...p, [c.id]: e.target.value }))}
-                placeholder={c.placeholder}
-                className="w-full bg-dark-800 border border-dark-700 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-neon/40 transition-all placeholder:text-dark-500"
-              />
-            </div>
-          ))}
+        {/* Abas */}
+        <div className="flex border-b border-dark-700/40 px-6">
+          <button
+            onClick={() => setAbaAtiva('geral')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+              abaAtiva === 'geral' ? 'border-neon text-neon' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Links Gerais
+          </button>
+          <button
+            onClick={() => setAbaAtiva('montagem')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+              abaAtiva === 'montagem' ? 'border-blue-400 text-blue-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            <Wrench className="w-3 h-3" />
+            Links por Equipamento
+            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+              totalCompletos === EQUIPAMENTOS_MONTAGEM.length ? 'bg-emerald-500/20 text-emerald-400' : 'bg-dark-700 text-zinc-500'
+            }`}>
+              {totalCompletos}/{EQUIPAMENTOS_MONTAGEM.length}
+            </span>
+          </button>
+        </div>
 
-          <div className="bg-dark-800/60 border border-amber-500/20 rounded-xl p-3">
-            <p className="text-[10px] text-amber-400/80 leading-relaxed">
-              💡 Esses links são inseridos automaticamente nas mensagens via variáveis como {'{link_google}'}. Configure antes de começar a usar os templates.
-            </p>
-          </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {abaAtiva === 'geral' ? (
+            <>
+              {camposGerais.map(c => (
+                <div key={c.id}>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1.5">{c.label}</label>
+                  <input
+                    type="url"
+                    value={links[c.id] || ''}
+                    onChange={e => setLinks(p => ({ ...p, [c.id]: e.target.value }))}
+                    placeholder={c.placeholder}
+                    className="w-full bg-dark-800 border border-dark-700 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-neon/40 transition-all placeholder:text-dark-500"
+                  />
+                </div>
+              ))}
+              <div className="bg-dark-800/60 border border-amber-500/20 rounded-xl p-3">
+                <p className="text-[10px] text-amber-400/80 leading-relaxed">
+                  💡 Configure os links por equipamento na aba ao lado (Montagem, Vídeos e Manutenção).
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
+                <p className="text-[10px] text-blue-300 leading-relaxed">
+                  🔍 O sistema detecta o equipamento pelos itens do orçamento e insere o link correto em cada mensagem. Configure os 3 links de cada equipamento abaixo.
+                </p>
+              </div>
+              {EQUIPAMENTOS_MONTAGEM.map(eq => {
+                const configs = [
+                  { key: eq.linkKey,          label: '🔧 Montagem',   placeholder: 'https://...' },
+                  { key: eq.linkVideosKey,    label: '🎬 Vídeos de Uso', placeholder: 'https://youtube.com/...' },
+                  { key: eq.linkManutencaoKey,label: '🛠️ Manutenção',  placeholder: 'https://...' },
+                ];
+                const totalEq = configs.filter(c => links[c.key]).length;
+                return (
+                  <div key={eq.id} className="bg-dark-800/40 border border-dark-700/50 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{eq.icon}</span>
+                      <span className="text-sm font-bold text-white">{eq.label}</span>
+                      <span className={`ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                        totalEq === 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-dark-700 text-zinc-500'
+                      }`}>{totalEq}/3</span>
+                    </div>
+                    {configs.map(c => (
+                      <div key={c.key}>
+                        <label className="text-[10px] font-semibold text-zinc-500 block mb-1">{c.label}</label>
+                        <input
+                          type="url"
+                          value={links[c.key] || ''}
+                          onChange={e => setLinks(p => ({ ...p, [c.key]: e.target.value }))}
+                          placeholder={c.placeholder}
+                          className="w-full bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400/40 transition-all placeholder:text-dark-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
 
         <div className="px-6 py-4 border-t border-dark-700/40 flex justify-end gap-2">
@@ -374,16 +516,93 @@ function ModalConfig({ onClose }) {
   );
 }
 
+// ─── Modal Selecionar Equipamento (fallback manual) ───────────────────────────
+
+function ModalSelecionarEquipamento({ cliente, estrategia, onConfirm, onClose }) {
+  const links = (() => {
+    try { return JSON.parse(localStorage.getItem('posv_links') || '{}'); }
+    catch { return {}; }
+  })();
+  const [selecionado, setSelecionado] = useState(null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700/40">
+          <div>
+            <h3 className="text-sm font-bold text-white">Selecionar Equipamento</h3>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Qual equipamento o cliente comprou?</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-2">
+          <p className="text-[10px] text-zinc-600 mb-3">Cliente: <span className="text-white font-semibold">{cliente.cliente}</span></p>
+          {EQUIPAMENTOS_MONTAGEM.map(eq => {
+            const temAlgumLink = !!(links[eq.linkKey] || links[eq.linkVideosKey] || links[eq.linkManutencaoKey]);
+            const sel = selecionado === eq.id;
+            const totalLinks = [eq.linkKey, eq.linkVideosKey, eq.linkManutencaoKey].filter(k => links[k]).length;
+            return (
+              <button
+                key={eq.id}
+                onClick={() => setSelecionado(eq.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all cursor-pointer text-left ${
+                  sel
+                    ? 'bg-blue-500/20 border-blue-500/50 text-white'
+                    : 'bg-dark-800/60 border-dark-700/40 text-zinc-400 hover:border-dark-600 hover:text-white'
+                }`}
+              >
+                <span className="text-lg">{eq.icon}</span>
+                <span className="text-sm font-semibold flex-1">{eq.label}</span>
+                {temAlgumLink
+                  ? <span className="text-[9px] text-emerald-400 font-bold">{totalLinks}/3 links</span>
+                  : <span className="text-[9px] text-zinc-600">Sem links</span>
+                }
+                {sel && <Check className="w-4 h-4 text-blue-400" />}
+              </button>
+            );
+          })}
+
+          {!EQUIPAMENTOS_MONTAGEM.some(e => links[e.linkKey] || links[e.linkVideosKey] || links[e.linkManutencaoKey]) && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mt-2">
+              <p className="text-[10px] text-amber-400">
+                ⚠️ Nenhum link de montagem configurado. Acesse Configurações → Links para adicionar.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-dark-700/40 flex gap-2">
+          <button onClick={onClose} className="flex-1 px-4 py-2 text-xs font-semibold text-zinc-400 border border-dark-600 rounded-xl hover:text-white hover:bg-dark-700 transition-colors cursor-pointer">
+            Cancelar
+          </button>
+          <button
+            onClick={() => selecionado && onConfirm(EQUIPAMENTOS_MONTAGEM.find(e => e.id === selecionado))}
+            disabled={!selecionado}
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-dark-950 bg-neon hover:bg-neon/90 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function PosVendaTab() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
-  const [modalTemplate, setModalTemplate] = useState(null); // estrategia object
+  const [modalTemplate, setModalTemplate] = useState(null);
   const [modalConfig, setModalConfig] = useState(false);
+  const [modalEquipamento, setModalEquipamento] = useState(null); // { cliente, estrategia, modo } onde modo = 'whatsapp' | 'copiar'
   const [toast, setToast] = useState('');
-  const [activeSection, setActiveSection] = useState('clientes'); // 'clientes' | 'estrategias' | 'config'
+  const [activeSection, setActiveSection] = useState('clientes');
   const [busca, setBusca] = useState('');
   const [filtroAcao, setFiltroAcao] = useState('todos');
 
@@ -393,25 +612,45 @@ export default function PosVendaTab() {
     catch { return {}; }
   }, [modalConfig]);
 
-  // Ações enviadas persistidas localmente
-  const [acoesEnviadas, setAcoesEnviadas] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('posv_acoes') || '{}'); }
-    catch { return {}; }
-  });
+  // Ações persistidas no Supabase: { [orcId_estratId]: { id, executado_em, prevista_em } }
+  const [acoesData, setAcoesData] = useState({});
 
-  function marcarEnviado(orcamentoId, estrategiaId) {
+  async function marcarEnviado(orcamentoId, estrategiaId) {
+    const agora = new Date().toISOString();
     const key = `${orcamentoId}_${estrategiaId}`;
-    const novas = { ...acoesEnviadas, [key]: new Date().toISOString() };
-    setAcoesEnviadas(novas);
-    localStorage.setItem('posv_acoes', JSON.stringify(novas));
+    const existing = acoesData[key];
+
+    // Atualiza UI imediatamente
+    setAcoesData(prev => ({ ...prev, [key]: { ...(prev[key] || {}), executado_em: agora } }));
+
+    try {
+      if (existing?.id) {
+        await supabase.from('posv_acoes')
+          .update({ executado_em: agora, atualizado_em: agora })
+          .eq('id', existing.id);
+      } else {
+        // Orçamento legado (anterior à feature): cria a linha
+        const { data: inserted } = await supabase.from('posv_acoes').insert({
+          orcamento_id: orcamentoId,
+          estrategia_id: estrategiaId,
+          executado_em: agora,
+          prevista_em: agora,
+        }).select('id').single();
+        if (inserted) {
+          setAcoesData(prev => ({ ...prev, [key]: { id: inserted.id, executado_em: agora, prevista_em: agora } }));
+        }
+      }
+    } catch (e) {
+      console.error('[PosVendaTab] erro ao salvar ação:', e);
+    }
   }
 
   function isEnviado(orcamentoId, estrategiaId) {
-    return !!acoesEnviadas[`${orcamentoId}_${estrategiaId}`];
+    return !!acoesData[`${orcamentoId}_${estrategiaId}`]?.executado_em;
   }
 
   function dataEnvio(orcamentoId, estrategiaId) {
-    return acoesEnviadas[`${orcamentoId}_${estrategiaId}`];
+    return acoesData[`${orcamentoId}_${estrategiaId}`]?.executado_em;
   }
 
   function showToast(msg) {
@@ -421,19 +660,54 @@ export default function PosVendaTab() {
 
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  // Edicao inline de telefone para pedidos Bling sem telefone
+  const [editandoTelBling, setEditandoTelBling] = useState({}); // { [orcId]: string }
 
-  // ── Fetch clientes com compras aprovadas ──
+  async function salvarTelBling(orcId, tel) {
+    if (!tel.trim()) return;
+    const clean = tel.replace(/\D/g, '');
+    // Buscar payload atual
+    const { data: orc } = await supabase.from('orcamentos_salvos').select('payload').eq('id', orcId).single();
+    if (!orc) return;
+    await supabase.from('orcamentos_salvos').update({
+      payload: { ...orc.payload, telefoneCliente: clean },
+    }).eq('id', orcId);
+    setEditandoTelBling(prev => { const n = { ...prev }; delete n[orcId]; return n; });
+    fetchClientes();
+    showToast('✅ Telefone salvo com sucesso!');
+  }
+
+  // ── Fetch clientes com compras aprovadas + posv_acoes do Supabase ──
   const fetchClientes = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('orcamentos_salvos')
-        .select('id, slug, cliente, consultor, criado_em, aprovado_em, payload, origem_lead, bling_pedido_id, bling_status_pedido, data_entrega, bling_status_verificado_em')
+        .select('id, slug, cliente, consultor, criado_em, aprovado_em, payload, origem_lead, bling_pedido_id, bling_status_pedido, data_entrega, bling_status_verificado_em, bling_origem')
         .eq('payload->>status', 'Aprovado')
         .order('aprovado_em', { ascending: false });
 
       if (error) throw error;
       setClientes(data || []);
+
+      // Carregar posv_acoes do Supabase para todos os orçamentos
+      const ids = (data || []).map(o => o.id);
+      if (ids.length) {
+        const { data: acoes } = await supabase
+          .from('posv_acoes')
+          .select('id, orcamento_id, estrategia_id, executado_em, prevista_em')
+          .in('orcamento_id', ids);
+
+        const map = {};
+        for (const row of (acoes || [])) {
+          map[`${row.orcamento_id}_${row.estrategia_id}`] = {
+            id: row.id,
+            executado_em: row.executado_em,
+            prevista_em: row.prevista_em,
+          };
+        }
+        setAcoesData(map);
+      }
     } catch (err) {
       console.error('Erro ao buscar clientes pós-venda:', err);
     } finally {
@@ -481,22 +755,65 @@ export default function PosVendaTab() {
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
   // ── Substituir variáveis no template ──
-  function processarTemplate(template, cliente) {
-    const telefone = cliente.payload?.telefoneCliente || '';
+  function processarTemplate(template, cliente, equipamentoOverride = null) {
     const produtos = (cliente.payload?.itens || []).map(i => i.nome).join(', ');
+    const detectados = equipamentoOverride ? [equipamentoOverride] : detectarEquipamentos(cliente.payload?.itens || []);
+
+    function resolverLink(linkKeyFn, fallback) {
+      if (detectados.length === 1) {
+        return configLinks[linkKeyFn(detectados[0])] || fallback;
+      } else if (detectados.length > 1) {
+        const lista = detectados
+          .filter(e => configLinks[linkKeyFn(e)])
+          .map(e => `${e.icon} ${e.label}: ${configLinks[linkKeyFn(e)]}`);
+        return lista.length > 0 ? lista.join('\n') : fallback;
+      }
+      return fallback;
+    }
+
+    const linkMontagem  = resolverLink(e => e.linkKey,           '[link de montagem]');
+    const linkVideos    = resolverLink(e => e.linkVideosKey,     '[link de vídeos]');
+    const linkManutencao= resolverLink(e => e.linkManutencaoKey, '[link de manutenção]');
+
     return template
       .replace(/\{nome\}/g, cliente.cliente || 'Cliente')
       .replace(/\{consultor\}/g, cliente.consultor || 'Equipe Brave')
       .replace(/\{produto\}/g, produtos || 'seus equipamentos')
-      .replace(/\{link_montagem\}/g, configLinks.link_montagem || '[link de montagem]')
-      .replace(/\{link_videos\}/g, configLinks.link_videos || '[link de vídeos]')
-      .replace(/\{link_manutencao\}/g, configLinks.link_manutencao || '[link de manutenção]')
+      .replace(/\{link_montagem\}/g, linkMontagem)
+      .replace(/\{link_videos\}/g, linkVideos)
+      .replace(/\{link_manutencao\}/g, linkManutencao)
       .replace(/\{link_google\}/g, configLinks.link_google || '[link do Google]');
   }
 
-  function handleDispararWhatsApp(cliente, estrategia) {
+  // ── Lógica de dispatch: detecta ou abre seletor ──
+  // Estratégias que dependem de equipamento específico
+  const ESTRATEGIAS_POR_EQUIPAMENTO = ['montagem'];
+
+  function resolverEquipamentoEExecutar(cliente, estrategia, modo) {
+    if (!ESTRATEGIAS_POR_EQUIPAMENTO.includes(estrategia.id)) {
+      // Não depende de equipamento: executa direto
+      modo === 'whatsapp'
+        ? _dispararWhatsApp(cliente, estrategia, null)
+        : _copiarMensagem(cliente, estrategia, null);
+      return;
+    }
+
+    const itens = cliente.payload?.itens || [];
+    const detectados = detectarEquipamentos(itens);
+
+    if (detectados.length === 1) {
+      modo === 'whatsapp'
+        ? _dispararWhatsApp(cliente, estrategia, detectados[0])
+        : _copiarMensagem(cliente, estrategia, detectados[0]);
+    } else {
+      // 0 ou múltiplos: abre seletor manual
+      setModalEquipamento({ cliente, estrategia, modo });
+    }
+  }
+
+  function _dispararWhatsApp(cliente, estrategia, equipamento) {
     const templateSalvo = localStorage.getItem(`posv_template_${estrategia.id}`) || estrategia.templatePadrao;
-    const msg = processarTemplate(templateSalvo, cliente);
+    const msg = processarTemplate(templateSalvo, cliente, equipamento);
     const tel = cliente.payload?.telefoneCliente;
     const link = whatsappLink(tel, msg);
     window.open(link, '_blank');
@@ -504,13 +821,21 @@ export default function PosVendaTab() {
     showToast(`✓ WhatsApp aberto para ${cliente.cliente}`);
   }
 
-  function handleCopiarMensagem(cliente, estrategia) {
+  function _copiarMensagem(cliente, estrategia, equipamento) {
     const templateSalvo = localStorage.getItem(`posv_template_${estrategia.id}`) || estrategia.templatePadrao;
-    const msg = processarTemplate(templateSalvo, cliente);
+    const msg = processarTemplate(templateSalvo, cliente, equipamento);
     navigator.clipboard.writeText(msg).then(() => {
       marcarEnviado(cliente.id, estrategia.id);
       showToast('✓ Mensagem copiada para a área de transferência');
     });
+  }
+
+  function handleDispararWhatsApp(cliente, estrategia) {
+    resolverEquipamentoEExecutar(cliente, estrategia, 'whatsapp');
+  }
+
+  function handleCopiarMensagem(cliente, estrategia) {
+    resolverEquipamentoEExecutar(cliente, estrategia, 'copiar');
   }
 
   // ── Métricas ──
@@ -530,7 +855,7 @@ export default function PosVendaTab() {
     });
 
     return { total, totalAcoes, acoesPendentes };
-  }, [clientes, acoesEnviadas]);
+  }, [clientes, acoesData]);
 
   // ── Filtro de clientes ──
   const clientesFiltrados = useMemo(() => {
@@ -585,7 +910,7 @@ export default function PosVendaTab() {
       });
     });
     return acoes.sort((a, b) => a.diasRestantes - b.diasRestantes).slice(0, 15);
-  }, [clientes, acoesEnviadas]);
+  }, [clientes, acoesData]);
 
   const SECTIONS = [
     { id: 'clientes',    label: 'Clientes',   icon: Users },
@@ -616,6 +941,21 @@ export default function PosVendaTab() {
         />
       )}
       {modalConfig && <ModalConfig onClose={() => setModalConfig(false)} />}
+      {modalEquipamento && (
+        <ModalSelecionarEquipamento
+          cliente={modalEquipamento.cliente}
+          estrategia={modalEquipamento.estrategia}
+          onClose={() => setModalEquipamento(null)}
+          onConfirm={(equipamento) => {
+            setModalEquipamento(null);
+            if (modalEquipamento.modo === 'whatsapp') {
+              _dispararWhatsApp(modalEquipamento.cliente, modalEquipamento.estrategia, equipamento);
+            } else {
+              _copiarMensagem(modalEquipamento.cliente, modalEquipamento.estrategia, equipamento);
+            }
+          }}
+        />
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -789,7 +1129,32 @@ export default function PosVendaTab() {
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                           <span className="text-[10px] text-zinc-500">{c.consultor}</span>
-                          {tel && <span className="text-[10px] text-zinc-600">{fmtTel(tel)}</span>}
+                          {tel
+                            ? <span className="text-[10px] text-zinc-600">{fmtTel(tel)}</span>
+                            : c.bling_origem && (
+                              editandoTelBling[c.id] !== undefined ? (
+                                <span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    placeholder="Ex: 11999999999"
+                                    value={editandoTelBling[c.id]}
+                                    onChange={e => setEditandoTelBling(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                    onKeyDown={e => e.key === 'Enter' && salvarTelBling(c.id, editandoTelBling[c.id])}
+                                    className="text-[10px] px-2 py-0.5 rounded border border-zinc-600 bg-zinc-800 text-zinc-300 w-36 outline-none"
+                                  />
+                                  <button onClick={e => { e.stopPropagation(); salvarTelBling(c.id, editandoTelBling[c.id]); }}
+                                    className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 cursor-pointer">Salvar</button>
+                                  <button onClick={e => { e.stopPropagation(); setEditandoTelBling(prev => { const n={...prev}; delete n[c.id]; return n; }); }}
+                                    className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400 cursor-pointer">X</button>
+                                </span>
+                              ) : (
+                                <button onClick={e => { e.stopPropagation(); setEditandoTelBling(prev => ({ ...prev, [c.id]: '' })); }}
+                                  className="text-[10px] text-amber-500 hover:text-amber-400 underline cursor-pointer">
+                                  + Adicionar telefone
+                                </button>
+                              )
+                            )}
                           <span className="text-[10px] text-zinc-600">
                             Compra aprovada: {fmtData(c.aprovado_em || c.criado_em)}
                             {dias !== null && ` (há ${dias}d)`}

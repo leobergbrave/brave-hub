@@ -212,7 +212,6 @@ serve(async (req) => {
         };
 
         if (isEntregue) {
-          // Usar a data do Bling se disponível, senão usar agora
           update.data_entrega = status.dataEntregaBling
             ? new Date(status.dataEntregaBling).toISOString()
             : agora;
@@ -226,6 +225,28 @@ serve(async (req) => {
           .from('orcamentos_salvos')
           .update(update)
           .eq('id', orc.id);
+
+        // Quando entregue: preencher datas de avaliacao e nps em posv_acoes
+        if (isEntregue && update.data_entrega) {
+          const dataEntrega = new Date(update.data_entrega);
+          const d7 = new Date(dataEntrega);
+          d7.setDate(d7.getDate() + 7);
+          const agoraTs = new Date().toISOString();
+
+          await supabase.from('posv_acoes')
+            .update({ prevista_em: dataEntrega.toISOString(), atualizado_em: agoraTs })
+            .eq('orcamento_id', orc.id)
+            .eq('estrategia_id', 'avaliacao')
+            .is('executado_em', null)
+            .is('prevista_em', null);
+
+          await supabase.from('posv_acoes')
+            .update({ prevista_em: d7.toISOString(), atualizado_em: agoraTs })
+            .eq('orcamento_id', orc.id)
+            .eq('estrategia_id', 'nps')
+            .is('executado_em', null)
+            .is('prevista_em', null);
+        }
 
         atualizados++;
 
