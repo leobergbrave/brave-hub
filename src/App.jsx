@@ -1368,14 +1368,13 @@ export default function App() {
                           .map(p => (
                           <div
                             key={p.id}
-                            onMouseDown={(e) => {
-                              // Desktop: prevent input blur so onClick can fire
-                              e.preventDefault();
-                            }}
-                            onClick={() => {
-                              setProdutoId(p.id);
-                              setDropdownAberto(false);
-                              setBuscaProduto('');
+                            onPointerDown={(e) => {
+                              if (e.pointerType !== 'touch') {
+                                e.preventDefault();
+                                setProdutoId(p.id);
+                                setDropdownAberto(false);
+                                setBuscaProduto('');
+                              }
                             }}
                             onTouchStart={(e) => {
                               touchStartYRef.current = e.touches[0].clientY;
