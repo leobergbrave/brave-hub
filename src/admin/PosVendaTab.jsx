@@ -3,7 +3,7 @@ import {
   Heart, Star, Send, Clock, CheckCircle2, AlertCircle, RefreshCw,
   Loader2, ChevronDown, ChevronUp, MessageSquare, Gift, TrendingUp,
   Users, Zap, BarChart3, Settings, X, Check, Edit3, ExternalLink,
-  Smile, Package, ThumbsUp, Bell, Repeat, Info, Copy, Phone,
+  Smile, Package, ThumbsUp, Bell, Repeat, Info, Copy, Phone, Truck,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
@@ -419,13 +419,16 @@ export default function PosVendaTab() {
     setTimeout(() => setToast(''), 3000);
   }
 
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+
   // ── Fetch clientes com compras aprovadas ──
   const fetchClientes = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('orcamentos_salvos')
-        .select('id, slug, cliente, consultor, criado_em, aprovado_em, payload, origem_lead')
+        .select('id, slug, cliente, consultor, criado_em, aprovado_em, payload, origem_lead, bling_pedido_id, bling_status_pedido, data_entrega, bling_status_verificado_em')
         .eq('payload->>status', 'Aprovado')
         .order('aprovado_em', { ascending: false });
 
@@ -437,6 +440,43 @@ export default function PosVendaTab() {
       setLoading(false);
     }
   }, []);
+
+  // ── Sincronizar status de entrega com Bling ──
+  const syncBlingStatus = useCallback(async (orcamentoId) => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-bling-status`;
+      const body = orcamentoId ? JSON.stringify({ orcamento_id: orcamentoId }) : '{}';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body,
+      });
+      const result = await res.json();
+      if (result.ok) {
+        const msg = orcamentoId
+          ? result.entregues > 0 ? '✅ Entrega confirmada!' : '⏳ Pedido ainda não entregue'
+          : `✅ ${result.verificados} verificado(s) · ${result.entregues} entregue(s)`;
+        setSyncResult(msg);
+        showToast(msg);
+        await fetchClientes();
+      } else {
+        setSyncResult(`❌ Erro: ${result.error}`);
+        showToast(`❌ Erro: ${result.error}`);
+      }
+    } catch (e) {
+      setSyncResult(`❌ ${e.message}`);
+      showToast(`❌ ${e.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  }, [fetchClientes]);
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
@@ -517,18 +557,34 @@ export default function PosVendaTab() {
   // ── Próximas ações (próximos 7 dias) ──
   const proximasAcoes = useMemo(() => {
     const acoes = [];
-    clientes.forEach(c => {
+    clientes.forEach((c) => {
       const dias = diasDesde(c.aprovado_em || c.criado_em);
       if (dias === null) return;
       ESTRATEGIAS.forEach(e => {
-        if (e.diasAposCompra === null) return;
-        const diasRestantes = e.diasAposCompra - dias;
-        if (diasRestantes >= 0 && diasRestantes <= 7 && !isEnviado(c.id, e.id)) {
-          acoes.push({ cliente: c, estrategia: e, diasRestantes });
+        // Ações baseadas em dias pós-compra
+        if (e.diasAposCompra !== null) {
+          const diasRestantes = e.diasAposCompra - dias;
+          if (diasRestantes >= 0 && diasRestantes <= 7 && !isEnviado(c.id, e.id)) {
+            acoes.push({ cliente: c, estrategia: e, diasRestantes });
+          }
+        }
+        // Ações baseadas em entrega (avaliacao, nps) — aparecem quando entregue e não enviadas
+        if (e.diasAposCompra === null && (e.id === 'avaliacao' || e.id === 'nps')) {
+          if (c.data_entrega && !isEnviado(c.id, e.id)) {
+            const diasDesdeEntrega = diasDesde(c.data_entrega);
+            // NPS: mostrar na agenda após 7 dias da entrega
+            if (e.id === 'nps' && diasDesdeEntrega !== null && diasDesdeEntrega >= 7 && diasDesdeEntrega <= 14) {
+              acoes.push({ cliente: c, estrategia: e, diasRestantes: 0, motivo: 'Entrega confirmada' });
+            }
+            // Avaliação: mostrar imediatamente após entrega
+            if (e.id === 'avaliacao' && diasDesdeEntrega !== null && diasDesdeEntrega <= 10) {
+              acoes.push({ cliente: c, estrategia: e, diasRestantes: 0, motivo: 'Entrega confirmada' });
+            }
+          }
         }
       });
     });
-    return acoes.sort((a, b) => a.diasRestantes - b.diasRestantes).slice(0, 10);
+    return acoes.sort((a, b) => a.diasRestantes - b.diasRestantes).slice(0, 15);
   }, [clientes, acoesEnviadas]);
 
   const SECTIONS = [
@@ -577,6 +633,15 @@ export default function PosVendaTab() {
           >
             <Settings className="w-3.5 h-3.5" />
             Configurar Links
+          </button>
+          <button
+            onClick={() => syncBlingStatus()}
+            disabled={syncing}
+            title="Verificar status de entrega no Bling para todos os pedidos pendentes"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded-xl hover:bg-blue-500/20 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+          >
+            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Truck className="w-3.5 h-3.5" />}
+            {syncing ? 'Verificando...' : 'Sync Entregas'}
           </button>
           <button onClick={fetchClientes} className="p-2 rounded-xl bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white transition-colors cursor-pointer">
             <RefreshCw className="w-4 h-4" />
@@ -710,6 +775,17 @@ export default function PosVendaTab() {
                               {pendentes.length} pendente{pendentes.length > 1 ? 's' : ''}
                             </span>
                           )}
+                          {/* Badge de entrega do Bling */}
+                          {c.data_entrega ? (
+                            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
+                              <Truck className="w-2.5 h-2.5" /> Entregue {fmtData(c.data_entrega)}
+                            </span>
+                          ) : c.bling_pedido_id ? (
+                            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              <Truck className="w-2.5 h-2.5" /> #{c.bling_pedido_id}
+                              {c.bling_status_pedido && ` · ${c.bling_status_pedido}`}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                           <span className="text-[10px] text-zinc-500">{c.consultor}</span>
@@ -718,6 +794,11 @@ export default function PosVendaTab() {
                             Compra aprovada: {fmtData(c.aprovado_em || c.criado_em)}
                             {dias !== null && ` (há ${dias}d)`}
                           </span>
+                          {c.bling_status_verificado_em && (
+                            <span className="text-[10px] text-zinc-700">
+                              Sync: {fmtData(c.bling_status_verificado_em)}
+                            </span>
+                          )}
                         </div>
                         <p className="text-[10px] text-neon/70 mt-0.5 truncate">{produtos}</p>
                       </div>
@@ -746,7 +827,21 @@ export default function PosVendaTab() {
                             const enviado = isEnviado(c.id, e.id);
                             const dataE = dataEnvio(c.id, e.id);
                             const diasRestantes = e.diasAposCompra !== null ? e.diasAposCompra - dias : null;
-                            const disponivel = e.diasAposCompra === null || (dias !== null && dias >= e.diasAposCompra);
+                            // Ações baseadas em dias pós-compra
+                            let disponivel = e.diasAposCompra === null || (dias !== null && dias >= e.diasAposCompra);
+                            // Avaliação Google: só fica disponível após entrega confirmada pelo Bling
+                            if (e.id === 'avaliacao') disponivel = !!c.data_entrega;
+                            // NPS: disponível 7 dias após entrega
+                            if (e.id === 'nps') {
+                              const diasEntrega = c.data_entrega ? diasDesde(c.data_entrega) : null;
+                              disponivel = diasEntrega !== null && diasEntrega >= 7;
+                            }
+                            // Motivo de bloqueio para mostrar ao usuário
+                            const motivoBloqueio =
+                              e.id === 'avaliacao' && !c.data_entrega ? 'Aguarda entrega confirmada' :
+                              e.id === 'nps' && !c.data_entrega ? 'Aguarda entrega confirmada' :
+                              e.id === 'nps' && c.data_entrega && diasDesde(c.data_entrega) < 7 ? `Disponível em ${7 - diasDesde(c.data_entrega)}d` :
+                              null;
 
                             return (
                               <div key={e.id} className={`rounded-xl border p-3 ${enviado ? 'bg-emerald-500/5 border-emerald-500/20' : cor.bg + ' ' + cor.border}`}>
@@ -774,18 +869,24 @@ export default function PosVendaTab() {
                                 {dataE && (
                                   <p className="text-[10px] text-zinc-600 mb-2">Enviado em {fmtData(dataE)}</p>
                                 )}
+                                {motivoBloqueio && !enviado && (
+                                  <p className="text-[10px] text-amber-400/80 mb-2 flex items-center gap-1">
+                                    <Clock className="w-2.5 h-2.5" /> {motivoBloqueio}
+                                  </p>
+                                )}
 
                                 {/* Botões */}
                                 {tel ? (
                                   <div className="flex gap-1.5">
                                     <button
                                       onClick={() => handleDispararWhatsApp(c, e)}
-                                      className={`flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold rounded-lg transition-colors cursor-pointer ${
+                                      disabled={!disponivel && !enviado}
+                                      className={`flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                                         enviado
                                           ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
                                           : disponivel
                                             ? 'bg-neon text-dark-950 hover:bg-neon/90'
-                                            : 'bg-dark-700 text-zinc-500 hover:bg-dark-600'
+                                            : 'bg-dark-700 text-zinc-500'
                                       }`}
                                     >
                                       <Phone className="w-3 h-3" />
