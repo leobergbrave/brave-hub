@@ -706,6 +706,18 @@ export default function PosVendaTab() {
             prevista_em: row.prevista_em,
           };
         }
+
+        // Merge com localStorage para orçamentos anteriores à migration
+        // (garante que ações já marcadas não desapareçam)
+        try {
+          const local = JSON.parse(localStorage.getItem('posv_acoes') || '{}');
+          for (const [key, executado_em] of Object.entries(local)) {
+            if (!map[key]) {
+              map[key] = { id: null, executado_em, prevista_em: null };
+            }
+          }
+        } catch (_) {}
+
         setAcoesData(map);
       }
     } catch (err) {
