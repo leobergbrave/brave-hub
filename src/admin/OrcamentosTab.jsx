@@ -795,15 +795,30 @@ export default function OrcamentosTab() {
 
             {/* Footer */}
             <div className="p-5 border-t border-zinc-800 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 {blingPedidos.length > 0 && !blingCarregando && (
-                  <button
-                    onClick={() => {
-                      const elegiveis = blingPedidos.filter(p => !p.jaImportado && p.elegivel).map(p => p.id);
-                      setBlingSelecionados(new Set(elegiveis));
-                    }}
-                    className="text-xs text-orange-400 hover:text-orange-300 underline cursor-pointer"
-                  >Selecionar elegíveis</button>
+                  <>
+                    <button
+                      onClick={() => {
+                        const visiveis = blingPedidos.filter(p => !p.jaImportado && (blingFiltroStatus === 'todos' || p.status.toLowerCase().includes(blingFiltroStatus)));
+                        setBlingSelecionados(new Set(visiveis.map(p => p.id)));
+                      }}
+                      className="text-xs text-zinc-400 hover:text-white underline cursor-pointer"
+                    >Selecionar todos</button>
+                    <button
+                      onClick={() => {
+                        const elegiveis = blingPedidos.filter(p => !p.jaImportado && p.elegivel && (blingFiltroStatus === 'todos' || p.status.toLowerCase().includes(blingFiltroStatus))).map(p => p.id);
+                        setBlingSelecionados(new Set(elegiveis));
+                      }}
+                      className="text-xs text-orange-400 hover:text-orange-300 underline cursor-pointer"
+                    >Selecionar elegíveis</button>
+                    {blingSelecionados.size > 0 && (
+                      <button
+                        onClick={() => setBlingSelecionados(new Set())}
+                        className="text-xs text-zinc-600 hover:text-zinc-400 underline cursor-pointer"
+                      >Limpar</button>
+                    )}
+                  </>
                 )}
                 {blingImportResult && <span className="text-xs text-zinc-300">{blingImportResult}</span>}
               </div>

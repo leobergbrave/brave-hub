@@ -353,9 +353,15 @@ serve(async (req) => {
         if (d?.id) detailMap[String(d.id)] = d;
       }
 
+      // Filtrar apenas pedidos do vendedor permitido (usa detalhe se disponível, senão item da listagem)
+      const amostraFiltrada = amostra.filter(p => {
+        const detail = detailMap[String(p.id)];
+        return vendedorPermitido(detail || p);
+      });
+
       // Coletar IDs únicos de contatos para buscar telefones
       const contatoIdPorPedido: Record<string, number> = {};
-      for (const p of amostra) {
+      for (const p of amostraFiltrada) {
         const detail = detailMap[String(p.id)];
         const cid = detail?.contato?.id || p.contato?.id;
         if (cid) contatoIdPorPedido[String(p.id)] = Number(cid);
@@ -381,8 +387,8 @@ serve(async (req) => {
         if (i + LOTE < uniqueContatoIds.length) await sleep(400);
       }
 
-      // Usar amostra (listagem) como base — status do detalhe ou da listagem; telefone do endpoint /contatos
-      const lista = amostra.map((p: any) => {
+      // Usar amostraFiltrada (só vendedor Leo Berg) como base
+      const lista = amostraFiltrada.map((p: any) => {
         const detail = detailMap[String(p.id)];
         const statusNome = detail?.situacao?.nome || p.situacao?.nome || 'Desconhecido';
         const contatoId = contatoIdPorPedido[String(p.id)];
