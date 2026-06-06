@@ -347,18 +347,34 @@ serve(async (req) => {
         if (i + LOTE < amostra.length) await sleep(400);
       }
 
-      const lista = detalhes.map((p: any) => {
-        const statusNome = p.situacao?.nome || 'Desconhecido';
-        // Telefone do pedido ou do contato (se vier no detalhe)
-        const telefone = p.contato?.celular || p.contato?.telefone || p.contato?.fone || '';
+      // Mapear detalhes por ID para merge com itens da listagem
+      const detailMap: Record<string, any> = {};
+      for (const d of detalhes) {
+        if (d?.id) detailMap[String(d.id)] = d;
+      }
+
+      // Usar amostra (listagem) como base — garante que todos os pedidos aparecem
+      // mesmo se o fetch de detalhes falhar; status e telefone vêm do detalhe quando disponível
+      const lista = amostra.map((p: any) => {
+        const detail = detailMap[String(p.id)];
+        // Status: preferir detalhe, cair para listagem (que já tem situacao.nome)
+        const statusNome = detail?.situacao?.nome || p.situacao?.nome || 'Desconhecido';
+        // Telefone: preferir detalhe (campo completo do contato)
+        const telefone =
+          detail?.contato?.celular || detail?.contato?.telefone || detail?.contato?.fone ||
+          p.contato?.celular || p.contato?.telefone || p.contato?.fone || '';
+        const clienteNome = detail?.contato?.nome || p.contato?.nome || 'Cliente Bling';
+        const vendedor = (detail ? extrairNomeVendedor(detail) : '') || extrairNomeVendedor(p) || 'Nao informado';
+        const valor = Number(detail?.totalProdutos) || Number(detail?.total) || Number(p.totalProdutos) || Number(p.total) || 0;
+
         return {
           id: p.id,
-          numero: p.numero,
-          data: p.data,
-          cliente: p.contato?.nome || 'Cliente Bling',
-          vendedor: extrairNomeVendedor(p) || 'Nao informado',
+          numero: detail?.numero || p.numero,
+          data: detail?.data || p.data,
+          cliente: clienteNome,
+          vendedor,
           status: statusNome,
-          valor: Number(p.totalProdutos) || Number(p.total) || 0,
+          valor,
           telefone,
           jaImportado: idsExistentes.has(String(p.id)),
           elegivel: STATUS_PARA_IMPORTAR.has(statusNome.toLowerCase()),
