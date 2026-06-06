@@ -353,14 +353,40 @@ serve(async (req) => {
         if (d?.id) detailMap[String(d.id)] = d;
       }
 
-      // Usar amostra (listagem) como base — garante que todos os pedidos aparecem
-      // mesmo se o fetch de detalhes falhar; status e telefone vêm do detalhe quando disponível
+      // Coletar IDs únicos de contatos para buscar telefones
+      const contatoIdPorPedido: Record<string, number> = {};
+      for (const p of amostra) {
+        const detail = detailMap[String(p.id)];
+        const cid = detail?.contato?.id || p.contato?.id;
+        if (cid) contatoIdPorPedido[String(p.id)] = Number(cid);
+      }
+      const uniqueContatoIds = [...new Set(Object.values(contatoIdPorPedido))];
+
+      // Buscar telefones em batch
+      const phoneByContatoId: Record<string, string> = {};
+      for (let i = 0; i < uniqueContatoIds.length; i += LOTE) {
+        const lote = uniqueContatoIds.slice(i, i + LOTE);
+        await Promise.all(lote.map(async (cid: number) => {
+          try {
+            const res = await fetchWithBlingAuth(
+              `https://api.bling.com.br/v3/contatos/${cid}`,
+              { method: 'GET' }, supabase,
+            );
+            if (!res.ok) return;
+            const c = (await res.json()).data;
+            const tel = c?.celular || c?.telefone || c?.fone || '';
+            if (tel) phoneByContatoId[String(cid)] = tel;
+          } catch (_) {}
+        }));
+        if (i + LOTE < uniqueContatoIds.length) await sleep(400);
+      }
+
+      // Usar amostra (listagem) como base — status do detalhe ou da listagem; telefone do endpoint /contatos
       const lista = amostra.map((p: any) => {
         const detail = detailMap[String(p.id)];
-        // Status: preferir detalhe, cair para listagem (que já tem situacao.nome)
         const statusNome = detail?.situacao?.nome || p.situacao?.nome || 'Desconhecido';
-        // Telefone: preferir detalhe (campo completo do contato)
-        const telefone =
+        const contatoId = contatoIdPorPedido[String(p.id)];
+        const telefone = (contatoId && phoneByContatoId[String(contatoId)]) ||
           detail?.contato?.celular || detail?.contato?.telefone || detail?.contato?.fone ||
           p.contato?.celular || p.contato?.telefone || p.contato?.fone || '';
         const clienteNome = detail?.contato?.nome || p.contato?.nome || 'Cliente Bling';
