@@ -192,15 +192,17 @@ export default async function handler(req, res) {
   const totalPedido = Math.round((totalItens + frete) * 100) / 100;
 
   // 9. Criar pedido de venda no Bling
+  const hoje = new Date().toISOString().split('T')[0];
   const pedidoPayload = {
     contato: { id: Number(contatoId) },
-    data: new Date().toISOString().split('T')[0],
+    data: hoje,
     itens,
     observacoes: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug}`,
     transporte: {
       fretePorConta: 'D',
       ...(frete > 0 ? { frete } : {}),
     },
+    parcelas: [{ dataVencimento: hoje, valor: totalPedido }],
   };
 
   await sleep(300);
