@@ -111,6 +111,7 @@ export default async function handler(req, res) {
     nome: cliente.nome,
     tipoPessoa: isPJ ? 'J' : 'F',
     situacao: 'A',
+    tiposContato: [{ id: 1 }], // 1 = Cliente no Bling V3
     email: cliente.email || '',
     telefone: cliente.telefone || '',
     celular: cliente.telefone || '',
