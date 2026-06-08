@@ -417,7 +417,7 @@ export default function ClientesTab({ onNavigate }) {
 
   const iniciarEdicao = (c) => {
     setEditandoId(c.id);
-    setEditForm({ nome: c.nome || '', telefone: c.telefone || '', email: c.email || '', tipo_negocio: c.tipo_negocio || '', cpf_cnpj: c.cpf_cnpj || '', numero_endereco: c.dados_fiscais?.numero || '', _dados_fiscais: c.dados_fiscais || {} });
+    setEditForm({ nome: c.nome || '', telefone: c.telefone || '', email: c.email || '', tipo_negocio: c.tipo_negocio || '', cpf_cnpj: c.cpf_cnpj || '', numero_endereco: c.dados_fiscais?.numero || '', complemento_endereco: c.dados_fiscais?.complemento || '', _dados_fiscais: c.dados_fiscais || {} });
   };
 
   const salvarEdicao = async (id) => {
@@ -429,7 +429,7 @@ export default function ClientesTab({ onNavigate }) {
       email: editForm.email,
       tipo_negocio: editForm.tipo_negocio,
       ...(cpfLimpo !== undefined ? { cpf_cnpj: cpfLimpo } : {}),
-      dados_fiscais: { ...editForm._dados_fiscais, numero: editForm.numero_endereco || editForm._dados_fiscais?.numero || '' },
+      dados_fiscais: { ...editForm._dados_fiscais, numero: editForm.numero_endereco || editForm._dados_fiscais?.numero || '', complemento: editForm.complemento_endereco ?? editForm._dados_fiscais?.complemento ?? '' },
       atualizado_em: new Date().toISOString(),
     }).eq('id', id);
     setSalvando(false);
@@ -458,7 +458,7 @@ export default function ClientesTab({ onNavigate }) {
       estado: novoClienteForm.estado || '',
       cep: novoClienteForm.cep || '',
     };
-    const { error } = await supabase.from('clientes').insert({
+    const { data: inserted, error } = await supabase.from('clientes').insert({
       nome: novoClienteForm.nome.trim(),
       telefone: telLimpo,
       email: novoClienteForm.email.trim() || null,
@@ -471,9 +471,21 @@ export default function ClientesTab({ onNavigate }) {
       total_gasto: 0,
       criado_em: agora,
       atualizado_em: agora,
-    });
+    }).select('id').single();
     setSalvandoNovoCliente(false);
     if (error) { alert(`Erro ao cadastrar: ${error.message}`); return; }
+
+    // Sincronizar contato no Bling em background (não bloqueia o fluxo)
+    if (inserted?.id) {
+      fetch('/api/sincronizar-contato-bling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId: inserted.id }),
+      }).then(r => r.json()).then(r => {
+        if (!r.ok) console.warn('[Bling sync] Não foi possível sincronizar contato:', r.error);
+      }).catch(e => console.warn('[Bling sync] Erro de rede:', e.message));
+    }
+
     setNovoClienteModal(false);
     setNovoClienteForm({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
     fetchClientes();
@@ -696,9 +708,14 @@ export default function ClientesTab({ onNavigate }) {
                             className={inputCls} placeholder="000.000.000-00 ou CNPJ" />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Número do Endereço</label>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Número</label>
                           <input value={editForm.numero_endereco} onChange={e => setEditForm(p => ({ ...p, numero_endereco: e.target.value }))}
                             className={inputCls} placeholder="123" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Complemento</label>
+                          <input value={editForm.complemento_endereco} onChange={e => setEditForm(p => ({ ...p, complemento_endereco: e.target.value }))}
+                            className={inputCls} placeholder="Apto, sala..." />
                         </div>
                       </div>
                     )}
@@ -1474,6 +1491,12 @@ export default function ClientesTab({ onNavigate }) {
                 <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Logradouro</label>
                 <input value={novoClienteForm.logradouro} onChange={e => setNovoClienteForm(p => ({ ...p, logradouro: e.target.value }))}
                   className={inputCls} placeholder="Rua, Avenida..." />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Complemento</label>
+                <input value={novoClienteForm.complemento} onChange={e => setNovoClienteForm(p => ({ ...p, complemento: e.target.value }))}
+                  className={inputCls} placeholder="Apto, sala, bloco..." />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
