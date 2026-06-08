@@ -213,19 +213,18 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: 'Orçamento sem itens com quantidade > 0.' });
   }
 
-  // 8. Buscar vendedor no Bling (obrigatório para propostas-comerciais)
+  // 8. Buscar vendedor no Bling (obrigatorio para propostas-comerciais)
   let idVendedor = null;
   await sleep(300);
-  const vendRes = await blingRequest('https://api.bling.com.br/v3/vendedores', 'GET', null, token);
+  const vendRes = await blingRequest("https://api.bling.com.br/v3/vendedores", "GET", null, token);
   if (vendRes?.ok) {
     const vendData = await vendRes.json();
     const lista = vendData?.data || [];
-    const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-    const match = lista.find(v => norm(v.contato?.nome) === norm('Léo Berg'));
+    const match = lista.find(v => (v.contato?.nome || "").toLowerCase().includes("leo"));
     idVendedor = match?.id || lista[0]?.id || null;
   }
   if (!idVendedor) {
-    return res.status(200).json({ ok: false, error: 'Nenhum vendedor encontrado no Bling. Cadastre ao menos um vendedor em Configurações → Vendedores.' });
+    return res.status(200).json({ ok: false, error: "Nenhum vendedor encontrado no Bling." });
   }
 
   // 9. Calcular total
