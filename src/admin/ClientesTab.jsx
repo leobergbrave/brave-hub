@@ -50,6 +50,33 @@ function whatsappLink(tel) {
   return `https://wa.me/${num}`;
 }
 
+function OrcItem({ o, sel, onSelect, vinculado = false, calcTotal }) {
+  const total = calcTotal(o);
+  const itensNomes = (o.payload?.itens || []).map(i => i.nome).filter(Boolean).join(', ');
+  return (
+    <button type="button"
+      onClick={() => onSelect(sel ? null : o)}
+      className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer text-left ${
+        sel ? 'border-orange-500 bg-orange-500/10' : 'border-dark-600/60 bg-dark-800/30 hover:border-dark-500 hover:bg-dark-800/60'
+      }`}>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-white truncate">{o.cliente || o.slug}</p>
+          {vinculado && <span className="text-[9px] font-bold text-orange-400 bg-orange-500/10 px-1 rounded shrink-0">vinculado</span>}
+          {o.bling_pedido_id && <span className="text-[9px] text-zinc-600 shrink-0">Bling ✓</span>}
+        </div>
+        <p className="text-[10px] text-zinc-600 truncate">{itensNomes || '—'} · {new Date(o.criado_em).toLocaleDateString('pt-BR')}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-xs font-bold text-neon">{total > 0 ? total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}</span>
+        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${sel ? 'border-orange-500 bg-orange-500' : 'border-zinc-600'}`}>
+          {sel && <Check className="w-2.5 h-2.5 text-white" />}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function ClientesTab({ onNavigate }) {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,9 +109,9 @@ export default function ClientesTab({ onNavigate }) {
   const [blingEnvioModal, setBlingEnvioModal] = useState(null); // { cliente }
   const [blingEnvioStep, setBlingEnvioStep] = useState('select'); // select | preview | sending | done
   const [orcEnvioSelecionado, setOrcEnvioSelecionado] = useState(null);
-  const [buscaOrcSlug, setBuscaOrcSlug] = useState('');
-  const [buscaOrcResults, setBuscaOrcResults] = useState(null);
-  const [buscandoOrc, setBuscandoOrc] = useState(false);
+  const [filtroOrcModal, setFiltroOrcModal] = useState('');
+  const [orcsRecentes, setOrcsRecentes] = useState([]);
+  const [carregandoOrcsRecentes, setCarregandoOrcsRecentes] = useState(false);
   const [enviandoBling, setEnviandoBling] = useState(false);
   const [blingEnvioResult, setBlingEnvioResult] = useState(null);
 
@@ -274,33 +301,27 @@ export default function ClientesTab({ onNavigate }) {
     return totalItens + (orc.payload?.frete || 0);
   }
 
-  function abrirBlingEnvio(cliente, orcPre = null) {
+  async function abrirBlingEnvio(cliente, orcPre = null) {
     setBlingEnvioModal({ cliente });
     setBlingEnvioStep('select');
     setOrcEnvioSelecionado(orcPre);
-    setBuscaOrcSlug('');
-    setBuscaOrcResults(null);
+    setFiltroOrcModal('');
+    setOrcsRecentes([]);
     setBlingEnvioResult(null);
     if (!orcamentosCliente[cliente.id]) {
       fetchOrcamentosCliente(cliente.id, cliente.telefone, cliente.cpf_cnpj);
     }
-  }
-
-  async function buscarOrcamento() {
-    const termo = buscaOrcSlug.trim();
-    if (!termo) return;
-    setBuscandoOrc(true);
-    setBuscaOrcResults(null);
+    // Carregar orçamentos recentes do sistema para navegação
+    setCarregandoOrcsRecentes(true);
     try {
       const { data } = await supabase
         .from('orcamentos_salvos')
         .select('id, slug, cliente, criado_em, aprovado_em, payload, bling_pedido_id')
-        .or(`slug.eq.${termo},cliente.ilike.%${termo}%`)
         .order('criado_em', { ascending: false })
-        .limit(5);
-      setBuscaOrcResults(data || []);
+        .limit(50);
+      setOrcsRecentes(data || []);
     } finally {
-      setBuscandoOrc(false);
+      setCarregandoOrcsRecentes(false);
     }
   }
 
@@ -733,7 +754,23 @@ export default function ClientesTab({ onNavigate }) {
 
             {/* ── ETAPA: SELECT ─────────────────────────────────────────────── */}
             {blingEnvioStep === 'select' && (() => {
-              const vinculados = orcamentosCliente[blingEnvioModal.cliente.id];
+              const vinculadosIds = new Set((orcamentosCliente[blingEnvioModal.cliente.id] || []).map(o => o.id));
+
+              // Lista unificada: vinculados no topo + todos os recentes abaixo, filtrados pelo texto
+              const filtro = filtroOrcModal.toLowerCase().trim();
+              const listaFiltrada = orcsRecentes.filter(o => {
+                if (!filtro) return true;
+                return (
+                  (o.cliente || '').toLowerCase().includes(filtro) ||
+                  (o.slug || '').toLowerCase().includes(filtro) ||
+                  (o.payload?.itens || []).some(i => (i.nome || '').toLowerCase().includes(filtro))
+                );
+              });
+
+              // Separar vinculados dos demais
+              const vinculadosFiltrados = listaFiltrada.filter(o => vinculadosIds.has(o.id));
+              const outrosFiltrados = listaFiltrada.filter(o => !vinculadosIds.has(o.id));
+
               return (
                 <>
                   {/* Info cliente */}
@@ -746,108 +783,67 @@ export default function ClientesTab({ onNavigate }) {
                       <p className="text-[10px] text-zinc-500">
                         {blingEnvioModal.cliente.cpf_cnpj
                           ? `${blingEnvioModal.cliente.tipo_pessoa === 'J' ? 'CNPJ' : 'CPF'}: ${blingEnvioModal.cliente.cpf_cnpj}`
-                          : <span className="text-red-400">CPF/CNPJ não informado — contato pode falhar</span>
+                          : <span className="text-amber-400">CPF/CNPJ não informado</span>
                         }
                       </p>
                     </div>
                   </div>
 
-                  {/* Orçamentos vinculados */}
-                  <div className="mb-4">
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Orçamentos vinculados</p>
-                    {vinculados === undefined ? (
-                      <div className="flex items-center gap-2 text-xs text-zinc-600 py-2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando...
-                      </div>
-                    ) : vinculados.length === 0 ? (
-                      <p className="text-xs text-zinc-600 italic">Nenhum orçamento vinculado por telefone/CPF</p>
-                    ) : (
-                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                        {vinculados.map(o => {
-                          const total = calcTotalOrc(o);
-                          const sel = orcEnvioSelecionado?.id === o.id;
-                          return (
-                            <button key={o.id} type="button"
-                              onClick={() => setOrcEnvioSelecionado(sel ? null : o)}
-                              className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer text-left ${
-                                sel
-                                  ? 'border-orange-500 bg-orange-500/10'
-                                  : 'border-dark-600 bg-dark-800/40 hover:border-dark-500'
-                              }`}>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-semibold text-white truncate">
-                                  {(o.payload?.itens || []).map(i => i.nome).filter(Boolean).join(', ') || o.cliente || 'Orçamento'}
-                                </p>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-zinc-600">{fmtData(o.aprovado_em || o.criado_em)}</span>
-                                  {o.bling_pedido_id && <span className="text-[9px] text-orange-400/70">Já enviado</span>}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs font-bold text-neon">{formatCurrency(total)}</span>
-                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${sel ? 'border-orange-500 bg-orange-500' : 'border-zinc-600'}`}>
-                                  {sel && <Check className="w-2.5 h-2.5 text-white" />}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  {/* Campo de filtro */}
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                    <input
+                      autoFocus
+                      value={filtroOrcModal}
+                      onChange={e => setFiltroOrcModal(e.target.value)}
+                      placeholder="Filtrar por nome, cliente ou produto..."
+                      className="w-full pl-9 pr-3 py-2.5 bg-dark-800 border border-dark-600 rounded-xl text-sm text-white placeholder-zinc-600 outline-none focus:border-orange-500/50 transition-colors"
+                    />
+                    {filtroOrcModal && (
+                      <button onClick={() => setFiltroOrcModal('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white cursor-pointer">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
 
-                  {/* Busca por slug / nome */}
-                  <div className="mb-5">
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Buscar outro orçamento</p>
-                    <div className="flex gap-2">
-                      <input
-                        value={buscaOrcSlug}
-                        onChange={e => setBuscaOrcSlug(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && buscarOrcamento()}
-                        placeholder="Slug ou nome do cliente..."
-                        className="flex-1 bg-dark-800 border border-dark-600 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-orange-500/50 transition-colors"
-                      />
-                      <button onClick={buscarOrcamento} disabled={buscandoOrc || !buscaOrcSlug.trim()}
-                        className="px-3 py-2 rounded-xl bg-dark-700 text-zinc-400 hover:text-white hover:bg-dark-600 transition-colors cursor-pointer disabled:opacity-40">
-                        {buscandoOrc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                      </button>
+                  {/* Lista de orçamentos */}
+                  {carregandoOrcsRecentes ? (
+                    <div className="flex items-center justify-center gap-2 py-6 text-xs text-zinc-500">
+                      <Loader2 className="w-4 h-4 animate-spin text-orange-400" /> Carregando orçamentos...
                     </div>
-                    {buscaOrcResults !== null && (
-                      <div className="mt-2 space-y-1">
-                        {buscaOrcResults.length === 0
-                          ? <p className="text-xs text-zinc-600 italic">Nenhum resultado</p>
-                          : buscaOrcResults.map(o => {
-                              const total = calcTotalOrc(o);
-                              const sel = orcEnvioSelecionado?.id === o.id;
-                              return (
-                                <button key={o.id} type="button"
-                                  onClick={() => setOrcEnvioSelecionado(sel ? null : o)}
-                                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer text-left ${
-                                    sel ? 'border-orange-500 bg-orange-500/10' : 'border-dark-600 bg-dark-800/40 hover:border-dark-500'
-                                  }`}>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-semibold text-white truncate">{o.cliente || o.slug}</p>
-                                    <span className="text-[10px] text-zinc-600">{fmtData(o.criado_em)} · {o.slug}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs font-bold text-neon">{formatCurrency(total)}</span>
-                                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${sel ? 'border-orange-500 bg-orange-500' : 'border-zinc-600'}`}>
-                                      {sel && <Check className="w-2.5 h-2.5 text-white" />}
-                                    </div>
-                                  </div>
-                                </button>
-                              );
-                            })
-                        }
-                      </div>
-                    )}
-                  </div>
+                  ) : (
+                    <div className="space-y-1 max-h-64 overflow-y-auto mb-4 pr-0.5">
+                      {/* Vinculados ao cliente */}
+                      {vinculadosFiltrados.length > 0 && (
+                        <>
+                          <p className="text-[9px] font-bold text-orange-400/70 uppercase tracking-wider px-1 pt-1">Vinculados a este cliente</p>
+                          {vinculadosFiltrados.map(o => <OrcItem key={o.id} o={o} sel={orcEnvioSelecionado?.id === o.id} onSelect={setOrcEnvioSelecionado} vinculado calcTotal={calcTotalOrc} />)}
+                        </>
+                      )}
+
+                      {/* Todos os orçamentos do sistema */}
+                      {outrosFiltrados.length > 0 && (
+                        <>
+                          <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-wider px-1 pt-2">
+                            {vinculadosFiltrados.length > 0 ? 'Outros orçamentos' : 'Orçamentos do sistema'}
+                          </p>
+                          {outrosFiltrados.map(o => <OrcItem key={o.id} o={o} sel={orcEnvioSelecionado?.id === o.id} onSelect={setOrcEnvioSelecionado} calcTotal={calcTotalOrc} />)}
+                        </>
+                      )}
+
+                      {listaFiltrada.length === 0 && (
+                        <p className="text-xs text-zinc-600 italic text-center py-4">
+                          {filtro ? 'Nenhum orçamento encontrado' : 'Nenhum orçamento no sistema'}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <button
                     onClick={() => setBlingEnvioStep('preview')}
                     disabled={!orcEnvioSelecionado}
                     className="w-full py-3 rounded-xl font-black text-sm text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer">
-                    Ver Preview →
+                    {orcEnvioSelecionado ? `Ver Preview — ${orcEnvioSelecionado.cliente || orcEnvioSelecionado.slug}` : 'Selecione um orçamento'}
                   </button>
                 </>
               );
