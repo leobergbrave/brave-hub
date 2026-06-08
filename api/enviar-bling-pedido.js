@@ -198,7 +198,7 @@ export default async function handler(req, res) {
     contato: { id: Number(contatoId) },
     data: hoje,
     itens,
-    observacoes: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug}`,
+    observacoes: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
     transporte: {
       fretePorConta: 'D',
       ...(frete > 0 ? { frete } : {}),
