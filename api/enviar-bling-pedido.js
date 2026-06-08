@@ -114,7 +114,7 @@ export default async function handler(req, res) {
   // 5. Criar ou atualizar contato no Bling
   const contatoPayload = {
     nome: cliente.nome,
-    tipoPessoa: isPJ ? 'J' : 'F',
+    tipo: isPJ ? 'J' : 'F',
     situacao: 'A',
     tiposContato: [{ id: 1 }], // 1 = Cliente no Bling V3
     email: cliente.email || '',
