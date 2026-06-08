@@ -45,7 +45,7 @@ Regras:
 - Se não encontrar algum campo, deixe como string vazia ou array vazio`;
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,9 +84,10 @@ Regras:
     });
   } catch (error: any) {
     console.error('Erro ao extrair dados da imagem:', error);
+    // Retorna 200 para que o cliente possa ler a mensagem de erro real
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
+      status: 200,
     });
   }
 });
