@@ -220,12 +220,9 @@ export default async function handler(req, res) {
   if (vendRes?.ok) {
     const vendData = await vendRes.json();
     const lista = vendData?.data || [];
-    const nomeConsultor = (orc.consultor || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-    if (nomeConsultor) {
-      const match = lista.find(v => (v.contato?.nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === nomeConsultor);
-      if (match) idVendedor = match.id;
-    }
-    if (!idVendedor && lista.length > 0) idVendedor = lista[0].id;
+    const norm = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const match = lista.find(v => norm(v.contato?.nome) === norm('Léo Berg'));
+    idVendedor = match?.id || lista[0]?.id || null;
   }
   if (!idVendedor) {
     return res.status(200).json({ ok: false, error: 'Nenhum vendedor encontrado no Bling. Cadastre ao menos um vendedor em Configurações → Vendedores.' });
