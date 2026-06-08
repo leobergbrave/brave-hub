@@ -265,8 +265,8 @@ export default async function handler(req, res) {
     propostaNumero = propostaJson.data?.numero || propostaJson.data?.numeroProposta || null;
   } catch (_) {}
 
-  // 10. Salvar bling_pedido_id no orçamento
-  if (pedidoId) {
+  // 11. Salvar bling_pedido_id no orçamento
+  if (propostaId) {
     await supabaseAdmin
       .from('orcamentos_salvos')
       .update({ bling_pedido_id: propostaId })
