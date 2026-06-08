@@ -93,7 +93,7 @@ export default async function handler(req, res) {
   const df = cliente.dados_fiscais || {};
   const isPJ = cliente.tipo_pessoa === 'J';
 
-  // 4. Buscar contato existente no Bling por CPF/CNPJ
+  // 4. Buscar contato existente no Bling por CPF/CNPJ — valida que o retorno realmente bate
   let contatoId = null;
   if (cpfLimpo) {
     await sleep(300);
@@ -102,7 +102,12 @@ export default async function handler(req, res) {
     );
     if (searchRes?.ok) {
       const j = await searchRes.json();
-      contatoId = (j.data || [])[0]?.id || null;
+      // Verifica que o contato retornado realmente tem este CPF/CNPJ (o parâmetro pode ser ignorado)
+      const match = (j.data || []).find(c => {
+        const docBling = (c.numeroDocumento || c.cpfCnpj || c.cpf || c.cnpj || '').replace(/\D/g, '');
+        return docBling === cpfLimpo;
+      });
+      contatoId = match?.id || null;
     }
   }
 

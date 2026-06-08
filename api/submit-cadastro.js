@@ -170,7 +170,11 @@ export default async function handler(req, res) {
       const resBusca = await blingFetch(`https://api.bling.com.br/v3/contatos?cpf_cnpj=${cpfLimpo}`, 'GET', null);
       if (resBusca?.ok) {
         const j = await resBusca.json();
-        contatoId = (j.data || [])[0]?.id || null;
+        const match = (j.data || []).find(c => {
+          const docBling = (c.numeroDocumento || c.cpfCnpj || c.cpf || c.cnpj || '').replace(/\D/g, '');
+          return docBling === cpfLimpo;
+        });
+        contatoId = match?.id || null;
       }
     }
     const payload = {
