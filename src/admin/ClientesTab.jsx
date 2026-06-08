@@ -103,6 +103,10 @@ export default function ClientesTab({ onNavigate }) {
   const [buscandoPreview, setBuscandoPreview] = useState(false);
   const [importando, setImportando] = useState(false);
   const [limpando, setLimpando] = useState(false);
+
+  // Diagnóstico Bling — inspecionar contato
+  const [diagModal, setDiagModal] = useState(null); // dados retornados
+  const [diagLoading, setDiagLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
 
   // Envio para Bling — fluxo modal
@@ -322,6 +326,23 @@ export default function ClientesTab({ onNavigate }) {
       setOrcsRecentes(data || []);
     } finally {
       setCarregandoOrcsRecentes(false);
+    }
+  }
+
+  async function inspecionarContato(cpfCnpj) {
+    setDiagLoading(true);
+    setDiagModal(null);
+    try {
+      const res = await fetch('/api/importar-clientes-bling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'inspecionar-contato', cpfCnpj }),
+      });
+      setDiagModal(await res.json());
+    } catch (e) {
+      setDiagModal({ ok: false, error: e.message });
+    } finally {
+      setDiagLoading(false);
     }
   }
 
@@ -625,9 +646,21 @@ export default function ClientesTab({ onNavigate }) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide flex items-center gap-1">
-                          <CreditCard className="w-3 h-3" /> Dados Fiscais
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide flex items-center gap-1">
+                            <CreditCard className="w-3 h-3" /> Dados Fiscais
+                          </p>
+                          {c.cpf_cnpj && (
+                            <button
+                              onClick={() => inspecionarContato(c.cpf_cnpj)}
+                              disabled={diagLoading}
+                              className="text-[10px] text-zinc-600 hover:text-orange-400 transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-40"
+                            >
+                              {diagLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                              Verificar Bling
+                            </button>
+                          )}
+                        </div>
                         {c.cpf_cnpj ? (
                           <div className="bg-dark-700/30 rounded-xl p-3 space-y-1">
                             <div className="flex items-center gap-2">
@@ -725,6 +758,84 @@ export default function ClientesTab({ onNavigate }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal: Diagnóstico contato Bling */}
+      {diagModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <ExternalLink className="w-4 h-4 text-orange-400" /> Contato no Bling
+              </h3>
+              <button onClick={() => setDiagModal(null)} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-700 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-4">
+              {!diagModal.ok ? (
+                <p className="text-sm text-red-400">{diagModal.error}</p>
+              ) : !diagModal.encontrado ? (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+                  <p className="text-sm font-bold text-amber-400">Contato NÃO encontrado no Bling</p>
+                  <p className="text-xs text-zinc-500 mt-1">Nenhum contato com este CPF/CNPJ existe no Bling. A criação via "Enviar para Bling" deve funcionar.</p>
+                </div>
+              ) : (
+                diagModal.contatos.map((c, i) => {
+                  const d = c.detalheCompleto || c.resumo;
+                  return (
+                    <div key={i} className="space-y-3">
+                      <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-bold text-white">{d.nome}</p>
+                          <span className="text-[10px] font-mono text-zinc-500">ID {c.id}</span>
+                        </div>
+
+                        {/* Campos-chave */}
+                        {[
+                          ['tipoPessoa', d.tipoPessoa],
+                          ['situacao', d.situacao],
+                          ['tiposContato', JSON.stringify(d.tiposContato)],
+                          ['tipo', JSON.stringify(d.tipo)],
+                          ['cliente', String(d.cliente ?? '—')],
+                          ['fornecedor', String(d.fornecedor ?? '—')],
+                          ['cpfCnpj / cnpj / cpf', d.cpfCnpj || d.cnpj || d.cpf || '—'],
+                          ['email', d.email || '—'],
+                          ['telefone', d.telefone || d.celular || '—'],
+                        ].map(([label, val]) => val && val !== 'undefined' && (
+                          <div key={label} className="flex items-start gap-2 text-xs">
+                            <span className="text-zinc-500 shrink-0 w-40">{label}:</span>
+                            <span className={`font-mono break-all ${
+                              label === 'cliente' && val === 'true' ? 'text-green-400 font-bold' :
+                              label === 'cliente' && val !== 'true' ? 'text-red-400' :
+                              'text-zinc-300'
+                            }`}>{val}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Todos os campos disponíveis */}
+                      <div>
+                        <p className="text-[10px] font-bold text-zinc-600 uppercase mb-1.5">Todos os campos retornados pela API</p>
+                        <div className="flex flex-wrap gap-1">
+                          {(c.todosCampos || []).map(f => (
+                            <span key={f} className="text-[10px] font-mono bg-dark-800 text-zinc-500 px-1.5 py-0.5 rounded">{f}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button onClick={() => setDiagModal(null)}
+              className="mt-4 w-full py-2.5 rounded-xl font-bold text-sm text-white bg-dark-700 hover:bg-dark-600 cursor-pointer transition-colors shrink-0">
+              Fechar
+            </button>
+          </div>
         </div>
       )}
 
