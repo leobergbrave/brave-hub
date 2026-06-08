@@ -201,7 +201,6 @@ export default async function handler(req, res) {
       fretePorConta: 'D',
       ...(frete > 0 ? { frete } : {}),
     },
-    parcelas: [{ dias: 0, valor: totalPedido }],
   };
 
   await sleep(300);
