@@ -93,8 +93,9 @@ export default async function handler(req, res) {
   const df = cliente.dados_fiscais || {};
   const isPJ = cliente.tipo_pessoa === 'J';
 
-  // 4. Buscar contato existente no Bling por CPF/CNPJ — valida que o retorno realmente bate
+  // 4. Buscar contato existente no Bling (CPF/CNPJ primeiro, depois email como fallback)
   let contatoId = null;
+
   if (cpfLimpo) {
     await sleep(300);
     const searchRes = await blingRequest(
@@ -102,7 +103,6 @@ export default async function handler(req, res) {
     );
     if (searchRes?.ok) {
       const j = await searchRes.json();
-      // Verifica que o contato retornado realmente tem este CPF/CNPJ (o parâmetro pode ser ignorado)
       const match = (j.data || []).find(c => {
         const docBling = (c.numeroDocumento || c.cpfCnpj || c.cpf || c.cnpj || '').replace(/\D/g, '');
         return docBling === cpfLimpo;
@@ -111,16 +111,32 @@ export default async function handler(req, res) {
     }
   }
 
+  // Fallback: buscar por email se CPF vazio ou sem match
+  if (!contatoId && cliente.email) {
+    await sleep(300);
+    const emailRes = await blingRequest(
+      `https://api.bling.com.br/v3/contatos?email=${encodeURIComponent(cliente.email)}`, 'GET', null, token
+    );
+    if (emailRes?.ok) {
+      const j = await emailRes.json();
+      const emailLower = (cliente.email || '').toLowerCase();
+      const match = (j.data || []).find(c => (c.email || '').toLowerCase() === emailLower);
+      if (match) {
+        contatoId = match.id;
+        console.log('[Bling contato] Encontrado por email:', contatoId);
+      }
+    }
+  }
+
   // 5. Criar ou atualizar contato no Bling
   const contatoPayload = {
     nome: cliente.nome,
     tipo: isPJ ? 'J' : 'F',
     situacao: 'A',
-    tiposContato: [{ id: 1 }], // 1 = Cliente no Bling V3
     email: cliente.email || '',
     telefone: cliente.telefone || '',
     celular: cliente.telefone || '',
-    cpfCnpj: cpfLimpo,
+    ...(cpfLimpo ? { cpfCnpj: cpfLimpo } : {}),
     ...(isPJ
       ? { fantasia: df.nomeFantasia || '', ie: df.inscricaoEstadual || '' }
       : { dataNascimento: df.dataNascimento || '' }),
@@ -138,23 +154,23 @@ export default async function handler(req, res) {
 
   await sleep(300);
   if (contatoId) {
-    await blingRequest(`https://api.bling.com.br/v3/contatos/${contatoId}`, 'PUT', contatoPayload, token);
+    const updRes = await blingRequest(`https://api.bling.com.br/v3/contatos/${contatoId}`, 'PUT', contatoPayload, token);
+    console.log('[Bling contato] Atualizado:', contatoId, 'status:', updRes?.status);
   } else {
     const createRes = await blingRequest('https://api.bling.com.br/v3/contatos', 'POST', contatoPayload, token);
+    const createBody = await createRes?.text?.() || '';
+    console.log('[Bling contato] Criado status:', createRes?.status, 'body:', createBody.slice(0, 300));
     if (createRes?.ok) {
-      const j = await createRes.json();
-      contatoId = j.data?.id || null;
+      try { contatoId = JSON.parse(createBody).data?.id || null; } catch (_) {}
     } else {
-      const errTxt = await createRes?.text?.() || '';
-      console.error('[Bling contato] Erro ao criar:', errTxt);
-      return res.status(200).json({ ok: false, error: `Erro ao criar contato no Bling: ${errTxt}` });
+      return res.status(200).json({ ok: false, error: `Erro ao criar contato no Bling: ${createBody}` });
     }
   }
 
   if (!contatoId) {
     return res.status(200).json({
       ok: false,
-      error: 'Não foi possível criar/encontrar o contato no Bling. Verifique CPF/CNPJ do cliente.',
+      error: 'Não foi possível criar/encontrar o contato no Bling. Verifique CPF/CNPJ ou email do cliente.',
     });
   }
 

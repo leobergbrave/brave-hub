@@ -181,11 +181,10 @@ export default async function handler(req, res) {
       nome: dados.nomeCompleto,
       tipo: dados.tipoPessoa === 'J' ? 'J' : 'F',
       situacao: 'A',
-      tiposContato: [{ id: 1 }], // 1 = Cliente no Bling V3
       email: dados.email || '',
       telefone: telLimpo,
       celular: telLimpo,
-      cpfCnpj: cpfLimpo,
+      ...(cpfLimpo ? { cpfCnpj: cpfLimpo } : {}),
       ...(isPJ
         ? { fantasia: dados.nomeFantasia || '', ie: dados.inscricaoEstadual || '' }
         : { dataNascimento: dados.dataNascimento || '' }),
