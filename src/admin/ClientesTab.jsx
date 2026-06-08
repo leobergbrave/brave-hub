@@ -412,16 +412,19 @@ export default function ClientesTab({ onNavigate }) {
 
   const iniciarEdicao = (c) => {
     setEditandoId(c.id);
-    setEditForm({ nome: c.nome || '', telefone: c.telefone || '', email: c.email || '', tipo_negocio: c.tipo_negocio || '' });
+    setEditForm({ nome: c.nome || '', telefone: c.telefone || '', email: c.email || '', tipo_negocio: c.tipo_negocio || '', cpf_cnpj: c.cpf_cnpj || '', numero_endereco: c.dados_fiscais?.numero || '', _dados_fiscais: c.dados_fiscais || {} });
   };
 
   const salvarEdicao = async (id) => {
     setSalvando(true);
+    const cpfLimpo = (editForm.cpf_cnpj || '').replace(/\D/g, '') || null;
     await supabase.from('clientes').update({
       nome: editForm.nome,
       telefone: (editForm.telefone || '').replace(/\D/g, ''),
       email: editForm.email,
       tipo_negocio: editForm.tipo_negocio,
+      ...(cpfLimpo !== undefined ? { cpf_cnpj: cpfLimpo } : {}),
+      dados_fiscais: { ...editForm._dados_fiscais, numero: editForm.numero_endereco || editForm._dados_fiscais?.numero || '' },
       atualizado_em: new Date().toISOString(),
     }).eq('id', id);
     setSalvando(false);
@@ -640,6 +643,16 @@ export default function ClientesTab({ onNavigate }) {
                             <option value="">Selecionar...</option>
                             {TIPOS_NEGOCIO.map(t => <option key={t.v} value={t.v}>{t.emoji} {t.label}</option>)}
                           </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">CPF / CNPJ</label>
+                          <input value={editForm.cpf_cnpj} onChange={e => setEditForm(p => ({ ...p, cpf_cnpj: e.target.value }))}
+                            className={inputCls} placeholder="000.000.000-00 ou CNPJ" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Número do Endereço</label>
+                          <input value={editForm.numero_endereco} onChange={e => setEditForm(p => ({ ...p, numero_endereco: e.target.value }))}
+                            className={inputCls} placeholder="123" />
                         </div>
                       </div>
                     )}

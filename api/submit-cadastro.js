@@ -182,6 +182,7 @@ export default async function handler(req, res) {
       tipo: dados.tipoPessoa === 'J' ? 'J' : 'F',
       situacao: 'A',
       email: dados.email || '',
+      emailNotaFiscal: dados.email || '',
       telefone: telLimpo,
       celular: telLimpo,
       ...(cpfLimpo ? { cpfCnpj: cpfLimpo } : {}),

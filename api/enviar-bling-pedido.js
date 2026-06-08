@@ -134,6 +134,7 @@ export default async function handler(req, res) {
     tipo: isPJ ? 'J' : 'F',
     situacao: 'A',
     email: cliente.email || '',
+    emailNotaFiscal: cliente.email || '',
     telefone: cliente.telefone || '',
     celular: cliente.telefone || '',
     ...(cpfLimpo ? { cpfCnpj: cpfLimpo } : {}),
