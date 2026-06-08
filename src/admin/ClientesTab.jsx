@@ -3,7 +3,7 @@ import {
   Users, Search, Phone, Mail, MapPin, CreditCard, Building2, User,
   ChevronDown, ChevronUp, RefreshCw, Loader2, ExternalLink, Edit3,
   CheckCircle2, ShoppingBag, X, Check, MessageSquare, Download, AlertCircle, Heart,
-  Send, FileCheck,
+  Send, FileCheck, UserPlus,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
@@ -118,6 +118,11 @@ export default function ClientesTab({ onNavigate }) {
   const [carregandoOrcsRecentes, setCarregandoOrcsRecentes] = useState(false);
   const [enviandoBling, setEnviandoBling] = useState(false);
   const [blingEnvioResult, setBlingEnvioResult] = useState(null);
+
+  // Cadastro manual de cliente
+  const [novoClienteModal, setNovoClienteModal] = useState(false);
+  const [novoClienteForm, setNovoClienteForm] = useState({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '' });
+  const [salvandoNovoCliente, setSalvandoNovoCliente] = useState(false);
 
   // cores por nome de status
   function corSituacao(nome) {
@@ -438,6 +443,32 @@ export default function ClientesTab({ onNavigate }) {
     if (isOpening) fetchOrcamentosCliente(c.id, c.telefone, c.cpf_cnpj);
   };
 
+  const salvarNovoCliente = async () => {
+    if (!novoClienteForm.nome.trim()) return;
+    setSalvandoNovoCliente(true);
+    const agora = new Date().toISOString();
+    const telLimpo = (novoClienteForm.telefone || '').replace(/\D/g, '') || null;
+    const cpfLimpo = (novoClienteForm.cpf_cnpj || '').replace(/\D/g, '') || null;
+    const { error } = await supabase.from('clientes').insert({
+      nome: novoClienteForm.nome.trim(),
+      telefone: telLimpo,
+      email: novoClienteForm.email.trim() || null,
+      tipo_pessoa: novoClienteForm.tipo_pessoa || 'F',
+      cpf_cnpj: cpfLimpo,
+      tipo_negocio: novoClienteForm.tipo_negocio || null,
+      origem: 'manual',
+      total_compras: 0,
+      total_gasto: 0,
+      criado_em: agora,
+      atualizado_em: agora,
+    });
+    setSalvandoNovoCliente(false);
+    if (error) { alert(`Erro ao cadastrar: ${error.message}`); return; }
+    setNovoClienteModal(false);
+    setNovoClienteForm({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '' });
+    fetchClientes();
+  };
+
   const totalClientes = clientes.length;
   const totalGasto = clientes.reduce((acc, c) => acc + (parseFloat(c.total_gasto) || 0), 0);
   const compradores = clientes.filter(c => (c.total_compras || 0) > 0).length;
@@ -453,6 +484,11 @@ export default function ClientesTab({ onNavigate }) {
           <p className="text-xs text-zinc-500 mt-0.5">CRM de clientes — compras e cadastros</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setNovoClienteModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-neon/10 text-neon border border-neon/20 hover:bg-neon/20 transition-colors cursor-pointer">
+            <UserPlus className="w-3.5 h-3.5" />
+            Novo Cliente
+          </button>
           <button onClick={abrirImportModal}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition-colors cursor-pointer">
             <Download className="w-3.5 h-3.5" />
@@ -1331,6 +1367,84 @@ export default function ClientesTab({ onNavigate }) {
               </>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Novo Cliente Manual */}
+      {novoClienteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-neon" /> Novo Cliente
+              </h3>
+              <button onClick={() => setNovoClienteModal(false)} className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-700 cursor-pointer transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Tipo de Pessoa */}
+              <div className="grid grid-cols-2 gap-2">
+                {[{ v: 'F', label: 'Pessoa Física', Icon: User }, { v: 'J', label: 'Pessoa Jurídica', Icon: Building2 }].map(({ v, label, Icon }) => (
+                  <button key={v} type="button" onClick={() => setNovoClienteForm(p => ({ ...p, tipo_pessoa: v }))}
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border-2 transition-all cursor-pointer text-xs font-semibold ${
+                      novoClienteForm.tipo_pessoa === v
+                        ? 'border-neon bg-neon/10 text-neon'
+                        : 'border-dark-600 text-zinc-400 hover:border-dark-500'
+                    }`}>
+                    <Icon className="w-3.5 h-3.5" /> {label}
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Nome / Razão Social <span className="text-red-400">*</span></label>
+                <input value={novoClienteForm.nome} onChange={e => setNovoClienteForm(p => ({ ...p, nome: e.target.value }))}
+                  className={inputCls} placeholder="Nome completo ou razão social" autoFocus />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Telefone</label>
+                  <input value={novoClienteForm.telefone} onChange={e => setNovoClienteForm(p => ({ ...p, telefone: e.target.value }))}
+                    className={inputCls} placeholder="(11) 99999-9999" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">{novoClienteForm.tipo_pessoa === 'J' ? 'CNPJ' : 'CPF'}</label>
+                  <input value={novoClienteForm.cpf_cnpj} onChange={e => setNovoClienteForm(p => ({ ...p, cpf_cnpj: e.target.value }))}
+                    className={inputCls} placeholder={novoClienteForm.tipo_pessoa === 'J' ? '00.000.000/0001-00' : '000.000.000-00'} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">E-mail</label>
+                <input type="email" value={novoClienteForm.email} onChange={e => setNovoClienteForm(p => ({ ...p, email: e.target.value }))}
+                  className={inputCls} placeholder="email@exemplo.com" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Tipo de Negócio</label>
+                <select value={novoClienteForm.tipo_negocio} onChange={e => setNovoClienteForm(p => ({ ...p, tipo_negocio: e.target.value }))}
+                  className={`${inputCls} cursor-pointer`}>
+                  <option value="">Selecionar...</option>
+                  {TIPOS_NEGOCIO.map(t => <option key={t.v} value={t.v}>{t.emoji} {t.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setNovoClienteModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-zinc-400 hover:text-white bg-dark-800 hover:bg-dark-700 transition-colors cursor-pointer">
+                Cancelar
+              </button>
+              <button onClick={salvarNovoCliente} disabled={salvandoNovoCliente || !novoClienteForm.nome.trim()}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-neon/80 hover:bg-neon disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center justify-center gap-2">
+                {salvandoNovoCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Cadastrar
+              </button>
+            </div>
           </div>
         </div>
       )}
