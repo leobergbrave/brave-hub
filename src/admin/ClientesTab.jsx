@@ -3,6 +3,7 @@ import {
   Users, Search, Phone, Mail, MapPin, CreditCard, Building2, User,
   ChevronDown, ChevronUp, RefreshCw, Loader2, ExternalLink, Edit3,
   CheckCircle2, ShoppingBag, X, Check, MessageSquare, Download, AlertCircle, Heart,
+  Send, FileCheck,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
@@ -76,6 +77,16 @@ export default function ClientesTab({ onNavigate }) {
   const [importando, setImportando] = useState(false);
   const [limpando, setLimpando] = useState(false);
   const [importResult, setImportResult] = useState(null);
+
+  // Envio para Bling — fluxo modal
+  const [blingEnvioModal, setBlingEnvioModal] = useState(null); // { cliente }
+  const [blingEnvioStep, setBlingEnvioStep] = useState('select'); // select | preview | sending | done
+  const [orcEnvioSelecionado, setOrcEnvioSelecionado] = useState(null);
+  const [buscaOrcSlug, setBuscaOrcSlug] = useState('');
+  const [buscaOrcResults, setBuscaOrcResults] = useState(null);
+  const [buscandoOrc, setBuscandoOrc] = useState(false);
+  const [enviandoBling, setEnviandoBling] = useState(false);
+  const [blingEnvioResult, setBlingEnvioResult] = useState(null);
 
   // cores por nome de status
   function corSituacao(nome) {
@@ -248,6 +259,73 @@ export default function ClientesTab({ onNavigate }) {
       alert(`❌ Erro: ${e.message}`);
     } finally {
       setLimpando(false);
+    }
+  }
+
+  // ── Helpers envio Bling ───────────────────────────────────────────────────────
+
+  function calcTotalOrc(orc) {
+    const itens = orc.payload?.itens || [];
+    const totalItens = itens.reduce((acc, i) => {
+      const preco = i.p ?? i.preco ?? 0;
+      const qty = i.q ?? i.quantidade ?? 0;
+      return acc + preco * qty;
+    }, 0);
+    return totalItens + (orc.payload?.frete || 0);
+  }
+
+  function abrirBlingEnvio(cliente, orcPre = null) {
+    setBlingEnvioModal({ cliente });
+    setBlingEnvioStep('select');
+    setOrcEnvioSelecionado(orcPre);
+    setBuscaOrcSlug('');
+    setBuscaOrcResults(null);
+    setBlingEnvioResult(null);
+    if (!orcamentosCliente[cliente.id]) {
+      fetchOrcamentosCliente(cliente.id, cliente.telefone, cliente.cpf_cnpj);
+    }
+  }
+
+  async function buscarOrcamento() {
+    const termo = buscaOrcSlug.trim();
+    if (!termo) return;
+    setBuscandoOrc(true);
+    setBuscaOrcResults(null);
+    try {
+      const { data } = await supabase
+        .from('orcamentos_salvos')
+        .select('id, slug, cliente, criado_em, aprovado_em, payload, bling_pedido_id')
+        .or(`slug.eq.${termo},cliente.ilike.%${termo}%`)
+        .order('criado_em', { ascending: false })
+        .limit(5);
+      setBuscaOrcResults(data || []);
+    } finally {
+      setBuscandoOrc(false);
+    }
+  }
+
+  async function handleEnviarBling() {
+    if (!blingEnvioModal || !orcEnvioSelecionado) return;
+    setBlingEnvioStep('sending');
+    setEnviandoBling(true);
+    setBlingEnvioResult(null);
+    try {
+      const res = await fetch('/api/enviar-bling-pedido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteId: blingEnvioModal.cliente.id,
+          orcamentoSlug: orcEnvioSelecionado.slug,
+        }),
+      });
+      const data = await res.json();
+      setBlingEnvioResult(data);
+      setBlingEnvioStep('done');
+    } catch (e) {
+      setBlingEnvioResult({ ok: false, error: e.message });
+      setBlingEnvioStep('done');
+    } finally {
+      setEnviandoBling(false);
     }
   }
 
@@ -553,9 +631,18 @@ export default function ClientesTab({ onNavigate }) {
                       </div>
 
                       <div className="space-y-2">
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide flex items-center gap-1">
-                          <ShoppingBag className="w-3 h-3" /> Histórico de Compras
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide flex items-center gap-1">
+                            <ShoppingBag className="w-3 h-3" /> Histórico de Compras
+                          </p>
+                          <button
+                            onClick={() => abrirBlingEnvio(c)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-orange-400 hover:text-orange-300 transition-colors cursor-pointer"
+                            title="Vincular orçamento e enviar para Bling"
+                          >
+                            <Send className="w-3 h-3" /> Enviar para Bling
+                          </button>
+                        </div>
                         {orcs === undefined ? (
                           <div className="flex items-center gap-2 text-zinc-600 text-xs">
                             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando...
@@ -575,10 +662,24 @@ export default function ClientesTab({ onNavigate }) {
                                       <span className={`w-1.5 h-1.5 rounded-full ${isAprovado ? 'bg-green-400' : 'bg-amber-400'}`} />
                                       <span className="text-xs text-zinc-400 truncate">{itens.map(i => i.nome).join(', ') || 'Orçamento'}</span>
                                     </div>
-                                    <span className="text-[10px] text-zinc-600">{fmtData(o.aprovado_em || o.criado_em)}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] text-zinc-600">{fmtData(o.aprovado_em || o.criado_em)}</span>
+                                      {o.bling_pedido_id && (
+                                        <span className="text-[9px] font-bold text-orange-400/60 flex items-center gap-0.5">
+                                          <FileCheck className="w-2.5 h-2.5" /> Bling #{o.bling_pedido_id}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     <span className="text-xs font-bold text-neon">{formatCurrency(valor)}</span>
+                                    <button
+                                      onClick={() => abrirBlingEnvio(c, o)}
+                                      className="p-1 rounded bg-orange-500/10 text-orange-400 hover:bg-orange-500/25 transition-colors cursor-pointer"
+                                      title={o.bling_pedido_id ? 'Reenviar para Bling' : 'Enviar para Bling'}
+                                    >
+                                      <Send className="w-3 h-3" />
+                                    </button>
                                     <a href={`/orcamento/${o.slug}`} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-white cursor-pointer">
                                       <ExternalLink className="w-3 h-3" />
                                     </a>
@@ -603,6 +704,269 @@ export default function ClientesTab({ onNavigate }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal: Enviar para Bling — selecionar orçamento + pedido de venda */}
+      {blingEnvioModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Send className="w-4 h-4 text-orange-400" /> Enviar para Bling
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5 truncate max-w-[280px]">
+                  {blingEnvioModal.cliente.nome}
+                </p>
+              </div>
+              <button
+                onClick={() => setBlingEnvioModal(null)}
+                disabled={enviandoBling}
+                className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-700 cursor-pointer transition-colors disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* ── ETAPA: SELECT ─────────────────────────────────────────────── */}
+            {blingEnvioStep === 'select' && (() => {
+              const vinculados = orcamentosCliente[blingEnvioModal.cliente.id];
+              return (
+                <>
+                  {/* Info cliente */}
+                  <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-3 mb-4 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-sm font-black text-orange-400 shrink-0">
+                      {blingEnvioModal.cliente.nome.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{blingEnvioModal.cliente.nome}</p>
+                      <p className="text-[10px] text-zinc-500">
+                        {blingEnvioModal.cliente.cpf_cnpj
+                          ? `${blingEnvioModal.cliente.tipo_pessoa === 'J' ? 'CNPJ' : 'CPF'}: ${blingEnvioModal.cliente.cpf_cnpj}`
+                          : <span className="text-red-400">CPF/CNPJ não informado — contato pode falhar</span>
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Orçamentos vinculados */}
+                  <div className="mb-4">
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Orçamentos vinculados</p>
+                    {vinculados === undefined ? (
+                      <div className="flex items-center gap-2 text-xs text-zinc-600 py-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando...
+                      </div>
+                    ) : vinculados.length === 0 ? (
+                      <p className="text-xs text-zinc-600 italic">Nenhum orçamento vinculado por telefone/CPF</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {vinculados.map(o => {
+                          const total = calcTotalOrc(o);
+                          const sel = orcEnvioSelecionado?.id === o.id;
+                          return (
+                            <button key={o.id} type="button"
+                              onClick={() => setOrcEnvioSelecionado(sel ? null : o)}
+                              className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer text-left ${
+                                sel
+                                  ? 'border-orange-500 bg-orange-500/10'
+                                  : 'border-dark-600 bg-dark-800/40 hover:border-dark-500'
+                              }`}>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-white truncate">
+                                  {(o.payload?.itens || []).map(i => i.nome).filter(Boolean).join(', ') || o.cliente || 'Orçamento'}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-zinc-600">{fmtData(o.aprovado_em || o.criado_em)}</span>
+                                  {o.bling_pedido_id && <span className="text-[9px] text-orange-400/70">Já enviado</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs font-bold text-neon">{formatCurrency(total)}</span>
+                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${sel ? 'border-orange-500 bg-orange-500' : 'border-zinc-600'}`}>
+                                  {sel && <Check className="w-2.5 h-2.5 text-white" />}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Busca por slug / nome */}
+                  <div className="mb-5">
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Buscar outro orçamento</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={buscaOrcSlug}
+                        onChange={e => setBuscaOrcSlug(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && buscarOrcamento()}
+                        placeholder="Slug ou nome do cliente..."
+                        className="flex-1 bg-dark-800 border border-dark-600 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-orange-500/50 transition-colors"
+                      />
+                      <button onClick={buscarOrcamento} disabled={buscandoOrc || !buscaOrcSlug.trim()}
+                        className="px-3 py-2 rounded-xl bg-dark-700 text-zinc-400 hover:text-white hover:bg-dark-600 transition-colors cursor-pointer disabled:opacity-40">
+                        {buscandoOrc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {buscaOrcResults !== null && (
+                      <div className="mt-2 space-y-1">
+                        {buscaOrcResults.length === 0
+                          ? <p className="text-xs text-zinc-600 italic">Nenhum resultado</p>
+                          : buscaOrcResults.map(o => {
+                              const total = calcTotalOrc(o);
+                              const sel = orcEnvioSelecionado?.id === o.id;
+                              return (
+                                <button key={o.id} type="button"
+                                  onClick={() => setOrcEnvioSelecionado(sel ? null : o)}
+                                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer text-left ${
+                                    sel ? 'border-orange-500 bg-orange-500/10' : 'border-dark-600 bg-dark-800/40 hover:border-dark-500'
+                                  }`}>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-semibold text-white truncate">{o.cliente || o.slug}</p>
+                                    <span className="text-[10px] text-zinc-600">{fmtData(o.criado_em)} · {o.slug}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs font-bold text-neon">{formatCurrency(total)}</span>
+                                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${sel ? 'border-orange-500 bg-orange-500' : 'border-zinc-600'}`}>
+                                      {sel && <Check className="w-2.5 h-2.5 text-white" />}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })
+                        }
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setBlingEnvioStep('preview')}
+                    disabled={!orcEnvioSelecionado}
+                    className="w-full py-3 rounded-xl font-black text-sm text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer">
+                    Ver Preview →
+                  </button>
+                </>
+              );
+            })()}
+
+            {/* ── ETAPA: PREVIEW ────────────────────────────────────────────── */}
+            {blingEnvioStep === 'preview' && orcEnvioSelecionado && (() => {
+              const c = blingEnvioModal.cliente;
+              const o = orcEnvioSelecionado;
+              const itens = (o.payload?.itens || []).filter(i => (i.q ?? i.quantidade ?? 0) > 0);
+              const frete = parseFloat(o.payload?.frete || 0);
+              const totalItens = itens.reduce((acc, i) => acc + (i.p ?? i.preco ?? 0) * (i.q ?? i.quantidade ?? 0), 0);
+              const total = totalItens + frete;
+              return (
+                <>
+                  <div className="space-y-3 mb-5">
+                    {/* Cliente */}
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase mb-1.5">Contato Bling</p>
+                      <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl p-3 space-y-0.5">
+                        <p className="text-sm font-bold text-white">{c.nome}</p>
+                        {c.cpf_cnpj && <p className="text-xs text-zinc-500">{c.tipo_pessoa === 'J' ? 'CNPJ' : 'CPF'}: {c.cpf_cnpj}</p>}
+                        {c.email && <p className="text-xs text-zinc-500">{c.email}</p>}
+                        {c.telefone && <p className="text-xs text-zinc-500">{fmtTel(c.telefone)}</p>}
+                      </div>
+                    </div>
+
+                    {/* Itens */}
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase mb-1.5">Itens do Pedido</p>
+                      <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl divide-y divide-dark-700/40">
+                        {itens.map((i, idx) => (
+                          <div key={idx} className="flex items-center justify-between px-3 py-2 gap-2">
+                            <span className="text-xs text-zinc-300 truncate flex-1">{i.nome || `Produto ${idx + 1}`}</span>
+                            <span className="text-[10px] text-zinc-600 shrink-0">×{i.q ?? i.quantidade}</span>
+                            <span className="text-xs font-bold text-zinc-200 shrink-0 ml-1">
+                              {formatCurrency((i.p ?? i.preco ?? 0) * (i.q ?? i.quantidade ?? 0))}
+                            </span>
+                          </div>
+                        ))}
+                        {frete > 0 && (
+                          <div className="flex items-center justify-between px-3 py-2 gap-2">
+                            <span className="text-xs text-zinc-500">Frete</span>
+                            <span className="text-xs font-bold text-zinc-300">{formatCurrency(frete)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between px-3 py-2 gap-2 bg-dark-700/30">
+                          <span className="text-xs font-bold text-zinc-300">Total</span>
+                          <span className="text-sm font-black text-neon">{formatCurrency(total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => setBlingEnvioStep('select')}
+                      className="flex-1 py-2.5 rounded-xl text-sm text-zinc-400 border border-dark-600 hover:text-white cursor-pointer transition-colors">
+                      ← Voltar
+                    </button>
+                    <button onClick={handleEnviarBling}
+                      className="flex-1 py-2.5 rounded-xl font-black text-sm text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 cursor-pointer transition-all">
+                      Confirmar Envio
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* ── ETAPA: SENDING ────────────────────────────────────────────── */}
+            {blingEnvioStep === 'sending' && (
+              <div className="text-center py-8">
+                <Loader2 className="w-10 h-10 text-orange-400 animate-spin mx-auto mb-4" />
+                <p className="text-white font-bold">Enviando para o Bling...</p>
+                <p className="text-xs text-zinc-500 mt-2">Criando contato e pedido de venda.</p>
+              </div>
+            )}
+
+            {/* ── ETAPA: DONE ───────────────────────────────────────────────── */}
+            {blingEnvioStep === 'done' && blingEnvioResult && (
+              <>
+                <div className={`rounded-xl p-4 mb-4 flex items-start gap-3 ${
+                  blingEnvioResult.ok
+                    ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                }`}>
+                  {blingEnvioResult.ok
+                    ? <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+                    : <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />}
+                  <div>
+                    {blingEnvioResult.ok ? (
+                      <>
+                        <p className="text-sm font-bold">Pedido criado no Bling!</p>
+                        {blingEnvioResult.pedidoNumero && (
+                          <p className="text-xs mt-0.5">Número: #{blingEnvioResult.pedidoNumero}</p>
+                        )}
+                        {blingEnvioResult.pedidoId && !blingEnvioResult.pedidoNumero && (
+                          <p className="text-xs mt-0.5">ID: {blingEnvioResult.pedidoId}</p>
+                        )}
+                        <p className="text-xs mt-0.5 text-green-400/70">Total: {formatCurrency(blingEnvioResult.total || 0)}</p>
+                        {blingEnvioResult.itensSemBling?.length > 0 && (
+                          <p className="text-xs mt-1.5 text-amber-400">
+                            ⚠ {blingEnvioResult.itensSemBling.length} iten(s) sem ID Bling — importe os produtos para vincular:
+                            {' '}{blingEnvioResult.itensSemBling.join(', ')}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm leading-relaxed">{blingEnvioResult.error || 'Erro desconhecido'}</p>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setBlingEnvioModal(null)}
+                  className="w-full py-3 rounded-xl font-bold text-sm text-white bg-dark-700 hover:bg-dark-600 cursor-pointer transition-colors">
+                  Fechar
+                </button>
+              </>
+            )}
+
+          </div>
         </div>
       )}
 
