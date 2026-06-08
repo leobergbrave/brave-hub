@@ -187,7 +187,7 @@ export default async function handler(req, res) {
     (produtos || []).forEach(p => { prodMap[p.id] = p; });
   }
 
-  // 7. Montar itens do pedido
+  // 7. Montar itens da proposta
   const itensSemBling = [];
   const itens = itensRaw
     .filter(i => (i.q ?? i.quantidade ?? 0) > 0)
@@ -196,13 +196,17 @@ export default async function handler(req, res) {
       const quantidade = Number(i.q ?? i.quantidade ?? 1);
       const valor = parseFloat(i.p ?? i.preco ?? 0);
       const descricao = prod?.nome || i.nome || 'Produto';
-      const item = { descricao, unidade: 'UN', quantidade, valor };
-      if (prod?.bling_id) {
-        item.produto = { id: Number(prod.bling_id) };
-      } else {
-        itensSemBling.push(descricao);
-      }
-      return item;
+      const blingId = prod?.bling_id ? Number(prod.bling_id) : null;
+      if (!blingId) itensSemBling.push(descricao);
+      return {
+        codigo: prod?.codigo_sku || '',
+        descricao,
+        unidade: 'UN',
+        quantidade,
+        valor: Number(valor.toFixed(2)),
+        desconto: 0,
+        produto: blingId ? { id: blingId } : { descricao },
+      };
     });
 
   if (itens.length === 0) {
@@ -215,18 +219,16 @@ export default async function handler(req, res) {
   const totalProposta = Math.round((totalItens + frete) * 100) / 100;
 
   // 9. Criar proposta comercial no Bling
-  const hoje = new Date().toISOString().split('T')[0];
   const propostaPayload = {
     contato: { id: Number(contatoId) },
-    data: hoje,
     itens,
-    observacoes: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
-    ...(frete > 0 ? { frete } : {}),
+    transporte: { fretePorConta: 0, frete: frete > 0 ? frete : 0 },
+    observacaoInterna: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
   };
 
   await sleep(300);
   const propostaRes = await blingRequest(
-    'https://api.bling.com.br/v3/propostas', 'POST', propostaPayload, token
+    'https://api.bling.com.br/v3/propostas-comerciais', 'POST', propostaPayload, token
   );
 
   const propostaStatus = propostaRes?.status;
