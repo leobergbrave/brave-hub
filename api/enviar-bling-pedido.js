@@ -213,14 +213,33 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: 'Orçamento sem itens com quantidade > 0.' });
   }
 
-  // 8. Calcular total
+  // 8. Buscar vendedor no Bling (obrigatório para propostas-comerciais)
+  let idVendedor = null;
+  await sleep(300);
+  const vendRes = await blingRequest('https://api.bling.com.br/v3/vendedores', 'GET', null, token);
+  if (vendRes?.ok) {
+    const vendData = await vendRes.json();
+    const lista = vendData?.data || [];
+    const nomeConsultor = (orc.consultor || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    if (nomeConsultor) {
+      const match = lista.find(v => (v.contato?.nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === nomeConsultor);
+      if (match) idVendedor = match.id;
+    }
+    if (!idVendedor && lista.length > 0) idVendedor = lista[0].id;
+  }
+  if (!idVendedor) {
+    return res.status(200).json({ ok: false, error: 'Nenhum vendedor encontrado no Bling. Cadastre ao menos um vendedor em Configurações → Vendedores.' });
+  }
+
+  // 9. Calcular total
   const totalItens = itens.reduce((acc, i) => acc + i.valor * i.quantidade, 0);
   const frete = parseFloat(orc.payload?.frete || 0);
   const totalProposta = Math.round((totalItens + frete) * 100) / 100;
 
-  // 9. Criar proposta comercial no Bling
+  // 10. Criar proposta comercial no Bling
   const propostaPayload = {
     contato: { id: Number(contatoId) },
+    vendedor: { id: idVendedor },
     itens,
     transporte: { fretePorConta: 0, frete: frete > 0 ? frete : 0 },
     observacaoInterna: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
