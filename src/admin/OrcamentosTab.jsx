@@ -141,14 +141,18 @@ export default function OrcamentosTab() {
     const subtotal = itens.reduce((acc, i) => acc + i.preco * i.quantidade, 0);
     const valorTotal = valor || subtotal + parseFloat(o.payload?.frete || 0);
 
-    await supabase.from('orcamentos_salvos')
+    const { error: errAprov } = await supabase.from('orcamentos_salvos')
       .update({ payload: { ...o.payload, status: 'Aprovado' }, valor_fechado: valor, aprovado_em: new Date().toISOString() })
       .eq('id', o.id);
+
+    if (errAprov) {
+      alert(`Erro ao aprovar: ${errAprov.message}`);
+      return;
+    }
 
     // Upsert na tabela clientes ao aprovar
     const telCliente = (o.payload?.telefoneCliente || '').replace(/\D/g, '');
     if (o.cliente) {
-      // Tenta por telefone se disponível, senão cria novo
       const { data: existente } = await supabase.from('clientes').select('id, total_compras, total_gasto').eq('telefone', telCliente).maybeSingle();
       if (existente) {
         await supabase.from('clientes').update({
