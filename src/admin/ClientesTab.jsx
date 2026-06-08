@@ -63,7 +63,7 @@ function OrcItem({ o, sel, onSelect, vinculado = false, calcTotal }) {
         <div className="flex items-center gap-1.5">
           <p className="text-xs font-semibold text-white truncate">{o.cliente || o.slug}</p>
           {vinculado && <span className="text-[9px] font-bold text-orange-400 bg-orange-500/10 px-1 rounded shrink-0">vinculado</span>}
-          {o.bling_pedido_id && <span className="text-[9px] text-zinc-600 shrink-0">Bling ✓</span>}
+          {o.bling_pedido_id && <span className="text-[9px] text-zinc-600 shrink-0">Proposta ✓</span>}
         </div>
         <p className="text-[10px] text-zinc-600 truncate">{itensNomes || '—'} · {new Date(o.criado_em).toLocaleDateString('pt-BR')}</p>
       </div>
@@ -720,7 +720,7 @@ export default function ClientesTab({ onNavigate }) {
                                       <span className="text-[10px] text-zinc-600">{fmtData(o.aprovado_em || o.criado_em)}</span>
                                       {o.bling_pedido_id && (
                                         <span className="text-[9px] font-bold text-orange-400/60 flex items-center gap-0.5">
-                                          <FileCheck className="w-2.5 h-2.5" /> Bling #{o.bling_pedido_id}
+                                          <FileCheck className="w-2.5 h-2.5" /> Proposta #{o.bling_pedido_id}
                                         </span>
                                       )}
                                     </div>
@@ -730,7 +730,7 @@ export default function ClientesTab({ onNavigate }) {
                                     <button
                                       onClick={() => abrirBlingEnvio(c, o)}
                                       className="p-1 rounded bg-orange-500/10 text-orange-400 hover:bg-orange-500/25 transition-colors cursor-pointer"
-                                      title={o.bling_pedido_id ? 'Reenviar para Bling' : 'Enviar para Bling'}
+                                      title={o.bling_pedido_id ? 'Reenviar proposta ao Bling' : 'Criar proposta no Bling'}
                                     >
                                       <Send className="w-3 h-3" />
                                     </button>
@@ -1046,12 +1046,12 @@ export default function ClientesTab({ onNavigate }) {
                   <div>
                     {blingEnvioResult.ok ? (
                       <>
-                        <p className="text-sm font-bold">Pedido criado no Bling!</p>
-                        {blingEnvioResult.pedidoNumero && (
-                          <p className="text-xs mt-0.5">Número: #{blingEnvioResult.pedidoNumero}</p>
+                        <p className="text-sm font-bold">Proposta criada no Bling!</p>
+                        {blingEnvioResult.propostaNumero && (
+                          <p className="text-xs mt-0.5">Número: #{blingEnvioResult.propostaNumero}</p>
                         )}
-                        {blingEnvioResult.pedidoId && !blingEnvioResult.pedidoNumero && (
-                          <p className="text-xs mt-0.5">ID: {blingEnvioResult.pedidoId}</p>
+                        {blingEnvioResult.propostaId && !blingEnvioResult.propostaNumero && (
+                          <p className="text-xs mt-0.5">ID: {blingEnvioResult.propostaId}</p>
                         )}
                         <p className="text-xs mt-0.5 text-green-400/70">Total: {formatCurrency(blingEnvioResult.total || 0)}</p>
                         {blingEnvioResult.itensSemBling?.length > 0 && (

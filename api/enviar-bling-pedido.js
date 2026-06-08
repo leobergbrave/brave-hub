@@ -211,60 +211,56 @@ export default async function handler(req, res) {
   // 8. Calcular total
   const totalItens = itens.reduce((acc, i) => acc + i.valor * i.quantidade, 0);
   const frete = parseFloat(orc.payload?.frete || 0);
-  const totalPedido = Math.round((totalItens + frete) * 100) / 100;
+  const totalProposta = Math.round((totalItens + frete) * 100) / 100;
 
-  // 9. Criar pedido de venda no Bling
+  // 9. Criar proposta comercial no Bling
   const hoje = new Date().toISOString().split('T')[0];
-  const pedidoPayload = {
+  const propostaPayload = {
     contato: { id: Number(contatoId) },
     data: hoje,
     itens,
     observacoes: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
-    transporte: {
-      fretePorConta: 'D',
-      ...(frete > 0 ? { frete } : {}),
-    },
-    parcelas: [{ dataVencimento: hoje, valor: totalPedido }],
+    ...(frete > 0 ? { frete } : {}),
   };
 
   await sleep(300);
-  const pedidoRes = await blingRequest(
-    'https://api.bling.com.br/v3/pedidos/vendas', 'POST', pedidoPayload, token
+  const propostaRes = await blingRequest(
+    'https://api.bling.com.br/v3/propostas', 'POST', propostaPayload, token
   );
 
-  const pedidoStatus = pedidoRes?.status;
-  const pedidoBodyRaw = await pedidoRes?.text?.() || '';
-  console.log('[Bling pedido]', { status: pedidoStatus, body: pedidoBodyRaw.slice(0, 500) });
+  const propostaStatus = propostaRes?.status;
+  const propostaBodyRaw = await propostaRes?.text?.() || '';
+  console.log('[Bling proposta]', { status: propostaStatus, body: propostaBodyRaw.slice(0, 500) });
 
-  if (!pedidoRes?.ok) {
+  if (!propostaRes?.ok) {
     return res.status(200).json({
       ok: false,
-      error: `Erro ao criar pedido no Bling (HTTP ${pedidoStatus}): ${pedidoBodyRaw}`,
+      error: `Erro ao criar proposta no Bling (HTTP ${propostaStatus}): ${propostaBodyRaw}`,
     });
   }
 
-  let pedidoId = null;
-  let pedidoNumero = null;
+  let propostaId = null;
+  let propostaNumero = null;
   try {
-    const pedidoJson = JSON.parse(pedidoBodyRaw);
-    pedidoId = pedidoJson.data?.id || null;
-    pedidoNumero = pedidoJson.data?.numero || pedidoJson.data?.numeroPedido || null;
+    const propostaJson = JSON.parse(propostaBodyRaw);
+    propostaId = propostaJson.data?.id || null;
+    propostaNumero = propostaJson.data?.numero || propostaJson.data?.numeroProposta || null;
   } catch (_) {}
 
   // 10. Salvar bling_pedido_id no orçamento
   if (pedidoId) {
     await supabaseAdmin
       .from('orcamentos_salvos')
-      .update({ bling_pedido_id: pedidoId })
+      .update({ bling_pedido_id: propostaId })
       .eq('id', orc.id);
   }
 
   return res.status(200).json({
     ok: true,
     contatoId,
-    pedidoId,
-    pedidoNumero,
-    total: totalPedido,
+    propostaId,
+    propostaNumero,
+    total: totalProposta,
     itensSemBling: itensSemBling.length > 0 ? itensSemBling : undefined,
   });
 }
