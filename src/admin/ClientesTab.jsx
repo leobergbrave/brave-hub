@@ -121,7 +121,7 @@ export default function ClientesTab({ onNavigate }) {
 
   // Cadastro manual de cliente
   const [novoClienteModal, setNovoClienteModal] = useState(false);
-  const [novoClienteForm, setNovoClienteForm] = useState({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '' });
+  const [novoClienteForm, setNovoClienteForm] = useState({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
   const [salvandoNovoCliente, setSalvandoNovoCliente] = useState(false);
 
   // cores por nome de status
@@ -449,6 +449,15 @@ export default function ClientesTab({ onNavigate }) {
     const agora = new Date().toISOString();
     const telLimpo = (novoClienteForm.telefone || '').replace(/\D/g, '') || null;
     const cpfLimpo = (novoClienteForm.cpf_cnpj || '').replace(/\D/g, '') || null;
+    const dadosFiscais = {
+      logradouro: novoClienteForm.logradouro || '',
+      numero: novoClienteForm.numero || '',
+      complemento: novoClienteForm.complemento || '',
+      bairro: novoClienteForm.bairro || '',
+      cidade: novoClienteForm.cidade || '',
+      estado: novoClienteForm.estado || '',
+      cep: novoClienteForm.cep || '',
+    };
     const { error } = await supabase.from('clientes').insert({
       nome: novoClienteForm.nome.trim(),
       telefone: telLimpo,
@@ -456,6 +465,7 @@ export default function ClientesTab({ onNavigate }) {
       tipo_pessoa: novoClienteForm.tipo_pessoa || 'F',
       cpf_cnpj: cpfLimpo,
       tipo_negocio: novoClienteForm.tipo_negocio || null,
+      dados_fiscais: dadosFiscais,
       origem: 'manual',
       total_compras: 0,
       total_gasto: 0,
@@ -465,7 +475,7 @@ export default function ClientesTab({ onNavigate }) {
     setSalvandoNovoCliente(false);
     if (error) { alert(`Erro ao cadastrar: ${error.message}`); return; }
     setNovoClienteModal(false);
-    setNovoClienteForm({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '' });
+    setNovoClienteForm({ nome: '', telefone: '', email: '', tipo_pessoa: 'F', cpf_cnpj: '', tipo_negocio: '', cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
     fetchClientes();
   };
 
@@ -1431,6 +1441,52 @@ export default function ClientesTab({ onNavigate }) {
                   <option value="">Selecionar...</option>
                   {TIPOS_NEGOCIO.map(t => <option key={t.v} value={t.v}>{t.emoji} {t.label}</option>)}
                 </select>
+              </div>
+
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide flex items-center gap-1 pt-1">
+                <MapPin className="w-3 h-3" /> Endereço <span className="font-normal normal-case text-zinc-600">(opcional)</span>
+              </p>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">CEP</label>
+                  <input value={novoClienteForm.cep} onChange={async e => {
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+                    const fmt = v.length > 5 ? `${v.slice(0,5)}-${v.slice(5)}` : v;
+                    setNovoClienteForm(p => ({ ...p, cep: fmt }));
+                    if (v.length === 8) {
+                      try {
+                        const r = await fetch(`https://viacep.com.br/ws/${v}/json/`);
+                        const d = await r.json();
+                        if (!d.erro) setNovoClienteForm(p => ({ ...p, logradouro: d.logradouro || p.logradouro, bairro: d.bairro || p.bairro, cidade: d.localidade || p.cidade, estado: d.uf || p.estado }));
+                      } catch (_) {}
+                    }
+                  }} className={inputCls} placeholder="00000-000" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Número</label>
+                  <input value={novoClienteForm.numero} onChange={e => setNovoClienteForm(p => ({ ...p, numero: e.target.value }))}
+                    className={inputCls} placeholder="123" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Logradouro</label>
+                <input value={novoClienteForm.logradouro} onChange={e => setNovoClienteForm(p => ({ ...p, logradouro: e.target.value }))}
+                  className={inputCls} placeholder="Rua, Avenida..." />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Cidade</label>
+                  <input value={novoClienteForm.cidade} onChange={e => setNovoClienteForm(p => ({ ...p, cidade: e.target.value }))}
+                    className={inputCls} placeholder="Cidade" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Estado</label>
+                  <input maxLength={2} value={novoClienteForm.estado} onChange={e => setNovoClienteForm(p => ({ ...p, estado: e.target.value.toUpperCase() }))}
+                    className={inputCls} placeholder="SP" />
+                </div>
               </div>
             </div>
 

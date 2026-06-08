@@ -162,6 +162,7 @@ export default async function handler(req, res) {
   // 3. Criar/atualizar contato no Bling
   let blingOk = false;
   let blingErro = '';
+  let blingStatus = null;
   try {
     const isPJ = dados.tipoPessoa === 'J';
     let contatoId = null;
@@ -204,7 +205,7 @@ export default async function handler(req, res) {
     const resBling = contatoId
       ? await blingFetch(`https://api.bling.com.br/v3/contatos/${contatoId}`, 'PUT', payload)
       : await blingFetch('https://api.bling.com.br/v3/contatos', 'POST', payload);
-    const blingStatus = resBling?.status;
+    blingStatus = resBling?.status;
     const blingBody = await resBling?.text?.() || '';
     blingOk = resBling?.ok || blingStatus === 200 || blingStatus === 201;
     if (!blingOk) blingErro = blingBody || 'Erro desconhecido';
