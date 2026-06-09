@@ -62,6 +62,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Lê { paginas: N } do body — padrão 1 (= 10 produtos, comportamento original)
+    let paginas = 1;
+    try {
+      const body = await req.json();
+      if (body?.paginas && Number.isInteger(body.paginas) && body.paginas > 0) {
+        paginas = Math.min(body.paginas, 5); // máximo 5 páginas (50 produtos) por chamada
+      }
+    } catch (_) { /* sem body = usa padrão */ }
+
+    const limite = paginas * 10;
+
     const config = await getBlingToken(supabase);
     const tokenRef = { token: config.access_token };
 
@@ -71,7 +82,7 @@ serve(async (req) => {
       .select('id, bling_id, nome, codigo_sku')
       .not('bling_id', 'is', null)
       .or('url_imagem.is.null,url_imagem.eq.')
-      .limit(10); // 10 por vez para não estourar timeout
+      .limit(limite);
 
     if (!semImagem || semImagem.length === 0) {
       // Contar total

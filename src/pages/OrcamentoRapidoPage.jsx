@@ -6,7 +6,7 @@ import {
   Building2, ExternalLink,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { parseMediaUrl } from '../data';
+import { parseMediaUrl, calcularFreteComRegra } from '../data';
 import { InstitutionalFooter } from '../components/BraveCredentials';
 
 /* ═══════════════════════════════════════════════
@@ -310,12 +310,10 @@ export default function OrcamentoRapidoPage() {
     [produtos, quantidades]
   );
 
-  const frete = useMemo(() => {
-    if (!regraFrete) return 0;
-    const pesoArredondado = Math.floor(pesoTotal);
-    const fretePorPeso = pesoArredondado * (regraFrete.multiplicador || 0);
-    return Math.max(fretePorPeso, regraFrete.valor_minimo || 0);
-  }, [regraFrete, pesoTotal]);
+  const frete = useMemo(
+    () => calcularFreteComRegra(pesoTotal, regraFrete),
+    [regraFrete, pesoTotal]
+  );
 
   const precoAvista = useMemo(() => {
     return produtos.reduce((acc, p) => {
@@ -350,9 +348,7 @@ export default function OrcamentoRapidoPage() {
       // Compute frete at call time usando regrasRef.current (sempre atualizado)
       const pesoAtual = produtos.reduce((acc, p) => acc + (p.peso_kg || 0) * (quantidades[p.id] || 1), 0);
       const regraAtual = regrasRef.current.find(r => r.estado === estado && r.zona === zona);
-      const freteAtual = regraAtual
-        ? Math.max(Math.floor(pesoAtual) * (regraAtual.multiplicador || 0), regraAtual.valor_minimo || 0)
-        : 0;
+      const freteAtual = calcularFreteComRegra(pesoAtual, regraAtual);
 
       const payload = {
         itens: produtos.map(p => ({

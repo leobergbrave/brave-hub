@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { calcularFrete } from './_frete.js';
+import { log } from './_log.js';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — API: Orçamento Automático
@@ -45,7 +47,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido' });
 
   try {
     const { cep, nome, telefone, consultor, produtos, desconto_avista, desconto_cartao, parcelas } = req.body;
@@ -53,6 +55,7 @@ export default async function handler(req, res) {
     // ── Validações ──
     if (!cep || !produtos || !Array.isArray(produtos) || produtos.length === 0) {
       return res.status(400).json({
+        ok: false,
         error: 'Campos obrigatórios: cep, produtos (array)',
         exemplo: {
           cep: '01310100',
@@ -67,14 +70,14 @@ export default async function handler(req, res) {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Configuração do Supabase ausente' });
+      return res.status(500).json({ ok: false, error: 'Configuração do Supabase ausente' });
     }
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // ── 1. Resolver CEP → Estado/Zona ──
     const cepLimpo = cep.replace(/\D/g, '');
     if (cepLimpo.length !== 8) {
-      return res.status(400).json({ error: 'CEP inválido. Envie 8 dígitos.' });
+      return res.status(400).json({ ok: false, error: 'CEP inválido. Envie 8 dígitos.' });
     }
 
     let estado = '';
@@ -83,7 +86,7 @@ export default async function handler(req, res) {
       const viaCepRes = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
       const viaCepData = await viaCepRes.json();
       if (viaCepData.erro) {
-        return res.status(400).json({ error: 'CEP não encontrado' });
+        return res.status(400).json({ ok: false, error: 'CEP não encontrado' });
       }
       estado = viaCepData.uf;
 
@@ -103,7 +106,7 @@ export default async function handler(req, res) {
         zona = 'INTERIOR 1';
       }
     } catch (err) {
-      return res.status(500).json({ error: 'Erro ao consultar ViaCEP: ' + err.message });
+      return res.status(500).json({ ok: false, error: 'Erro ao consultar ViaCEP: ' + err.message });
     }
 
     // ── 2. Buscar regra de frete ──
@@ -129,7 +132,7 @@ export default async function handler(req, res) {
       .select('id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem');
 
     if (!allProducts || allProducts.length === 0) {
-      return res.status(500).json({ error: 'Nenhum produto encontrado no banco' });
+      return res.status(500).json({ ok: false, error: 'Nenhum produto encontrado no banco' });
     }
 
     const itensResolvidos = [];
@@ -186,6 +189,7 @@ export default async function handler(req, res) {
 
     if (itensResolvidos.length === 0) {
       return res.status(400).json({
+        ok: false,
         error: 'Nenhum produto pôde ser resolvido',
         erros: errosResolucao,
         aliases_disponiveis: Object.keys(PRODUCT_ALIASES),
@@ -194,12 +198,8 @@ export default async function handler(req, res) {
 
     // ── 4. Calcular frete ──
     const pesoTotal = itensResolvidos.reduce((acc, i) => acc + (i.peso_kg || 0) * i.quantidade, 0);
-    let frete = 0;
-    if (regraFrete) {
-      const pesoArredondado = Math.floor(pesoTotal);
-      const fretePorPeso = pesoArredondado * (regraFrete.multiplicador || 0);
-      frete = Math.max(fretePorPeso, regraFrete.valor_minimo || 0);
-    }
+    const frete = calcularFrete(pesoTotal, regraFrete);
+    log('auto-orcamento', 'info', 'Frete calculado', { pesoTotal, frete, estado, zona });
 
     // ── 5. Calcular subtotal ──
     const subtotal = itensResolvidos.reduce((acc, i) => acc + i.preco * i.quantidade, 0);
@@ -235,7 +235,7 @@ export default async function handler(req, res) {
     });
 
     if (insertError) {
-      return res.status(500).json({ error: 'Erro ao salvar orçamento: ' + insertError.message });
+      return res.status(500).json({ ok: false, error: 'Erro ao salvar orçamento: ' + insertError.message });
     }
 
     // ── 7. Calcular totais para resposta ──
@@ -258,6 +258,7 @@ export default async function handler(req, res) {
 
     const link = `${baseUrl}/orcamento/${slug}`;
 
+    log('auto-orcamento', 'info', 'Orçamento gerado', { slug, cliente: nomeCliente, itens: itensResolvidos.length });
     return res.status(200).json({
       sucesso: true,
       link,
@@ -279,7 +280,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error('Erro na API auto-orcamento:', err);
-    return res.status(500).json({ error: 'Erro interno: ' + err.message });
+    log('auto-orcamento', 'error', 'Erro interno', { message: err.message });
+    return res.status(500).json({ ok: false, error: 'Erro interno: ' + err.message });
   }
 }

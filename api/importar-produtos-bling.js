@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { log } from './_log.js';
 
 /**
  * POST /api/importar-produtos-bling
@@ -111,20 +112,17 @@ function extrairImagemUrl(produto) {
 }
 
 // ── Mapear categoria do Bling para categorias existentes no Supabase ─────────
+// Recebe cache pré-carregado para evitar N queries no banco durante o loop.
 
-async function mapearCategoria(nomeCategoriaBlng) {
+function mapearCategoria(nomeCategoriaBlng, catsCache, subsCache) {
   if (!nomeCategoriaBlng) return { categoria: null, subcategoria: null };
 
   const nomeNorm = nomeCategoriaBlng.trim().toLowerCase();
 
-  // Buscar categorias existentes
-  const { data: cats } = await supabaseAdmin.from('categorias').select('nome');
-  const { data: subs } = await supabaseAdmin.from('subcategorias').select('nome');
-
-  const catMatch = (cats || []).find(c => c.nome.toLowerCase() === nomeNorm);
+  const catMatch = catsCache.find(c => c.nome.toLowerCase() === nomeNorm);
   if (catMatch) return { categoria: catMatch.nome, subcategoria: null };
 
-  const subMatch = (subs || []).find(s => s.nome.toLowerCase() === nomeNorm);
+  const subMatch = subsCache.find(s => s.nome.toLowerCase() === nomeNorm);
   if (subMatch) return { categoria: null, subcategoria: subMatch.nome };
 
   return { categoria: null, subcategoria: null };
@@ -260,6 +258,11 @@ export default async function handler(req, res) {
     const lista = await fetchProdutosLista(token, 20, apenasAtivos);
     const produtosComCodigo = lista.filter(p => p.codigo); // só com SKU (dedup key)
 
+    // Carregar categorias e subcategorias uma única vez antes do loop
+    const { data: catsCache = [] } = await supabaseAdmin.from('categorias').select('nome');
+    const { data: subsCache = [] } = await supabaseAdmin.from('subcategorias').select('nome');
+    log('importar-produtos', 'info', 'Cache de categorias carregado', { cats: catsCache.length, subs: subsCache.length });
+
     let criados = 0, atualizados = 0, erros = 0, semFoto = 0;
 
     for (const item of produtosComCodigo) {
@@ -271,11 +274,9 @@ export default async function handler(req, res) {
       const urlImagem = extrairImagemUrl(produto);
       if (!urlImagem) semFoto++;
 
-      // Categoria
+      // Categoria (usa cache — sem query por produto)
       const nomeCat = produto.categoria?.descricao || produto.categoria?.nome || null;
-      const { categoria, subcategoria } = nomeCat
-        ? await mapearCategoria(nomeCat)
-        : { categoria: null, subcategoria: null };
+      const { categoria, subcategoria } = mapearCategoria(nomeCat, catsCache ?? [], subsCache ?? []);
 
       // Preços
       const preco = parseFloat(produto.preco || produto.precoVenda || 0);
@@ -297,6 +298,7 @@ export default async function handler(req, res) {
       else erros++;
     }
 
+    log('importar-produtos', 'info', 'Import concluído', { criados, atualizados, erros, semFoto });
     return res.status(200).json({
       ok: true,
       totalBling: lista.length,
