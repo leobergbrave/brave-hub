@@ -80,9 +80,13 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, error: 'Sem token Bling. Reconecte nas configurações.' });
   }
 
-  const cpfLimpo = (cliente.cpf_cnpj || '').replace(/\D/g, '');
   const df = cliente.dados_fiscais || {};
-  const isPJ = cliente.tipo_pessoa === 'J';
+  // CPF: priority to clientes.cpf_cnpj, fallback to dados_fiscais.cpfCnpj (set when fiscal form is submitted)
+  const cpfLimpo = (
+    (cliente.cpf_cnpj || '').replace(/\D/g, '') ||
+    (df.cpfCnpj || '').replace(/\D/g, '')
+  );
+  const isPJ = (cliente.tipo_pessoa || df.tipoPessoa || 'F') === 'J';
 
   // Buscar contato existente no Bling por CPF/CNPJ
   let contatoId = null;

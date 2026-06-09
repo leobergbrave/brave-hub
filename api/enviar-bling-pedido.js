@@ -89,9 +89,26 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: 'Sem token Bling. Reconecte nas configurações.' });
   }
 
-  const cpfLimpo = (cliente.cpf_cnpj || '').replace(/\D/g, '');
-  const df = cliente.dados_fiscais || {};
-  const isPJ = cliente.tipo_pessoa === 'J';
+  // Fiscal form data stored inside orcamento payload (filled by client after sale)
+  const dfFiscal = orc.payload?.dadosFiscais || {};
+
+  // CPF: priority to clientes.cpf_cnpj, fallback to fiscal form data
+  const cpfLimpo = (
+    (cliente.cpf_cnpj || '').replace(/\D/g, '') ||
+    (dfFiscal.cpfCnpj || '').replace(/\D/g, '')
+  );
+
+  // Address: fiscal form as base (more complete), client dados_fiscais overrides if set
+  const df = { ...dfFiscal, ...(cliente.dados_fiscais || {}) };
+  const isPJ = (cliente.tipo_pessoa || dfFiscal.tipoPessoa || 'F') === 'J';
+
+  // Persist CPF back to client record if it was found from the fiscal form but missing in clientes
+  if (!cliente.cpf_cnpj && cpfLimpo) {
+    supabaseAdmin.from('clientes')
+      .update({ cpf_cnpj: cpfLimpo, atualizado_em: new Date().toISOString() })
+      .eq('id', clienteId)
+      .then(() => {}).catch(() => {});
+  }
 
   // 4. Buscar contato existente no Bling (CPF/CNPJ primeiro, depois email como fallback)
   let contatoId = null;
@@ -265,11 +282,11 @@ export default async function handler(req, res) {
     propostaNumero = propostaJson.data?.numero || propostaJson.data?.numeroProposta || null;
   } catch (_) {}
 
-  // 11. Salvar bling_pedido_id no orçamento
+  // 11. Salvar bling_pedido_id e cliente_id no orçamento
   if (propostaId) {
     await supabaseAdmin
       .from('orcamentos_salvos')
-      .update({ bling_pedido_id: propostaId })
+      .update({ bling_pedido_id: propostaId, cliente_id: clienteId })
       .eq('id', orc.id);
   }
 
