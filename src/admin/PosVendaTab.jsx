@@ -592,6 +592,123 @@ function ModalSelecionarEquipamento({ cliente, estrategia, onConfirm, onClose })
   );
 }
 
+// ─── Modal Disparar via BotConversa ──────────────────────────────────────────
+
+function ModalDispararBot({ cliente, estrategia, mensagemInicial, onClose, onSent }) {
+  const [mensagem, setMensagem] = useState(mensagemInicial);
+  const [enviando, setEnviando] = useState(false);
+  const cor = COR_MAP[estrategia.cor];
+  const Icon = estrategia.icon;
+
+  async function handleEnviar() {
+    const webhookUrl =
+      import.meta.env.VITE_BOTCONVERSA_WEBHOOK_POSVENDAS ||
+      import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
+
+    if (!webhookUrl) {
+      alert('⚠️ Configure VITE_BOTCONVERSA_WEBHOOK_POSVENDAS (ou VITE_BOTCONVERSA_WEBHOOK) na Vercel para usar o Bot.');
+      return;
+    }
+    if (!mensagem.trim()) return;
+    setEnviando(true);
+    try {
+      let tel = (cliente.payload?.telefoneCliente || '').replace(/\D/g, '');
+      if (tel.length === 10 || tel.length === 11) tel = '55' + tel;
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente: cliente.cliente,
+          telefone: tel,
+          consultor: cliente.consultor || 'Equipe Brave',
+          campanha: estrategia.titulo,
+          mensagem_formatada: mensagem.trim(),
+          media_url: '',
+        }),
+      });
+      onSent();
+    } catch (err) {
+      alert('❌ Erro ao enviar: ' + err.message);
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="bg-dark-900 border border-dark-700/60 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700/40">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl ${cor.bg} border ${cor.border} flex items-center justify-center shrink-0`}>
+              <Icon className={`w-4 h-4 ${cor.icon}`} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">Disparar via BotConversa</h3>
+              <p className="text-[10px] text-zinc-500">{estrategia.titulo}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-dark-700 transition-colors cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Info do cliente */}
+          <div className="bg-dark-800/60 border border-dark-700/40 rounded-xl px-4 py-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center text-xs font-black text-pink-400 shrink-0">
+              {(cliente.cliente || '?').charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">{cliente.cliente}</p>
+              <p className="text-[10px] text-zinc-500">{fmtTel(cliente.payload?.telefoneCliente)}</p>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-neon font-bold">
+              <Zap className="w-3 h-3" />
+              Via Bot
+            </div>
+          </div>
+
+          {/* Mensagem editável */}
+          <div>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1.5">
+              Mensagem — edite antes de enviar
+            </label>
+            <textarea
+              value={mensagem}
+              onChange={e => setMensagem(e.target.value)}
+              rows={10}
+              autoFocus
+              className="w-full bg-dark-800 border border-dark-700 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-neon/40 transition-all placeholder:text-dark-500 leading-relaxed"
+            />
+            <p className="text-[10px] text-zinc-600 mt-1">{mensagem.trim().length} caracteres</p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-dark-700/40 flex items-center gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-semibold text-zinc-400 border border-dark-600 rounded-xl hover:text-white hover:bg-dark-700 transition-colors cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={handleEnviar}
+            disabled={enviando || !mensagem.trim()}
+            className="flex items-center gap-2 px-6 py-2 text-xs font-bold text-dark-950 bg-neon hover:bg-neon/90 rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {enviando ? 'Enviando...' : 'Enviar via BotConversa'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function PosVendaTab() {
@@ -600,7 +717,8 @@ export default function PosVendaTab() {
   const [expandedId, setExpandedId] = useState(null);
   const [modalTemplate, setModalTemplate] = useState(null);
   const [modalConfig, setModalConfig] = useState(false);
-  const [modalEquipamento, setModalEquipamento] = useState(null); // { cliente, estrategia, modo } onde modo = 'whatsapp' | 'copiar'
+  const [modalEquipamento, setModalEquipamento] = useState(null); // { cliente, estrategia, modo } onde modo = 'whatsapp' | 'copiar' | 'bot'
+  const [modalBot, setModalBot] = useState(null); // { cliente, estrategia, mensagem }
   const [toast, setToast] = useState('');
   const [activeSection, setActiveSection] = useState('clientes');
   const [busca, setBusca] = useState('');
@@ -803,10 +921,9 @@ export default function PosVendaTab() {
 
   function resolverEquipamentoEExecutar(cliente, estrategia, modo) {
     if (!ESTRATEGIAS_POR_EQUIPAMENTO.includes(estrategia.id)) {
-      // Não depende de equipamento: executa direto
-      modo === 'whatsapp'
-        ? _dispararWhatsApp(cliente, estrategia, null)
-        : _copiarMensagem(cliente, estrategia, null);
+      if (modo === 'whatsapp') _dispararWhatsApp(cliente, estrategia, null);
+      else if (modo === 'bot') _dispararBot(cliente, estrategia, null);
+      else _copiarMensagem(cliente, estrategia, null);
       return;
     }
 
@@ -814,9 +931,9 @@ export default function PosVendaTab() {
     const detectados = detectarEquipamentos(itens);
 
     if (detectados.length === 1) {
-      modo === 'whatsapp'
-        ? _dispararWhatsApp(cliente, estrategia, detectados[0])
-        : _copiarMensagem(cliente, estrategia, detectados[0]);
+      if (modo === 'whatsapp') _dispararWhatsApp(cliente, estrategia, detectados[0]);
+      else if (modo === 'bot') _dispararBot(cliente, estrategia, detectados[0]);
+      else _copiarMensagem(cliente, estrategia, detectados[0]);
     } else {
       // 0 ou múltiplos: abre seletor manual
       setModalEquipamento({ cliente, estrategia, modo });
@@ -842,12 +959,22 @@ export default function PosVendaTab() {
     });
   }
 
+  function _dispararBot(cliente, estrategia, equipamento) {
+    const templateSalvo = localStorage.getItem(`posv_template_${estrategia.id}`) || estrategia.templatePadrao;
+    const msg = processarTemplate(templateSalvo, cliente, equipamento);
+    setModalBot({ cliente, estrategia, mensagem: msg });
+  }
+
   function handleDispararWhatsApp(cliente, estrategia) {
     resolverEquipamentoEExecutar(cliente, estrategia, 'whatsapp');
   }
 
   function handleCopiarMensagem(cliente, estrategia) {
     resolverEquipamentoEExecutar(cliente, estrategia, 'copiar');
+  }
+
+  function handleDispararBot(cliente, estrategia) {
+    resolverEquipamentoEExecutar(cliente, estrategia, 'bot');
   }
 
   // ── Métricas ──
@@ -953,6 +1080,19 @@ export default function PosVendaTab() {
         />
       )}
       {modalConfig && <ModalConfig onClose={() => setModalConfig(false)} />}
+      {modalBot && (
+        <ModalDispararBot
+          cliente={modalBot.cliente}
+          estrategia={modalBot.estrategia}
+          mensagemInicial={modalBot.mensagem}
+          onClose={() => setModalBot(null)}
+          onSent={() => {
+            marcarEnviado(modalBot.cliente.id, modalBot.estrategia.id);
+            showToast(`✓ Mensagem enviada via BotConversa para ${modalBot.cliente.cliente}`);
+            setModalBot(null);
+          }}
+        />
+      )}
       {modalEquipamento && (
         <ModalSelecionarEquipamento
           cliente={modalEquipamento.cliente}
@@ -962,6 +1102,8 @@ export default function PosVendaTab() {
             setModalEquipamento(null);
             if (modalEquipamento.modo === 'whatsapp') {
               _dispararWhatsApp(modalEquipamento.cliente, modalEquipamento.estrategia, equipamento);
+            } else if (modalEquipamento.modo === 'bot') {
+              _dispararBot(modalEquipamento.cliente, modalEquipamento.estrategia, equipamento);
             } else {
               _copiarMensagem(modalEquipamento.cliente, modalEquipamento.estrategia, equipamento);
             }
@@ -1009,9 +1151,8 @@ export default function PosVendaTab() {
             <p className="text-sm font-semibold text-white mb-1">Objetivo & Como Usar</p>
             <p className="text-xs text-zinc-400 leading-relaxed">
               Este painel mostra todos os clientes com compras aprovadas e sugere ações de relacionamento baseadas no tempo desde a compra.
-              Para cada cliente, você pode abrir o WhatsApp com a mensagem já preenchida ou copiar o texto.
+              Para cada cliente, use <strong className="text-neon">Bot</strong> para editar a mensagem e enviar via BotConversa, <strong className="text-zinc-300">📞</strong> para abrir o WhatsApp diretamente, ou copiar o texto.
               <strong className="text-pink-400"> Configure os links</strong> antes de usar (botão acima) e <strong className="text-pink-400">edite os templates</strong> de mensagem na aba Estratégias.
-              As ações marcadas como enviadas ficam registradas no seu navegador.
             </p>
           </div>
         </div>
@@ -1256,23 +1397,29 @@ export default function PosVendaTab() {
                                 {tel ? (
                                   <div className="flex gap-1.5">
                                     <button
-                                      onClick={() => handleDispararWhatsApp(c, e)}
+                                      onClick={() => handleDispararBot(c, e)}
                                       disabled={!disponivel && !enviado}
                                       className={`flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-                                        enviado
-                                          ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                                          : disponivel
-                                            ? 'bg-neon text-dark-950 hover:bg-neon/90'
-                                            : 'bg-dark-700 text-zinc-500'
+                                        disponivel || enviado
+                                          ? 'bg-neon text-dark-950 hover:bg-neon/90'
+                                          : 'bg-dark-700 text-zinc-500'
                                       }`}
                                     >
+                                      <Zap className="w-3 h-3" />
+                                      {enviado ? 'Reenviar' : 'Bot'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDispararWhatsApp(c, e)}
+                                      disabled={!disponivel && !enviado}
+                                      title="Abrir WhatsApp diretamente"
+                                      className="p-1.5 rounded-lg bg-dark-700 text-zinc-400 hover:text-white hover:bg-dark-600 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
                                       <Phone className="w-3 h-3" />
-                                      {enviado ? 'Reenviar' : 'WhatsApp'}
                                     </button>
                                     <button
                                       onClick={() => handleCopiarMensagem(c, e)}
-                                      className="p-1.5 rounded-lg bg-dark-700 text-zinc-400 hover:text-white hover:bg-dark-600 transition-colors cursor-pointer"
                                       title="Copiar mensagem"
+                                      className="p-1.5 rounded-lg bg-dark-700 text-zinc-400 hover:text-white hover:bg-dark-600 transition-colors cursor-pointer"
                                     >
                                       <Copy className="w-3 h-3" />
                                     </button>
@@ -1337,14 +1484,22 @@ export default function PosVendaTab() {
                     {tel && (
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
-                          onClick={() => handleDispararWhatsApp(c, e)}
+                          onClick={() => handleDispararBot(c, e)}
                           className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold bg-neon text-dark-950 rounded-lg hover:bg-neon/90 transition-colors cursor-pointer"
                         >
+                          <Zap className="w-3 h-3" />
+                          Bot
+                        </button>
+                        <button
+                          onClick={() => handleDispararWhatsApp(c, e)}
+                          title="Abrir WhatsApp diretamente"
+                          className="p-1.5 rounded-lg bg-dark-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                        >
                           <Phone className="w-3 h-3" />
-                          WhatsApp
                         </button>
                         <button
                           onClick={() => handleCopiarMensagem(c, e)}
+                          title="Copiar mensagem"
                           className="p-1.5 rounded-lg bg-dark-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
                         >
                           <Copy className="w-3 h-3" />
