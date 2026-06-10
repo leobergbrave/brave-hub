@@ -136,15 +136,20 @@ Deno.serve(async (req) => {
           let tel = (item.telefone || "").replace(/\D/g, "");
           if (tel.length === 10 || tel.length === 11) tel = "55" + tel;
 
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+
           const res = await fetch(config.webhook_url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cliente: item.nome || "", telefone: tel }),
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
           ok = res.ok;
           if (!ok) erro = `HTTP ${res.status}`;
         } catch (e: any) {
-          erro = e.message;
+          erro = e.name === "AbortError" ? "Timeout (8s)" : e.message;
         }
       }
 

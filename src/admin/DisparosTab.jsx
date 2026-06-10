@@ -84,6 +84,11 @@ export default function DisparosTab() {
   const [deleteModal, setDeleteModal] = useState(null); // campanha object
   const [deleting, setDeleting] = useState(false);
 
+  // ── Forçar disparo manual & Info ──
+  const [forcing, setForcing] = useState(false);
+  const [forceResult, setForceResult] = useState(null);
+  const [infoOpen, setInfoOpen] = useState(true);
+
   // ── Fetches ──
   const fetchCampanhas = useCallback(async () => {
     setLoadingCampanhas(true);
@@ -290,6 +295,45 @@ export default function DisparosTab() {
     }
   };
 
+  const handleForcarDisparo = async () => {
+    setForcing(true);
+    setForceResult(null);
+    try {
+      const res = await fetch('/api/disparo-sender', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        const total = data.processed || 0;
+        const sentList = data.results?.filter(r => r.sent) || [];
+        const failedList = data.results?.filter(r => !r.sent) || [];
+        
+        let msg = '';
+        if (sentList.length > 0) {
+          msg += `${sentList.length} enviado(s) com sucesso. `;
+        }
+        if (failedList.length > 0) {
+          msg += `${failedList.length} falha(s). `;
+        }
+        if (sentList.length === 0 && failedList.length === 0) {
+          if (data.skipped) {
+            msg = `Nenhum disparo realizado: ${data.skipped}.`;
+          } else {
+            msg = 'Nenhum disparo pendente na fila para o horário atual.';
+          }
+        }
+        
+        setForceResult({ success: true, msg });
+        fetchCampanhas();
+      } else {
+        setForceResult({ success: false, msg: data.fatal || data.error || 'Erro desconhecido ao processar disparos.' });
+      }
+    } catch (e) {
+      setForceResult({ success: false, msg: `Erro de rede: ${e.message}` });
+    } finally {
+      setForcing(false);
+      setTimeout(() => setForceResult(null), 10000);
+    }
+  };
+
   const estimativa = () => {
     if (!preview.total || !config.max_por_dia) return '—';
     return Math.ceil(preview.total / config.max_por_dia);
@@ -319,9 +363,30 @@ export default function DisparosTab() {
             {campanhas.length} campanha{campanhas.length !== 1 ? 's' : ''} criada{campanhas.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setInfoOpen(!infoOpen)}
+            title="Ajuda e Instruções"
+            className={`p-2.5 border rounded-xl text-zinc-400 hover:text-white transition-colors cursor-pointer ${infoOpen ? 'bg-dark-750 border-zinc-600 text-white' : 'bg-dark-800 border-dark-700'}`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleForcarDisparo}
+            disabled={forcing}
+            title="Forçar execução imediata da fila de disparos"
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-dark-800 border border-dark-700 rounded-xl text-xs font-bold text-zinc-450 hover:text-white hover:border-emerald-500/50 transition-colors cursor-pointer disabled:opacity-40"
+          >
+            {forcing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+            ) : (
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            {forcing ? 'Disparando...' : 'Forçar Disparo'}
+          </button>
           <button onClick={fetchCampanhas}
-            className="p-2.5 bg-dark-800 border border-dark-700 rounded-xl text-zinc-400 hover:text-white transition-colors cursor-pointer">
+            className="p-2.5 bg-dark-800 border border-dark-700 rounded-xl text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            title="Atualizar lista">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
           <button onClick={openWizard}
@@ -330,6 +395,51 @@ export default function DisparosTab() {
           </button>
         </div>
       </div>
+
+      {/* ── Painel de Objetivos, Instruções e Informações ── */}
+      {infoOpen && (
+        <div className="bg-dark-800/40 border border-dark-700/50 rounded-2xl p-5 space-y-4 text-xs text-zinc-400 transition-all">
+          <div className="flex items-center justify-between border-b border-dark-700/50 pb-2">
+            <h3 className="font-bold text-white flex items-center gap-2 text-sm">
+              <AlertCircle className="w-4 h-4 text-emerald-400" /> Objetivos e Instruções do Painel de Disparos
+            </h3>
+            <button onClick={() => setInfoOpen(false)} className="text-[10px] text-zinc-500 hover:text-white transition-colors cursor-pointer">
+              Ocultar
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <p>
+                <strong className="text-white">Objetivo:</strong> O módulo de disparos permite enviar mensagens automáticas em lote para seus clientes através da API do <strong className="text-white">BotConversa</strong>. Para proteger sua conta de WhatsApp contra banimentos, o envio é realizado em fila individual e espaçado de forma segura.
+              </p>
+              <p>
+                <strong className="text-white">Janela de Funcionamento:</strong> Os disparos automáticos respeitam o horário configurado em regras (início, fim e dias da semana). Se um disparo for calculado para fora deste intervalo, ele será agendado automaticamente para o próximo dia útil, no horário inicial.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p>
+                <strong className="text-white">Automação em Background (Cron):</strong> As mensagens da fila são disparadas automaticamente a cada minuto em produção. O agendador externo chama o serviço continuamente.
+              </p>
+              <p>
+                <strong className="text-white">Testabilidade Prática:</strong> Use o botão <strong className="text-white">"Forçar Disparo"</strong> acima para executar a fila manualmente e disparar a próxima mensagem pendente imediatamente, ou o teste de webhook no passo 2 de criação.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Notificação de feedback do disparo forçado ── */}
+      {forceResult && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-xs transition-all ${forceResult.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{forceResult.msg}</span>
+          </div>
+          <button onClick={() => setForceResult(null)} className="p-1 hover:bg-dark-700/50 rounded-lg shrink-0 cursor-pointer">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* ── Campaign list ── */}
       {loadingCampanhas ? (
@@ -355,6 +465,9 @@ export default function DisparosTab() {
             const resp = respostas[c.id];
             const totalRespondeu = resp ? (resp.aceitou + resp.optout + resp.sem_resposta) : 0;
             const semResposta = c.enviados_total - totalRespondeu;
+
+            const todayStr = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const enviadosHoje = c.ultima_data === todayStr ? c.enviados_hoje : 0;
 
             return (
               <div key={c.id} className="bg-dark-800/50 border border-dark-700/40 rounded-2xl overflow-hidden">
@@ -409,7 +522,7 @@ export default function DisparosTab() {
                     {[
                       { label: 'Total',    value: c.total_contatos,    color: 'text-white' },
                       { label: 'Enviados', value: c.enviados_total,    color: 'text-emerald-400' },
-                      { label: 'Hoje',     value: c.enviados_hoje,     color: 'text-blue-400' },
+                      { label: 'Hoje',     value: enviadosHoje,        color: 'text-blue-400' },
                       { label: 'Falhas',   value: c.falhas_total || 0, color: c.falhas_total ? 'text-red-400' : 'text-zinc-600' },
                     ].map(s => (
                       <div key={s.label} className="bg-dark-700/30 rounded-xl p-2.5 text-center">
