@@ -42,6 +42,7 @@ serve(async (req) => {
 
     // RD Station envia o deal dentro de body.deal ou diretamente
     const deal = body.deal || body;
+    const consultorNome = deal.user?.name || deal.user_name || 'Léo Berg';
 
     // ── 1. Extrair nome ──────────────────────────────────────────
     const nome = deal.name || deal.deal_name || 'Lead RD';
@@ -97,7 +98,7 @@ serve(async (req) => {
         momento_compra: momentoRaw || 'Não informado',
         produtos_interesse: aliases.length > 0 ? aliases : equipamentosLista,
         status: 'fluxo_disparado',
-        consultor: 'Léo Berg',
+        consultor: consultorNome,
         observacoes: `Origem: RD Station CRM | Campanha: ${deal.campaign?.name || 'N/A'} | Etapa: ${deal.deal_stage?.name || 'N/A'}`,
         link_rapido_codigo: aliases.length > 0 ? codigo : null,
       })
@@ -126,7 +127,7 @@ serve(async (req) => {
           momento_detectado: momentoRaw,
           produtos_interesse: equipamentosRaw,
           link: linkOrcamento,
-          consultor: 'Léo Berg',
+          consultor: consultorNome,
         }),
       });
 

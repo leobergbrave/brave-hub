@@ -4,7 +4,7 @@ import { formatCurrency } from '../data';
 import {
   Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle,
   Edit2, Search, Send, CopyPlus, ChevronRight, MapPin, RefreshCw, Link2, X,
-  SlidersHorizontal, ChevronDown, ArrowDownToLine, User,
+  SlidersHorizontal, ChevronDown, ArrowDownToLine, User, Info,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -405,17 +405,47 @@ export default function OrcamentosTab() {
     return data || null;
   };
 
+  const getConsultorFromLead = async (l) => {
+    let consultorDetectado = 'Léo Berg';
+    try {
+      const { data: leadByLink } = await supabase
+        .from('leads')
+        .select('consultor')
+        .eq('link_rapido_codigo', l.codigo)
+        .maybeSingle();
+      if (leadByLink?.consultor) {
+        consultorDetectado = leadByLink.consultor;
+      } else if (l.telefone_lead) {
+        const tel = l.telefone_lead.replace(/\D/g, '');
+        const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
+        const telSemDDI = tel.startsWith('55') ? tel.slice(2) : tel;
+        const { data: leadByPhone } = await supabase
+          .from('leads')
+          .select('consultor')
+          .or(`telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`)
+          .maybeSingle();
+        if (leadByPhone?.consultor) {
+          consultorDetectado = leadByPhone.consultor;
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao buscar consultor do lead:', e);
+    }
+    return consultorDetectado;
+  };
+
   const handleAprovarRapido = async (l) => {
     let orc = await resolveOrcRapido(l);
 
     // Se não existe orçamento ainda, cria um registro mínimo para poder registrar a venda
     if (!orc) {
+      const consultorName = await getConsultorFromLead(l);
       const slugBase = (l.nome_lead || 'rapido').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const slug = `${slugBase}-${Math.random().toString(36).substring(2, 8)}`;
       const { data } = await supabase.from('orcamentos_salvos').insert({
         slug,
         cliente: l.nome_lead || '—',
-        consultor: 'LEO BERG',
+        consultor: consultorName,
         payload: { itens: [], status: 'Pendente', produtos_texto: l.produtos_texto || '' },
       }).select().single();
       if (data) {
@@ -430,13 +460,14 @@ export default function OrcamentosTab() {
   const changeStatusRapido = async (l, status) => {
     let orc = await resolveOrcRapido(l);
     if (!orc) {
+      const consultorName = await getConsultorFromLead(l);
       // Cria registro mínimo se não existe
       const slugBase = (l.nome_lead || 'rapido').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
       const slug = `${slugBase}-${Math.random().toString(36).substring(2, 8)}`;
       const { data } = await supabase.from('orcamentos_salvos').insert({
         slug,
         cliente: l.nome_lead || '—',
-        consultor: 'LEO BERG',
+        consultor: consultorName,
         payload: { itens: [], status: 'Pendente' },
       }).select().single();
       if (data) {
@@ -872,6 +903,29 @@ export default function OrcamentosTab() {
           </button>
         </div>
 
+      </div>
+
+      {/* Informações da Funcionalidade: Vendedor Dinâmico */}
+      <div className="bg-dark-800/40 border border-dark-700/60 rounded-2xl p-5 mb-6">
+        <div className="flex items-start gap-3.5">
+          <div className="p-2 bg-neon/10 rounded-xl text-neon">
+            <Info className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-white mb-1">ℹ️ Funcionalidade: Vendedor Dinâmico (Bling)</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+              Ao gerar propostas comerciais ou aprovar orçamentos rápidos, o sistema busca e atribui automaticamente o vendedor/consultor no Bling com base no Lead correspondente. Se houver variação no nome do vendedor (como falta de acentos ou sobrenomes), a inteligência do sistema realiza uma correspondência aproximada.
+            </p>
+            <div className="bg-dark-900/50 rounded-xl p-3 border border-dark-800">
+              <span className="text-[10px] font-black uppercase text-neon tracking-wider block mb-1.5">🧪 Como Testar:</span>
+              <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-1">
+                <li>Localize ou crie um lead atribuído a um consultor específico (ex: <code>Thiago Freitas</code>).</li>
+                <li>Gere ou aprove o orçamento rápido correspondente no sistema.</li>
+                <li>Verifique no painel do Bling se a proposta gerada está sob a titularidade do vendedor associado.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Main tabs + Importar do Bling */}

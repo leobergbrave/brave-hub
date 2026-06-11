@@ -76,6 +76,7 @@ export default function OrcamentoRapidoPage() {
   const [regras, setRegras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
+  const [consultor, setConsultor] = useState('Léo Berg');
 
   const [cep, setCep] = useState('');
   const [buscandoCep, setBuscandoCep] = useState(false);
@@ -190,6 +191,30 @@ export default function OrcamentoRapidoPage() {
           if (linkData.nome_lead) setNomeUrl(linkData.nome_lead);
           if (linkData.estado_lead) setEstadoLead(linkData.estado_lead);
           if (linkData.cidade_lead) setCidadeLead(linkData.cidade_lead);
+
+          // Buscar consultor associado ao lead do link rápido
+          let consultorDetectado = 'Léo Berg';
+          const { data: leadByLink } = await supabase
+            .from('leads')
+            .select('consultor')
+            .eq('link_rapido_codigo', codigo)
+            .maybeSingle();
+          if (leadByLink?.consultor) {
+            consultorDetectado = leadByLink.consultor;
+          } else if (linkData.telefone_lead) {
+            const tel = linkData.telefone_lead.replace(/\D/g, '');
+            const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
+            const telSemDDI = tel.startsWith('55') ? tel.slice(2) : tel;
+            const { data: leadByPhone } = await supabase
+              .from('leads')
+              .select('consultor')
+              .or(`telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI}`)
+              .maybeSingle();
+            if (leadByPhone?.consultor) {
+              consultorDetectado = leadByPhone.consultor;
+            }
+          }
+          setConsultor(consultorDetectado);
         } else {
           // /orcamento-rapido/:alias or ?produtos=
           const raw = produtosParam || alias || '';
@@ -379,7 +404,7 @@ export default function OrcamentoRapidoPage() {
       const { error } = await supabase.from('orcamentos_salvos').insert({
         slug,
         cliente: nomeCliente,
-        consultor: 'Léo Berg',
+        consultor: consultor,
         origem_lead: 'RD STATION',
         payload,
       });
@@ -395,7 +420,7 @@ export default function OrcamentoRapidoPage() {
       }
 
       supabase.functions.invoke('sync-bling-proposal', {
-        body: { cliente: nomeCliente, consultor: 'Léo Berg', payload }
+        body: { cliente: nomeCliente, consultor: consultor, payload }
       }).catch(err => console.error('Erro ao syncar com Bling:', err));
     } catch (err) {
       console.error('Erro ao gerar orçamento:', err);
@@ -404,7 +429,7 @@ export default function OrcamentoRapidoPage() {
     } finally {
       setSalvando(false);
     }
-  }, [produtos, quantidades, estado, zona, regras, nomeUrl, salvando, codigo]);
+  }, [produtos, quantidades, estado, zona, regras, nomeUrl, salvando, codigo, consultor]);
 
   // ── Auto-gerar quando CEP é validado ──
   useEffect(() => {

@@ -45,7 +45,7 @@ export default function App() {
   const [cep, setCep] = useState('');
   const [cepInfo, setCepInfo] = useState(null); // { localidade, uf, logradouro, bairro }
   const [buscandoCep, setBuscandoCep] = useState(false);
-  const [nomeConsultor, setNomeConsultor] = useState('LEO BERG');
+  const [nomeConsultor, setNomeConsultor] = useState('Léo Berg');
   const [origemLead, setOrigemLead] = useState('');
   const [origemCustom, setOrigemCustom] = useState('');
   const [dataCriacaoCustom, setDataCriacaoCustom] = useState('');
@@ -1442,7 +1442,16 @@ export default function App() {
                     <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
                     <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
                       placeholder="Ex: Leo Berg"
+                      list="consultores-list"
                       className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                    <datalist id="consultores-list">
+                      <option value="Léo Berg" />
+                      <option value="Laís Carlos" />
+                      <option value="Thiago Freitas" />
+                      <option value="Lara Vitória" />
+                      <option value="Du Barbosa" />
+                      <option value="Eduardo Aureliano" />
+                    </datalist>
                   </label>
                   <label className="block">
                     <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Data do Orçamento (Opcional)</span>

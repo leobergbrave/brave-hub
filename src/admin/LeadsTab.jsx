@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-  Loader2, Plus, Phone, User, Search, ChevronDown, ChevronLeft, ChevronRight,
+  Loader2, Plus, Phone, User, Search, ChevronDown, ChevronLeft, ChevronRight, Info,
   Flame, Thermometer, Snowflake, ExternalLink, RotateCcw,
   CheckCircle2, MessageCircle, TrendingUp, X, Image, ScanLine, Trash2,
   ThumbsUp, ArrowRight, Edit2,
@@ -172,6 +172,7 @@ function CadastroModal({ onClose, onSaved }) {
     momento_compra: MOMENTOS[0].value,
     produtos_interesse: [],
     observacoes: '',
+    consultor: 'Léo Berg',
   });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -185,6 +186,7 @@ function CadastroModal({ onClose, onSaved }) {
       email: dados.email || prev.email,
       momento_compra: dados.momento_compra || prev.momento_compra,
       produtos_interesse: dados.produtos_interesse?.length > 0 ? dados.produtos_interesse : prev.produtos_interesse,
+      consultor: dados.consultor || prev.consultor,
     }));
   };
 
@@ -255,7 +257,7 @@ function CadastroModal({ onClose, onSaved }) {
     setSalvando(true);
     try {
       const { data, error } = await supabase.functions.invoke('cadastrar-lead', {
-        body: { ...form, consultor: 'Léo Berg' },
+        body: form,
       });
 
       if (error || data?.error) throw new Error(error?.message || data?.error);
@@ -389,16 +391,33 @@ function CadastroModal({ onClose, onSaved }) {
             </div>
           </div>
 
-          {/* Email */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1.5">E-mail (opcional)</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-              placeholder="lead@email.com"
-              className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-neon/50 transition-all placeholder:text-dark-500"
-            />
+          {/* Email + Consultor */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1.5">E-mail (opcional)</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                placeholder="lead@email.com"
+                className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-neon/50 transition-all placeholder:text-dark-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Consultor *</label>
+              <select
+                value={form.consultor}
+                onChange={e => setForm(p => ({ ...p, consultor: e.target.value }))}
+                className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-neon/50 transition-all cursor-pointer"
+              >
+                <option value="Léo Berg">Léo Berg</option>
+                <option value="Laís Carlos">Laís Carlos</option>
+                <option value="Thiago Freitas">Thiago Freitas</option>
+                <option value="Lara Vitória">Lara Vitória</option>
+                <option value="Du Barbosa">Du Barbosa</option>
+                <option value="Eduardo Aureliano">Eduardo Aureliano</option>
+              </select>
+            </div>
           </div>
 
           {/* Momento de compra */}
@@ -586,6 +605,30 @@ export default function LeadsTab() {
           >
             <Plus className="w-4 h-4" /> Novo Lead
           </button>
+        </div>
+      </div>
+
+      {/* Informações da Funcionalidade: Vendedor Dinâmico */}
+      <div className="bg-dark-800/40 border border-dark-700/60 rounded-2xl p-5 mb-6">
+        <div className="flex items-start gap-3.5">
+          <div className="p-2 bg-neon/10 rounded-xl text-neon">
+            <Info className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-white mb-1">ℹ️ Funcionalidade: Vendedor Dinâmico (Bling)</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+              Agora o sistema identifica automaticamente o vendedor/consultor responsável no Bling a partir do lead do CRM.
+              Se houver divergências de escrita (como omitir acentos ou sobrenomes), o sistema realiza correspondência inteligente (ex: "Lais" ou "Lais Carlos" se associa a "Laís Carlos" no Bling). Caso não haja correspondência, o padrão será "Léo Berg" (dono da chave de API).
+            </p>
+            <div className="bg-dark-900/50 rounded-xl p-3 border border-dark-800">
+              <span className="text-[10px] font-black uppercase text-neon tracking-wider block mb-1.5">🧪 Como Testar:</span>
+              <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-1">
+                <li>Clique em <strong>Novo Lead</strong> e preencha os dados selecionando um consultor (ex: <code>Thiago Freitas</code>).</li>
+                <li>Na aba <strong>Orçamentos</strong>, localize o orçamento gerado para esse lead e clique em <strong>Gerar no Bling</strong> (ou aprove o orçamento rápido).</li>
+                <li>Verifique no painel do Bling se a proposta de venda comercial foi corretamente associada ao vendedor cadastrado.</li>
+              </ol>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -106,7 +106,17 @@ serve(async (req) => {
     if (resVend.ok) {
       const vendData = await resVend.json();
       if (vendData && vendData.data) {
-        const vendedor = vendData.data.find((v: any) => normalize(v.contato.nome) === normalize(nomeConsultor));
+        let vendedor = vendData.data.find((v: any) => normalize(v.contato.nome) === normalize(nomeConsultor));
+        
+        // Se correspondência exata falhar, tenta correspondência parcial (ex: "Laís" -> "Laís Carlos")
+        if (!vendedor) {
+          const normConsultor = normalize(nomeConsultor);
+          vendedor = vendData.data.find((v: any) => {
+            const normVend = normalize(v.contato.nome);
+            return normVend.includes(normConsultor) || normConsultor.includes(normVend);
+          });
+        }
+        
         if (vendedor) idVendedor = vendedor.id;
       }
     }
