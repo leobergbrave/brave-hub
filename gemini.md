@@ -112,4 +112,5 @@ Este documento atua como a constituição do projeto, contendo os schemas de dad
 - **2026-06-17**: Inicialização e estruturação do protocolo B.L.A.S.T. e da arquitetura de 3 camadas A.N.T. Adicionada a documentação das tabelas e payloads reais do Brave Hub.
 - **2026-06-17**: Adicionados os schemas de dados para a nova funcionalidade de Potenciais Clientes (`potenciais_clientes` e `prospeccao_config`).
 - **2026-06-17**: Correção do bug de prospecção com a consolidação das APIs serverless para respeitar o limite Hobby de 12 funções da Vercel (deletados importadores individuais e lead-respondeu) e mapeamento do alias do domínio `brave-hub-two.vercel.app`.
+- **2026-06-17**: Resolução do bug de prospecção ("Actor with this name was not found") com a migração para o novo ator `compass~crawler-google-places`, renomeação da propriedade de busca para `searchStringsArray` e ajuste do idioma para `pt-BR`.
 
