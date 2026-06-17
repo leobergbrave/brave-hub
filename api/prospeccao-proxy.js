@@ -51,26 +51,21 @@ export default async function handler(req, res) {
     if (service === 'apify') {
       if (!config.apify_token) return res.status(400).json({ error: 'Token do Apify não configurado.' });
       let token = config.apify_token.trim();
-      
-      // Auto-cicatrização: remove prefixos inseridos por engano
-      if (token.startsWith('apify_api_key_')) token = token.replace('apify_api_key_', '');
-      if (token.startsWith('apify_api_')) token = token.replace('apify_api_', '');
-      if (token.startsWith('apify_token_')) token = token.replace('apify_token_', '');
 
       if (req.method === 'POST') {
         const { nicho, cidade, estado, limite } = req.body;
-        const searchStrings = [`${nicho} em ${cidade} - ${estado}`];
+        const searchStringsArray = [`${nicho} em ${cidade} - ${estado}`];
 
-        const response = await fetch(`https://api.apify.com/v2/acts/apify~google-maps-scraper/runs?token=${token}`, {
+        const response = await fetch(`https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${token}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            searchStrings,
+            searchStringsArray,
             maxCrawledPlacesPerSearch: parseInt(limite || 10),
             scrapeWebsite: true,
             scrapeReviews: false,
             scrapePeople: false,
-            language: 'pt'
+            language: 'pt-BR'
           })
         });
 

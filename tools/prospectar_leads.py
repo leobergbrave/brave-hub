@@ -158,15 +158,15 @@ def extrair_gancho_gemini(gemini_key, prompt_base, lead_info):
 
 def executar_raspagem_apify(apify_token, search_query, limite):
     print(f"[INFO] Disparando tarefa no Apify para: '{search_query}'...")
-    url = f"https://api.apify.com/v2/acts/apify~google-maps-scraper/runs?token={apify_token}"
+    url = f"https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token={apify_token}"
     
     payload = {
-        "searchStrings": [search_query],
+        "searchStringsArray": [search_query],
         "maxCrawledPlacesPerSearch": limite,
         "scrapeWebsite": True,
         "scrapeReviews": False,
         "scrapePeople": False,
-        "language": "pt"
+        "language": "pt-BR"
     }
     
     status, body = http_request(url, method="POST", body=payload)
@@ -235,12 +235,6 @@ def main():
     apify_token = config.get("apify_token")
     if apify_token:
         apify_token = apify_token.strip()
-        if apify_token.startswith("apify_api_key_"):
-            apify_token = apify_token.replace("apify_api_key_", "")
-        elif apify_token.startswith("apify_api_"):
-            apify_token = apify_token.replace("apify_api_", "")
-        elif apify_token.startswith("apify_token_"):
-            apify_token = apify_token.replace("apify_token_", "")
             
     gemini_key = config.get("gemini_key")
     prompt_base = config.get("prompt_personalizacao") or "Escreva uma abordagem de vendas para esta academia."

@@ -295,7 +295,10 @@ export default function ProspeccaoTab() {
 
       if (!startRes.ok) {
         const errData = await startRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Apify retornou erro HTTP ${startRes.status}`);
+        const errMsg = typeof errData.error === 'object'
+          ? errData.error?.message || JSON.stringify(errData.error)
+          : errData.error || `Apify retornou erro HTTP ${startRes.status}`;
+        throw new Error(errMsg);
       }
 
       const startData = await startRes.json();
@@ -816,11 +819,11 @@ export default function ProspeccaoTab() {
           </div>
 
           {/* Status & Logs da Operação */}
-          {raspando && (
+          {(raspando || logsRaspagem.length > 0) && (
             <div className="space-y-4 pt-4 border-t border-dark-800 animate-fade-in">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-zinc-400 font-bold flex items-center gap-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-neon" />
+                  {raspando && <Loader2 className="w-3.5 h-3.5 animate-spin text-neon" />}
                   {progressoStatus}
                 </span>
                 <span className="text-neon font-black">{percentualProgresso}%</span>
