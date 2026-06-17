@@ -163,17 +163,17 @@ export default function ClientesTab({ onNavigate }) {
     setIdVendedorSelecionado(null);
     try {
       // Buscar vendedores primeiro (token fresco), depois status
-      const resVend = await fetch('/api/importar-clientes-bling', {
+      const resVend = await fetch('/api/importar-bling', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'usuarios', dias_atras: diasImport }),
+        body: JSON.stringify({ type: 'clientes', mode: 'usuarios', dias_atras: diasImport }),
       });
       const dataVend = await resVend.json();
       if (dataVend.ok) setVendedoresBling(dataVend.vendedores || []);
 
       // Depois busca status
-      const resStatus = await fetch('/api/importar-clientes-bling', {
+      const resStatus = await fetch('/api/importar-bling', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'status', dias_atras: diasImport }),
+        body: JSON.stringify({ type: 'clientes', mode: 'status', dias_atras: diasImport }),
       });
       const dataStatus = await resStatus.json();
       if (dataStatus.ok && dataStatus.situacoes?.length > 0) {
@@ -211,10 +211,11 @@ export default function ClientesTab({ onNavigate }) {
   async function handlePreviewBling() {
     setBuscandoPreview(true);
     try {
-      const res = await fetch('/api/importar-clientes-bling', {
+      const res = await fetch('/api/importar-bling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: 'clientes',
           mode: 'preview',
           dias_atras: diasImport,
           situacoes: [...situacoesSelecionadas],
@@ -245,10 +246,11 @@ export default function ClientesTab({ onNavigate }) {
     setImportStep('import');
     setImportResult(null);
     try {
-      const res = await fetch('/api/importar-clientes-bling', {
+      const res = await fetch('/api/importar-bling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: 'clientes',
           mode: 'import',
           dias_atras: diasImport,
           situacoes: [...situacoesSelecionadas],
@@ -279,10 +281,10 @@ export default function ClientesTab({ onNavigate }) {
     if (!confirm('Tem certeza que deseja apagar todos os clientes importados do Bling? Essa ação não pode ser desfeita.')) return;
     setLimpando(true);
     try {
-      const res = await fetch('/api/importar-clientes-bling', {
+      const res = await fetch('/api/importar-bling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'limpar' }),
+        body: JSON.stringify({ type: 'clientes', mode: 'limpar' }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -338,10 +340,10 @@ export default function ClientesTab({ onNavigate }) {
     setDiagLoading(true);
     setDiagModal(null);
     try {
-      const res = await fetch('/api/importar-clientes-bling', {
+      const res = await fetch('/api/importar-bling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'inspecionar-contato', cpfCnpj }),
+        body: JSON.stringify({ type: 'clientes', mode: 'inspecionar-contato', cpfCnpj }),
       });
       setDiagModal(await res.json());
     } catch (e) {

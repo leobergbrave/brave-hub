@@ -1,5 +1,6 @@
 {
   "routes": [
+    { "src": "/api/lead-respondeu", "dest": "/api/disparo-resposta?type=lead-respondeu" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/proposta/(?<slug>[^/]+)", "dest": "/api/share?slug=$slug" },
     { "src": "/fiscal/(?<token>[^/]+)", "dest": "/api/fiscal?token=$token" },

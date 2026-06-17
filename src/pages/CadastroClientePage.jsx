@@ -113,7 +113,7 @@ export default function CadastroClientePage() {
     setSubmitting(true);
     setErro('');
     try {
-      const res = await fetch('/api/submit-cadastro', {
+      const res = await fetch('/api/cadastro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

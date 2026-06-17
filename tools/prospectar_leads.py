@@ -233,6 +233,15 @@ def main():
         sys.exit(1)
         
     apify_token = config.get("apify_token")
+    if apify_token:
+        apify_token = apify_token.strip()
+        if apify_token.startswith("apify_api_key_"):
+            apify_token = apify_token.replace("apify_api_key_", "")
+        elif apify_token.startswith("apify_api_"):
+            apify_token = apify_token.replace("apify_api_", "")
+        elif apify_token.startswith("apify_token_"):
+            apify_token = apify_token.replace("apify_token_", "")
+            
     gemini_key = config.get("gemini_key")
     prompt_base = config.get("prompt_personalizacao") or "Escreva uma abordagem de vendas para esta academia."
     

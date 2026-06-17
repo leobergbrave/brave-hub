@@ -43,8 +43,42 @@ export default async function handler(req) {
   let body;
   try { body = await req.json(); } catch { return json({ error: 'Body inválido' }, 400); }
 
+  const url = new URL(req.url);
+  const type = url.searchParams.get('type') || '';
   const payload = body.root || body;
 
+  // Lógica unificada para lead-respondeu
+  if (type === 'lead-respondeu') {
+    const telefoneRaw = payload.telefone || payload.phone || payload.contact?.phone || '';
+    const tel = telefoneRaw.replace(/\D/g, '');
+    if (tel.length < 10) {
+      return json({ ok: true, updated: false, msg: 'Telefone inválido ou variável não substituída' });
+    }
+
+    const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
+    const telSemDDI = tel.startsWith('55') && tel.length > 11 ? tel.slice(2) : tel;
+    const agora = new Date().toISOString();
+
+    try {
+      const orFilter = `or=(telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI})`;
+      const leads = await dbSelect(
+        'leads',
+        `${orFilter}&status=in.(novo,fluxo_disparado)&order=criado_em.desc&limit=1`,
+        'id'
+      );
+
+      if (!leads?.length) {
+        return json({ ok: true, updated: false, msg: 'Lead não encontrado ou já avançado' });
+      }
+
+      await dbPatch('leads', `id=eq.${leads[0].id}`, { status: 'respondeu', respondeu_em: agora });
+      return json({ ok: true, lead_id: leads[0].id, telefone: tel });
+    } catch (err) {
+      return json({ error: err.message }, 500);
+    }
+  }
+
+  // Lógica padrão de disparo-resposta
   const telefoneRaw = payload.telefone || payload.phone || payload.contact?.phone || '';
   const resposta    = payload.resposta || payload.tipo || '';
 
@@ -76,7 +110,6 @@ export default async function handler(req) {
     const item  = items[0];
     const agora = new Date().toISOString();
 
-    // Não sobrescreve estado final (aceitou/optout) com sem_resposta
     const ESTADOS_FINAIS = ['aceitou', 'optout'];
     if (resposta === 'sem_resposta' && ESTADOS_FINAIS.includes(item.resposta)) {
       return json({ ok: true, skipped: true, campanha_id: item.campanha_id, msg: 'Estado final preservado' });
@@ -89,7 +122,6 @@ export default async function handler(req) {
       await dbPatch('contatos', orFilter, { optout: true, optout_em: agora });
     }
 
-    // Avança o lead para "respondeu" quando responde positivamente à campanha
     if (resposta === 'aceitou') {
       const orFilter = `or=(telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI})`;
       const leadItems = await dbSelect('leads', `${orFilter}&status=in.(novo,fluxo_disparado)&order=criado_em.desc&limit=1`, 'id');
@@ -99,7 +131,6 @@ export default async function handler(req) {
     }
 
     return json({ ok: true, campanha_id: item.campanha_id, resposta, telefone: tel });
-
   } catch (err) {
     return json({ error: err.message }, 500);
   }

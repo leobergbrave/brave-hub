@@ -30,6 +30,7 @@ export default function ProspeccaoTab() {
     apify_token: '',
     gemini_key: '',
     instantly_key: '',
+    instantly_campaign_id: '',
     prompt_personalizacao: ''
   });
   const [loadingConfig, setLoadingConfig] = useState(true);
@@ -72,6 +73,7 @@ export default function ProspeccaoTab() {
           apify_token: data.apify_token || '',
           gemini_key: data.gemini_key || '',
           instantly_key: data.instantly_key || '',
+          instantly_campaign_id: data.instantly_campaign_id || '',
           prompt_personalizacao: data.prompt_personalizacao || ''
         });
       }
@@ -94,6 +96,7 @@ export default function ProspeccaoTab() {
           apify_token: config.apify_token.trim(),
           gemini_key: config.gemini_key.trim(),
           instantly_key: config.instantly_key.trim(),
+          instantly_campaign_id: config.instantly_campaign_id.trim(),
           prompt_personalizacao: config.prompt_personalizacao.trim(),
           updated_at: new Date().toISOString()
         });
@@ -180,7 +183,46 @@ export default function ProspeccaoTab() {
 
       if (errorUpdate) throw errorUpdate;
 
-      showToast('✅ Lead qualificado e enviado ao CRM de vendas!');
+      // 3. Enviar para o Instantly se configurado e o lead tiver e-mail
+      if (config.instantly_key && config.instantly_campaign_id && lead.email) {
+        try {
+          const resInstantly = await fetch('https://api.instantly.ai/api/v2/leads/add', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.instantly_key}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              campaign_id: config.instantly_campaign_id,
+              leads: [{
+                email: lead.email,
+                first_name: lead.nome_empresa,
+                company_name: lead.nome_empresa,
+                custom_variables: {
+                  gancho: lead.dados_personalizados?.gancho_whatsapp || '',
+                  cidade: lead.cidade || '',
+                  estado: lead.estado || '',
+                  segmento: lead.segmento || '',
+                  telefone: lead.telefone || ''
+                }
+              }]
+            })
+          });
+          if (resInstantly.ok) {
+            showToast('🚀 Lead qualificado no CRM e enviado ao Instantly!');
+          } else {
+            const errText = await resInstantly.text();
+            console.error('Erro ao enviar lead para o Instantly:', errText);
+            showToast('⚠️ Qualificado no CRM, erro ao enviar para o Instantly.');
+          }
+        } catch (errInstantly) {
+          console.error('Erro de conexão com Instantly:', errInstantly);
+          showToast('⚠️ Qualificado no CRM, erro de rede com Instantly.');
+        }
+      } else {
+        showToast('✅ Lead qualificado e enviado ao CRM de vendas!');
+      }
+
       fetchLeads();
     } catch (e) {
       console.error('Erro ao qualificar lead:', e);
@@ -243,28 +285,17 @@ export default function ProspeccaoTab() {
     };
 
     try {
-      // 1. Iniciar Actor no Apify (Google Maps Scraper)
+      // 1. Iniciar Actor no Apify (Google Maps Scraper) via Proxy Unificado
       addLog(`Disparando busca no Google Maps via Apify: "${nicho} em ${cidade} - ${estado}"...`);
-      const payloadApify = {
-        searchStrings: [`${nicho} em ${cidade} - ${estado}`],
-        maxCrawledPlacesPerSearch: parseInt(limite),
-        scrapeWebsite: true,
-        scrapeReviews: false,
-        scrapePeople: false,
-        language: 'pt'
-      };
-
-      const startRes = await fetch(
-        `https://api.apify.com/v2/acts/apify~google-maps-scraper/runs?token=${config.apify_token}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payloadApify)
-        }
-      );
+      const startRes = await fetch('/api/prospeccao-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service: 'apify', nicho, cidade, estado, limite })
+      });
 
       if (!startRes.ok) {
-        throw new Error(`Apify retornou erro HTTP ${startRes.status}`);
+        const errData = await startRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Apify retornou erro HTTP ${startRes.status}`);
       }
 
       const startData = await startRes.json();
@@ -274,9 +305,8 @@ export default function ProspeccaoTab() {
       addLog(`Scraper iniciado no Apify. Run ID: ${runId}`);
       setPercentualProgresso(20);
 
-      // 2. Polling de Status do Apify Run
+      // 2. Polling de Status do Apify Run via Proxy Unificado
       let statusApify = 'RUNNING';
-      const statusUrl = `https://api.apify.com/v2/actor-runs/${runId}?token=${config.apify_token}`;
       let checkCount = 0;
 
       while (statusApify === 'RUNNING' || statusApify === 'READY') {
@@ -288,7 +318,7 @@ export default function ProspeccaoTab() {
         setProgressoStatus(`Raspando locais no Google Maps... (${checkCount * 6}s)`);
         setPercentualProgresso(prev => Math.min(60, prev + 2));
 
-        const checkRes = await fetch(statusUrl);
+        const checkRes = await fetch(`/api/prospeccao-proxy?service=apify&action=status&runId=${runId}`);
         if (checkRes.ok) {
           const checkData = await checkRes.json();
           statusApify = checkData.data?.status;
@@ -303,9 +333,8 @@ export default function ProspeccaoTab() {
       setPercentualProgresso(65);
       setProgressoStatus('Coletando dados brutos extraídos...');
 
-      // 3. Baixar Dataset do Apify
-      const datasetUrl = `https://api.apify.com/v2/datasets/${datasetId}/items?token=${config.apify_token}`;
-      const dataRes = await fetch(datasetUrl);
+      // 3. Baixar Dataset do Apify via Proxy Unificado
+      const dataRes = await fetch(`/api/prospeccao-proxy?service=apify&action=dataset&datasetId=${datasetId}`);
       if (!dataRes.ok) throw new Error('Falha ao baixar os leads extraídos do Apify.');
       const items = await dataRes.json();
 
@@ -384,13 +413,10 @@ export default function ProspeccaoTab() {
             addLog(`Enriquecendo com Gemini 3.5 Flash: ${nomeEmpresa}...`);
             const promptIa = `${config.prompt_personalizacao || 'Escreva um gancho comercial.'}\n\nEmpresa: ${nomeEmpresa}\nSite: ${item.website || 'Sem site'}\nSegmento: ${item.categoryName || nicho}\nDescrição: ${item.subTitle || ''}`;
 
-            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${config.gemini_key}`;
-            const geminiRes = await fetch(geminiUrl, {
+            const geminiRes = await fetch('/api/prospeccao-proxy', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: promptIa }] }]
-              })
+              body: JSON.stringify({ service: 'gemini', prompt: promptIa })
             });
 
             if (geminiRes.ok) {
@@ -836,7 +862,7 @@ export default function ProspeccaoTab() {
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Apify Key */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Apify API Token</label>
@@ -869,6 +895,18 @@ export default function ProspeccaoTab() {
                     placeholder="Token do Instantly"
                     value={config.instantly_key}
                     onChange={e => setConfig(prev => ({ ...prev, instantly_key: e.target.value }))}
+                    className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-neon/40 transition-all font-mono"
+                  />
+                </div>
+
+                {/* Instantly Campaign ID */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Instantly Campaign ID</label>
+                  <input
+                    type="text"
+                    placeholder="UUID da Campanha"
+                    value={config.instantly_campaign_id}
+                    onChange={e => setConfig(prev => ({ ...prev, instantly_campaign_id: e.target.value }))}
                     className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-neon/40 transition-all font-mono"
                   />
                 </div>
