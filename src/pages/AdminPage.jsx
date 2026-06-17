@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap, Heart, Award, Layers, Users, Mail, BookUser } from 'lucide-react';
+import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap, Heart, Award, Layers, Users, Mail, BookUser, Search } from 'lucide-react';
+
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
 import DescontosTab from '../admin/DescontosTab';
@@ -14,17 +15,21 @@ import DisparosTab from '../admin/DisparosTab';
 import CockpitTab from '../admin/CockpitTab';
 import PosVendaTab from '../admin/PosVendaTab';
 import ClientesTab from '../admin/ClientesTab';
+import ProspeccaoTab from '../admin/ProspeccaoTab';
+
 
 const NAV_SECTIONS = [
   {
     label: 'COMERCIAL',
     items: [
-      { id: 'leads',     label: 'Leads',       icon: Users },
-      { id: 'clientes',  label: 'Clientes',    icon: BookUser },
-      { id: 'contatos',  label: 'Contatos',    icon: BookUser },
-      { id: 'orcamentos',label: 'Orçamentos',  icon: Receipt },
+      { id: 'leads',      label: 'Leads',               icon: Users },
+      { id: 'clientes',   label: 'Clientes',            icon: BookUser },
+      { id: 'contatos',   label: 'Contatos',            icon: BookUser },
+      { id: 'prospeccao', label: 'Potenciais Clientes', icon: Search },
+      { id: 'orcamentos', label: 'Orçamentos',          icon: Receipt },
     ],
   },
+
   {
     label: 'COMUNICAÇÃO',
     items: [
@@ -78,6 +83,7 @@ export default function AdminPage() {
       case 'leads':      return <LeadsTab />;
       case 'clientes':   return <ClientesTab onNavigate={handleTabChange} />;
       case 'contatos':   return <ContatosTab />;
+      case 'prospeccao': return <ProspeccaoTab />;
       case 'disparos':   return <DisparosTab />;
       case 'posvendas':  return <PosVendaTab />;
       case 'produtos':   return <ProdutosTab />;
@@ -90,6 +96,7 @@ export default function AdminPage() {
       default: return null;
     }
   };
+
 
   const SidebarContent = () => (
     <>

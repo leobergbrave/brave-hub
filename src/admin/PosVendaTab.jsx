@@ -1143,20 +1143,44 @@ export default function PosVendaTab() {
         </div>
       </div>
 
-      {/* ── Info Box ── */}
-      <div className="bg-gradient-to-r from-pink-500/5 to-purple-500/5 border border-pink-500/20 rounded-2xl p-5">
+      {/* ── Painel de Informações e Objetivos B.L.A.S.T. ── */}
+      <div className="bg-dark-900 border border-pink-500/20 rounded-2xl p-6 space-y-4 shadow-xl shadow-pink-500/5">
         <div className="flex items-start gap-3">
-          <Info className="w-4 h-4 text-pink-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-white mb-1">Objetivo & Como Usar</p>
+          <Info className="w-5 h-5 text-pink-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-white mb-1">Constituição B.L.A.S.T. · Pós-Venda & Fidelização</h3>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Este painel mostra todos os clientes com compras aprovadas e sugere ações de relacionamento baseadas no tempo desde a compra.
-              Para cada cliente, use <strong className="text-neon">Bot</strong> para editar a mensagem e enviar via BotConversa, <strong className="text-zinc-300">📞</strong> para abrir o WhatsApp diretamente, ou copiar o texto.
-              <strong className="text-pink-400"> Configure os links</strong> antes de usar (botão acima) e <strong className="text-pink-400">edite os templates</strong> de mensagem na aba Estratégias.
+              Esta funcionalidade gerencia o relacionamento pós-venda da <strong>Brave Equipment</strong>, visando transformar clientes de primeira compra em clientes recorrentes de longo prazo. A agenda é calculada automaticamente baseando-se no momento da aprovação do pedido e na confirmação física de entrega obtida via API do Bling ERP.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-dark-800">
+          <div>
+            <h4 className="text-xs font-black text-pink-400 uppercase tracking-wider mb-2">Instruções de Operação</h4>
+            <ul className="text-xs text-zinc-400 space-y-1.5 list-disc pl-4">
+              <li><strong>Disparar via Bot:</strong> Envia a mensagem formatada de forma automática pelo BotConversa.</li>
+              <li><strong>Disparar via WhatsApp:</strong> Abre a conversa direta no WhatsApp Web com a mensagem pré-preenchida.</li>
+              <li><strong>Links Logísticos:</strong> Configure os guias e vídeos na aba "Links" para que sejam injetados automaticamente.</li>
+              <li><strong>Modelos de Mensagem:</strong> Edite os templates de cada fase do pós-venda na aba "Estratégias".</li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-blue-400 uppercase tracking-wider mb-2">🧪 Teste Prático da Automação (Python)</h4>
+            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+              A sincronização inteligente pode ser testada localmente em seu computador. O script Python atômico consome a API do Bling v3 com tratamento autocicatrizante de tokens.
+            </p>
+            <div className="bg-dark-950 border border-dark-700/60 rounded-xl p-3 font-mono text-[10px] text-zinc-300 select-all space-y-1">
+              <p className="text-zinc-500"># Instale as dependências caso necessário e execute:</p>
+              <p className="text-neon">python tools/sync_bling_status.py</p>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-2">
+              💡 Esse comando simula a execução do cron e atualizará os status do Bling no banco do Supabase instantaneamente.
             </p>
           </div>
         </div>
       </div>
+
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

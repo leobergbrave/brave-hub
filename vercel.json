@@ -2,6 +2,8 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/proposta/(?<slug>[^/]+)", "dest": "/api/share?slug=$slug" },
+    { "src": "/fiscal/(?<token>[^/]+)", "dest": "/api/fiscal?token=$token" },
+    { "src": "/cadastro", "dest": "/api/cadastro" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
