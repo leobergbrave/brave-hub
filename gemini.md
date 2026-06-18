@@ -103,8 +103,39 @@ Este documento atua como a constituição do projeto, contendo os schemas de dad
 - `gemini_key`: TEXT
 - `instantly_key`: TEXT
 - `prompt_personalizacao`: TEXT
+- `automacao_ativa`: BOOLEAN (Default false)
+- `automacao_nichos`: JSONB
+- `automacao_nicho_atual_index`: INT
+- `automacao_cidades`: JSONB
+- `automacao_cidade_atual_index`: INT
+- `automacao_limite`: INT (Default 25)
+- `automacao_webhook_whatsapp`: TEXT
 - `updated_at`: TIMESTAMPTZ
 
+### 6. prospeccao_fila_envio (Tabela Supabase)
+- `id`: UUID (Chave Primária)
+- `criado_em`: TIMESTAMPTZ
+- `nome_empresa`: TEXT
+- `telefone`: TEXT
+- `mensagem`: TEXT
+- `agendado_para`: TIMESTAMPTZ
+- `status`: TEXT (Default 'pendente') - `pendente` | `enviado` | `falhou`
+- `tentativas`: INT
+- `erro_mensagem`: TEXT
+- `enviado_em`: TIMESTAMPTZ
+- `perfil_detectado`: TEXT
+- `cidade_origem`: TEXT
+- `segmento_origem`: TEXT
+
+### 7. prospeccao_historico (Tabela Supabase)
+- `id`: UUID (Chave Primária)
+- `criado_em`: TIMESTAMPTZ
+- `nicho_buscado`: TEXT
+- `cidade_buscada`: TEXT
+- `leads_encontrados`: INT
+- `leads_qualificados`: INT
+- `status`: TEXT (Default 'sucesso') - `sucesso` | `erro`
+- `detalhes`: TEXT
 
 ---
 
@@ -113,4 +144,6 @@ Este documento atua como a constituição do projeto, contendo os schemas de dad
 - **2026-06-17**: Adicionados os schemas de dados para a nova funcionalidade de Potenciais Clientes (`potenciais_clientes` e `prospeccao_config`).
 - **2026-06-17**: Correção do bug de prospecção com a consolidação das APIs serverless para respeitar o limite Hobby de 12 funções da Vercel (deletados importadores individuais e lead-respondeu) e mapeamento do alias do domínio `brave-hub-two.vercel.app`.
 - **2026-06-17**: Resolução do bug de prospecção ("Actor with this name was not found") com a migração para o novo ator `compass~crawler-google-places`, renomeação da propriedade de busca para `searchStringsArray` e ajuste do idioma para `pt-BR`.
+- **2026-06-18**: Implementação da automação diária de prospecção às 06h com agendamento inteligente de envios em fila (delays de 1 a 15 min), qualificação via Gemini com detecção de Hyrox e painel de controle e logs unificados na aba Potenciais Clientes. Ajustado o cron para limites Hobby da Vercel (cron da fila movido para disparo via cron-job.org).
+
 
