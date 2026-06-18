@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1. Buscar configurações de chaves com segurança no Supabase
+    // Buscar configurações com segurança no Supabase
     const { data: config, error: configError } = await supabase
       .from('prospeccao_config')
       .select('apify_token, gemini_key, automacao_ativa, automacao_nichos, automacao_nicho_atual_index, automacao_cidades, automacao_cidade_atual_index, automacao_limite, automacao_webhook_whatsapp')
@@ -18,11 +18,15 @@ export default async function handler(req, res) {
       .single();
 
     if (configError || !config) {
+      console.error('[Proxy] Config não encontrada:', configError);
       return res.status(400).json({ error: 'Configurações de prospecção não encontradas no banco de dados.' });
     }
 
-    // Identificar qual serviço de proxy está sendo solicitado
-    const service = req.body?.service || req.query?.service;
+    // Identificar serviço e ação — lê de query OU corpo da requisição
+    const service = req.query?.service || req.body?.service;
+    const action = req.query?.action || req.body?.action;
+
+    console.log(`[Proxy] method=${req.method} service=${service} action=${action}`);
 
     // ─── PROXY: GEMINI ────────────────────────────────────────────────────────
     if (service === 'gemini') {
@@ -38,9 +42,7 @@ export default async function handler(req, res) {
       const response = await fetch(geminiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
 
       const data = await response.json();
@@ -50,186 +52,220 @@ export default async function handler(req, res) {
     // ─── PROXY: APIFY ─────────────────────────────────────────────────────────
     if (service === 'apify') {
       if (!config.apify_token) return res.status(400).json({ error: 'Token do Apify não configurado.' });
-      let token = config.apify_token.trim();
+      const token = config.apify_token.trim();
 
-      // Receber webhook do Apify
-      if (req.method === 'POST' && req.body.eventData && req.body.resource) {
-        const { eventData, resource } = req.body;
+      // ── AÇÃO: WEBHOOK (Callback do Apify após execução) ─────────────────────
+      // O Apify faz um POST em ?service=apify&action=webhook com { eventData, resource }
+      if (action === 'webhook') {
+        console.log('[Webhook Apify] Recebendo callback do Apify...');
+        console.log('[Webhook Apify] Body keys:', Object.keys(req.body || {}));
+
+        // Parsear eventData e resource (podem vir como string ou objeto)
+        let eventData = req.body?.eventData;
+        let resource = req.body?.resource;
+
+        if (typeof eventData === 'string') {
+          try { eventData = JSON.parse(eventData); } catch (e) { /* já é string */ }
+        }
+        if (typeof resource === 'string') {
+          try { resource = JSON.parse(resource); } catch (e) { /* já é string */ }
+        }
+
         const runId = resource?.id;
         const datasetId = resource?.defaultDatasetId;
+        const status = resource?.status;
 
-        console.log(`[Webhook Apify] Recebido callback para o Run ID: ${runId}. Status: ${resource?.status}`);
+        console.log(`[Webhook Apify] runId=${runId} status=${status} datasetId=${datasetId}`);
 
-        if (resource?.status !== 'SUCCEEDED' || !datasetId) {
+        // Responder imediatamente ao Apify para não timeout
+        res.status(200).json({ message: 'Webhook recebido. Processando...' });
+
+        // Processar em background (após resposta enviada)
+        if (status !== 'SUCCEEDED' || !datasetId) {
+          console.log('[Webhook Apify] Execução não bem-sucedida ou sem dataset. Registrando histórico de erro.');
           await supabase.from('prospeccao_historico').insert({
             nicho_buscado: 'Automático',
             cidade_buscada: 'Desconhecida',
             leads_encontrados: 0,
             leads_qualificados: 0,
             status: 'erro',
-            detalhes: `A execução do Apify falhou ou não gerou dataset. Status: ${resource?.status || 'N/A'}`
+            detalhes: `Execução do Apify com status: ${status || 'desconhecido'}. runId: ${runId || 'N/A'}`
           });
-          return res.status(200).json({ message: 'Webhook processado (falha registrada).' });
+          return;
         }
 
-        try {
-          // Baixar o dataset
-          const resDataset = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}`);
-          if (!resDataset.ok) throw new Error(`Falha ao baixar dataset do Apify: ${await resDataset.text()}`);
-          
-          const rawItems = await resDataset.json();
-          console.log(`[Webhook Apify] Baixados ${rawItems.length} itens brutos.`);
+        // Processar leads em background
+        processarLeadsApify({ supabase, token, datasetId, runId, config }).catch(err => {
+          console.error('[Webhook Apify] Erro no processamento background:', err.message);
+        });
 
-          const validItems = [];
-          for (const item of rawItems) {
-            const nomeEmpresa = item.title;
-            if (!nomeEmpresa) continue;
-
-            const telefoneBruto = item.phone || item.phoneUnformatted || '';
-            const telefoneLimpo = telefoneBruto.replace(/\D/g, '');
-            if (telefoneLimpo.length < 8) continue;
-
-            // Verificar se já existe no CRM ou potenciais_clientes
-            const { data: existeCRM } = await supabase.from('leads').select('id').eq('nome', nomeEmpresa).maybeSingle();
-            const { data: existePC } = await supabase.from('potenciais_clientes').select('id').eq('nome_empresa', nomeEmpresa).maybeSingle();
-
-            if (existeCRM || existePC) continue;
-
-            item.telefoneLimpo = telefoneLimpo;
-            validItems.push(item);
-          }
-
-          console.log(`[Webhook Apify] Encontrados ${validItems.length} leads inéditos e válidos.`);
-
-          let qualificados = 0;
-          const totalEncontrados = rawItems.length;
-          let nichoBuscado = 'N/A';
-          let cidadeBuscada = 'N/A';
-
-          if (validItems.length > 0) {
-            cidadeBuscada = validItems[0].city || 'Região Sul/Sudeste';
-            nichoBuscado = validItems[0].categoryName || 'Automático';
-
-            // Configurar a janela útil de disparo (10h às 19h de Brasília = 13h às 22h UTC)
-            const hoje = new Date();
-            const dataInicio10h = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate(), 13, 0, 0));
-            const totalMinutosJanela = 540;
-            const totalLeads = validItems.length;
-
-            for (let i = 0; i < totalLeads; i++) {
-              const item = validItems[i];
-              let perfil = 'crossfit';
-              let gancho = '';
-              let valido = true;
-
-              if (config.gemini_key) {
-                try {
-                  const prompt = `
-Você é o qualificador e redator comercial da Brave Equipment, fabricante premium de equipamentos de fitness.
-Analise as informações do seguinte negócio raspado do Google Maps:
-Nome: ${item.title}
-Categoria: ${item.categoryName}
-Site: ${item.website || 'Não disponível'}
-Descrição: ${item.subTitle || ''}
-
-Sua tarefa é retornar estritamente um JSON no seguinte formato (sem formatação markdown, apenas o json limpo):
-{
-  "valido": true,
-  "nicho": "crossfit",
-  "oferece_hyrox": false,
-  "gancho_whatsapp": "Escreva uma mensagem de WhatsApp curta e impactante em português do Brasil com foco no nicho e diferencial da Brave. Se oferece_hyrox for true, a mensagem DEVE focar em equipamentos especializados para Hyrox (ergômetros, sleds/trenós, racks). Se for studio, focar em design premium personalizado."
-}
-`;
-                  const key = config.gemini_key.trim();
-                  const resGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                  });
-
-                  if (resGemini.ok) {
-                    const geminiData = await resGemini.json();
-                    const jsonText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json|```/g, '').trim();
-                    const parsed = JSON.parse(jsonText);
-                    valido = parsed.valido;
-                    perfil = parsed.oferece_hyrox ? 'hyrox' : (parsed.nicho || 'crossfit');
-                    gancho = parsed.gancho_whatsapp || '';
-                  }
-                } catch (errGem) {
-                  console.error(`[Webhook Apify] Erro Gemini para "${item.title}":`, errGem);
-                }
-              }
-
-              if (!valido) continue;
-              qualificados++;
-
-              // Salvar no banco
-              await supabase.from('potenciais_clientes').insert({
-                nome_empresa: item.title,
-                segmento: item.categoryName || nichoBuscado,
-                telefone: item.telefoneLimpo,
-                email: item.email || null,
-                site: item.website || null,
-                cidade: item.city || cidadeBuscada,
-                estado: item.state || 'BR',
-                origem: 'raspagem',
-                status: 'convertido',
-                dados_personalizados: {
-                  stars: item.stars,
-                  reviews: item.reviewsCount,
-                  maps_url: item.url,
-                  gancho_whatsapp: gancho
-                }
-              });
-
-              await supabase.from('leads').insert({
-                nome: item.title,
-                telefone: item.telefoneLimpo,
-                email: item.email || null,
-                momento_compra: 'frio',
-                observacoes: `Lead qualificado automaticamente via Prospecção Inteligente.\nNicho detectado: ${perfil}\nGancho WhatsApp: ${gancho}`,
-                status: 'novo',
-                origem: 'prospeccao'
-              });
-
-              // Calcular agendamento linear com espaçamento humano (entre 10h e 19h)
-              let minutosAdd = Math.floor(i * (totalMinutosJanela / totalLeads)) + Math.floor(Math.random() * 10 - 5);
-              if (minutosAdd < 0) minutosAdd = 0;
-              if (minutosAdd > totalMinutosJanela) minutosAdd = totalMinutosJanela;
-
-              const agendadoPara = new Date(dataInicio10h.getTime() + minutosAdd * 60 * 1000);
-
-              await supabase.from('prospeccao_fila_envio').insert({
-                nome_empresa: item.title,
-                telefone: item.telefoneLimpo,
-                mensagem: gancho || 'Olá! Conheça os equipamentos premium da Brave Equipment.',
-                agendado_para: agendadoPara.toISOString(),
-                status: 'pendente',
-                perfil_detectado: perfil,
-                cidade_origem: item.city || cidadeBuscada,
-                segmento_origem: item.categoryName || nichoBuscado
-              });
-            }
-          }
-
-          await supabase.from('prospeccao_historico').insert({
-            nicho_buscado: nichoBuscado,
-            cidade_buscada: cidadeBuscada,
-            leads_encontrados: totalEncontrados,
-            leads_qualificados: qualificados,
-            status: 'sucesso',
-            detalhes: `Automação diária concluída. ${qualificados} leads qualificados e agendados na fila de envios.`
-          });
-
-          return res.status(200).json({ status: 'success', qualificados });
-        } catch (errWeb) {
-          console.error('[Webhook Apify] Falha no processamento:', errWeb);
-          return res.status(500).json({ error: errWeb.message });
-        }
+        return;
       }
 
-      // Disparo manual (método POST)
-      if (req.method === 'POST') {
+      // ── AÇÃO: CRON (Disparo diário / simulação) ──────────────────────────────
+      if (action === 'cron' || (req.method === 'GET' && !action)) {
+        const force = req.query.force === 'true';
+        if (!config.automacao_ativa && !force) {
+          return res.status(200).json({ status: 'inactive', message: 'Automação diária desativada.' });
+        }
+
+        const nichos = config.automacao_nichos || ['Box de CrossFit'];
+        const cidades = config.automacao_cidades || [];
+        const nichoIdx = config.automacao_nicho_atual_index || 0;
+        const cidadeIdx = config.automacao_cidade_atual_index || 0;
+
+        if (cidades.length === 0) {
+          return res.status(400).json({ error: 'Nenhuma cidade configurada para a automação.' });
+        }
+
+        const nichoAtual = nichos[nichoIdx % nichos.length];
+        const cidadeAtual = cidades[cidadeIdx % cidades.length];
+        const termoDeBusca = `${nichoAtual} em ${cidadeAtual}`;
+
+        // Webhook do Apify: URL sem parâmetros adicionais que possam ser corrompidos
+        // Usamos apenas o endpoint base com service e action fixos
+        const webhookCallbackUrl = 'https://brave-hub-two.vercel.app/api/prospeccao-proxy?service=apify&action=webhook';
+        const webhooksPayload = [
+          {
+            eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
+            requestUrl: webhookCallbackUrl,
+            payloadTemplate: '{"eventData":{{eventData}},"resource":{{resource}}}'
+          }
+        ];
+        const base64Webhooks = Buffer.from(JSON.stringify(webhooksPayload)).toString('base64')
+          .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        // Usar Base64URL (sem caracteres especiais) para evitar corrupção na URL
+
+        console.log(`[Cron] Iniciando busca para: "${termoDeBusca}". Limite: ${config.automacao_limite}`);
+        console.log(`[Cron] Webhook callback URL: ${webhookCallbackUrl}`);
+
+        const apifyResponse = await fetch(
+          `https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${token}&webhooks=${base64Webhooks}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              searchStringsArray: [termoDeBusca],
+              maxCrawledPlacesPerSearch: parseInt(config.automacao_limite || 25),
+              scrapeWebsite: false,
+              scrapeReviews: false,
+              scrapePeople: false,
+              language: 'pt-BR'
+            })
+          }
+        );
+
+        if (!apifyResponse.ok) {
+          const errText = await apifyResponse.text();
+          console.error(`[Cron] Erro Apify: ${errText}`);
+          throw new Error(`Falha ao iniciar Actor no Apify: ${errText}`);
+        }
+
+        const runData = await apifyResponse.json();
+        const runId = runData.data?.id;
+        console.log(`[Cron] Run iniciado com sucesso. Run ID: ${runId}`);
+
+        // Verificar se webhook foi registrado
+        const webhookInfo = runData.data?.buildId ? 'webhook registrado' : 'verificar manualmente';
+        console.log(`[Cron] Detalhes run: ${JSON.stringify({ runId, webhookInfo, termoDeBusca })}`);
+
+        // Rotação de nicho/cidade
+        let proximoNichoIdx = nichoIdx + 1;
+        let proximaCidadeIdx = cidadeIdx;
+        if (proximoNichoIdx >= nichos.length) {
+          proximoNichoIdx = 0;
+          proximaCidadeIdx = (cidadeIdx + 1) % cidades.length;
+        }
+
+        await supabase
+          .from('prospeccao_config')
+          .update({
+            automacao_nicho_atual_index: proximoNichoIdx,
+            automacao_cidade_atual_index: proximaCidadeIdx
+          })
+          .eq('id', 1);
+
+        return res.status(200).json({
+          status: 'success',
+          message: `Automação iniciada para "${termoDeBusca}".`,
+          runId,
+          webhookUrl: webhookCallbackUrl
+        });
+      }
+
+      // ── AÇÃO: FILA (Disparo de mensagens pendentes) ──────────────────────────
+      if (action === 'fila') {
+        if (!config.automacao_webhook_whatsapp) {
+          return res.status(200).json({ message: 'Webhook de WhatsApp da automação não configurado.' });
+        }
+
+        const webhookUrl = config.automacao_webhook_whatsapp.trim();
+
+        const { data: pendentes, error: errFila } = await supabase
+          .from('prospeccao_fila_envio')
+          .select('*')
+          .eq('status', 'pendente')
+          .lte('agendado_para', new Date().toISOString());
+
+        if (errFila) throw errFila;
+
+        if (!pendentes || pendentes.length === 0) {
+          return res.status(200).json({ message: 'Nenhuma mensagem pendente na fila para disparo.' });
+        }
+
+        console.log(`[Fila] ${pendentes.length} mensagens prontas para disparo.`);
+
+        let enviados = 0;
+        let falhas = 0;
+
+        for (const lead of pendentes) {
+          try {
+            const response = await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                nome_empresa: lead.nome_empresa,
+                telefone: lead.telefone,
+                mensagem: lead.mensagem,
+                perfil_detectado: lead.perfil_detectado,
+                cidade_origem: lead.cidade_origem,
+                segmento_origem: lead.segmento_origem
+              })
+            });
+
+            const novasTentativas = lead.tentativas + 1;
+            if (response.ok) {
+              enviados++;
+              await supabase.from('prospeccao_fila_envio').update({
+                status: 'enviado',
+                enviado_em: new Date().toISOString(),
+                tentativas: novasTentativas
+              }).eq('id', lead.id);
+            } else {
+              falhas++;
+              const errText = await response.text();
+              await supabase.from('prospeccao_fila_envio').update({
+                status: novasTentativas >= 3 ? 'falhou' : 'pendente',
+                tentativas: novasTentativas,
+                erro_mensagem: `HTTP ${response.status}: ${errText.substring(0, 200)}`
+              }).eq('id', lead.id);
+            }
+          } catch (errDisparo) {
+            falhas++;
+            const novasTentativas = lead.tentativas + 1;
+            await supabase.from('prospeccao_fila_envio').update({
+              status: novasTentativas >= 3 ? 'falhou' : 'pendente',
+              tentativas: novasTentativas,
+              erro_mensagem: errDisparo.message
+            }).eq('id', lead.id);
+          }
+        }
+
+        return res.status(200).json({ message: 'Fila processada.', enviados, falhas });
+      }
+
+      // ── AÇÃO: DISPARO MANUAL (Nova Raspagem manual via formulário) ─────────────
+      if (req.method === 'POST' && !action) {
         const { nicho, cidade, estado, limite } = req.body;
         const searchStringsArray = [`${nicho} em ${cidade} - ${estado}`];
 
@@ -239,7 +275,7 @@ Sua tarefa é retornar estritamente um JSON no seguinte formato (sem formataçã
           body: JSON.stringify({
             searchStringsArray,
             maxCrawledPlacesPerSearch: parseInt(limite || 10),
-            scrapeWebsite: true,
+            scrapeWebsite: false,
             scrapeReviews: false,
             scrapePeople: false,
             language: 'pt-BR'
@@ -250,186 +286,206 @@ Sua tarefa é retornar estritamente um JSON no seguinte formato (sem formataçã
         return res.status(response.status).json(data);
       }
 
-      // Ações GET (status, dataset, cron, fila)
-      if (req.method === 'GET') {
-        const { action, runId, datasetId } = req.query;
+      // ── Ações legadas (status, dataset) ─────────────────────────────────────
+      if (action === 'status' && req.query.runId) {
+        const response = await fetch(`https://api.apify.com/v2/actor-runs/${req.query.runId}?token=${token}`);
+        const data = await response.json();
+        return res.status(response.status).json(data);
+      }
 
-        // AÇÃO: CRON (Disparada diariamente)
-        if (action === 'cron') {
-          const force = req.query.force === 'true';
-          if (!config.automacao_ativa && !force) {
-            return res.status(200).json({ status: 'inactive', message: 'Automação diária desativada.' });
-          }
+      if (action === 'dataset' && req.query.datasetId) {
+        const response = await fetch(`https://api.apify.com/v2/datasets/${req.query.datasetId}/items?token=${token}`);
+        const data = await response.json();
+        return res.status(response.status).json(data);
+      }
 
-          const nichos = config.automacao_nichos || ['Box de CrossFit'];
-          const cidades = config.automacao_cidades || [];
-          const nichoIdx = config.automacao_nicho_atual_index || 0;
-          const cidadeIdx = config.automacao_cidade_atual_index || 0;
+      return res.status(400).json({ error: `Ação inválida: action="${action}" method="${req.method}"` });
+    }
 
-          if (cidades.length === 0) {
-            return res.status(400).json({ error: 'Nenhuma cidade configurada para a automação.' });
-          }
+    return res.status(400).json({ error: `Serviço de proxy não especificado ou inválido: service="${service}"` });
 
-          const nichoAtual = nichos[nichoIdx % nichos.length];
-          const cidadeAtual = cidades[cidadeIdx % cidades.length];
-          const termoDeBusca = `${nichoAtual} em ${cidadeAtual}`;
+  } catch (err) {
+    console.error('[Proxy] Erro crítico:', err.message, err.stack);
+    return res.status(500).json({ error: err.message });
+  }
+}
 
-          // Configurar o webhook do Apify codificado em Base64
-          const webhookUrl = 'https://brave-hub-two.vercel.app/api/prospeccao-proxy?service=apify&action=webhook';
-          const webhooksObj = [
-            {
-              eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
-              requestUrl: webhookUrl,
-              payloadTemplate: '{\n  "eventData": {{eventData}},\n  "resource": {{resource}}\n}'
-            }
-          ];
-          const base64Webhooks = Buffer.from(JSON.stringify(webhooksObj)).toString('base64');
+// ─── Função de Processamento de Leads (background, sem bloquear a resposta) ───
+async function processarLeadsApify({ supabase, token, datasetId, runId, config }) {
+  console.log(`[Background] Processando dataset ${datasetId} do run ${runId}...`);
 
-          console.log(`[Automação] Disparando busca para: "${termoDeBusca}" no Apify...`);
+  const resDataset = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}&limit=100`);
+  if (!resDataset.ok) {
+    const errText = await resDataset.text();
+    throw new Error(`Falha ao baixar dataset do Apify: ${errText}`);
+  }
 
-          const response = await fetch(`https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${token}&webhooks=${encodeURIComponent(base64Webhooks)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              searchStringsArray: [termoDeBusca],
-              maxCrawledPlacesPerSearch: parseInt(config.automacao_limite || 25),
-              scrapeWebsite: true,
-              scrapeReviews: false,
-              scrapePeople: false,
-              language: 'pt-BR'
-            })
-          });
+  const rawItems = await resDataset.json();
+  console.log(`[Background] Baixados ${rawItems.length} itens brutos do dataset.`);
 
-          if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Falha ao iniciar Actor no Apify: ${errText}`);
-          }
+  // Filtrar leads com telefone e que não existam ainda no banco
+  const validItems = [];
+  for (const item of rawItems) {
+    const nomeEmpresa = item.title;
+    if (!nomeEmpresa) continue;
 
-          const runData = await response.json();
+    const telefoneBruto = item.phone || item.phoneUnformatted || '';
+    const telefoneLimpo = telefoneBruto.replace(/\D/g, '');
+    if (telefoneLimpo.length < 8) continue;
 
-          // Lógica de Rotação Combinada
-          let proximoNichoIdx = nichoIdx + 1;
-          let proximaCidadeIdx = cidadeIdx;
-          if (proximoNichoIdx >= nichos.length) {
-            proximoNichoIdx = 0;
-            proximaCidadeIdx = (cidadeIdx + 1) % cidades.length;
-          }
+    const { data: existePC } = await supabase
+      .from('potenciais_clientes')
+      .select('id')
+      .eq('nome_empresa', nomeEmpresa)
+      .maybeSingle();
 
-          await supabase
-            .from('prospeccao_config')
-            .update({
-              automacao_nicho_atual_index: proximoNichoIdx,
-              automacao_cidade_atual_index: proximaCidadeIdx
-            })
-            .eq('id', 1);
+    const { data: existeCRM } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('nome', nomeEmpresa)
+      .maybeSingle();
 
-          return res.status(200).json({
-            status: 'success',
-            message: `Automação iniciada para "${termoDeBusca}".`,
-            runId: runData.data?.id
-          });
+    if (existePC || existeCRM) {
+      console.log(`[Background] Lead "${nomeEmpresa}" já existe. Pulando.`);
+      continue;
+    }
+
+    item._telefoneLimpo = telefoneLimpo;
+    validItems.push(item);
+  }
+
+  console.log(`[Background] ${validItems.length} leads válidos e inéditos encontrados.`);
+
+  const totalEncontrados = rawItems.length;
+  let qualificados = 0;
+  let nichoBuscado = validItems[0]?.categoryName || 'Automático';
+  let cidadeBuscada = validItems[0]?.city || 'Desconhecida';
+
+  // Configurar janela de disparo (10h-19h Brasília = 13h-22h UTC)
+  const hoje = new Date();
+  const dataInicio10h = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate(), 13, 0, 0));
+  const totalMinutosJanela = 540;
+  const totalLeads = validItems.length;
+
+  for (let i = 0; i < totalLeads; i++) {
+    const item = validItems[i];
+    let gancho = '';
+    let perfil = 'crossfit';
+    let valido = true;
+
+    // Qualificar com Gemini (sem bloquear se falhar)
+    if (config.gemini_key) {
+      try {
+        const prompt = `Você é qualificador comercial da Brave Equipment (equipamentos fitness premium).
+Analise:
+Nome: ${item.title}
+Categoria: ${item.categoryName || 'academia'}
+Descrição: ${item.subTitle || ''}
+
+Retorne APENAS um JSON limpo (sem markdown):
+{"valido":true,"nicho":"crossfit","oferece_hyrox":false,"gancho_whatsapp":"Mensagem curta em português para WhatsApp sobre equipamentos fitness"}`;
+
+        const key = config.gemini_key.trim();
+        const resGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+
+        if (resGemini.ok) {
+          const geminiData = await resGemini.json();
+          const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const jsonText = rawText.replace(/```json|```/gi, '').trim();
+          const parsed = JSON.parse(jsonText);
+          valido = parsed.valido !== false;
+          perfil = parsed.oferece_hyrox ? 'hyrox' : (parsed.nicho || 'crossfit');
+          gancho = parsed.gancho_whatsapp || '';
         }
-
-        // AÇÃO: FILA (Disparada a cada 5 ou 10 minutos)
-        if (action === 'fila') {
-          if (!config.automacao_webhook_whatsapp) {
-            return res.status(200).json({ message: 'Webhook de WhatsApp da automação não configurado.' });
-          }
-
-          const webhookUrl = config.automacao_webhook_whatsapp.trim();
-
-          const { data: pendentes, error: errFila } = await supabase
-            .from('prospeccao_fila_envio')
-            .select('*')
-            .eq('status', 'pendente')
-            .lte('agendado_para', new Date().toISOString());
-
-          if (errFila) throw errFila;
-
-          if (!pendentes || pendentes.length === 0) {
-            return res.status(200).json({ message: 'Nenhuma mensagem pendente na fila para disparo.' });
-          }
-
-          console.log(`[Fila Disparos] Encontradas ${pendentes.length} mensagens prontas.`);
-
-          let enviados = 0;
-          let falhas = 0;
-
-          for (const lead of pendentes) {
-            try {
-              const response = await fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  nome_empresa: lead.nome_empresa,
-                  telefone: lead.telefone,
-                  mensagem: lead.mensagem,
-                  perfil_detectado: lead.perfil_detectado,
-                  cidade_origem: lead.cidade_origem,
-                  segmento_origem: lead.segmento_origem
-                })
-              });
-
-              if (response.ok) {
-                enviados++;
-                await supabase
-                  .from('prospeccao_fila_envio')
-                  .update({
-                    status: 'enviado',
-                    enviado_em: new Date().toISOString(),
-                    tentativas: lead.tentativas + 1
-                  })
-                  .eq('id', lead.id);
-              } else {
-                falhas++;
-                const errText = await response.text();
-                const novasTentativas = lead.tentativas + 1;
-                await supabase
-                  .from('prospeccao_fila_envio')
-                  .update({
-                    status: novasTentativas >= 3 ? 'falhou' : 'pendente',
-                    tentativas: novasTentativas,
-                    erro_mensagem: `HTTP ${response.status}: ${errText}`
-                  })
-                  .eq('id', lead.id);
-              }
-            } catch (errDisparo) {
-              falhas++;
-              const novasTentativas = lead.tentativas + 1;
-              await supabase
-                .from('prospeccao_fila_envio')
-                .update({
-                  status: novasTentativas >= 3 ? 'falhou' : 'pendente',
-                  tentativas: novasTentativas,
-                  erro_mensagem: errDisparo.message
-                })
-                .eq('id', lead.id);
-            }
-          }
-
-          return res.status(200).json({ message: 'Fila processada.', enviados, falhas });
-        }
-
-        // Ações legadas (status, dataset)
-        if (action === 'status' && runId) {
-          const response = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`);
-          const data = await response.json();
-          return res.status(response.status).json(data);
-        }
-
-        if (action === 'dataset' && datasetId) {
-          const response = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}`);
-          const data = await response.json();
-          return res.status(response.status).json(data);
-        }
-
-        return res.status(400).json({ error: 'Ação ou parâmetros inválidos no proxy do Apify.' });
+      } catch (errGem) {
+        console.warn(`[Background] Gemini falhou para "${item.title}": ${errGem.message}. Salvando sem gancho.`);
       }
     }
 
-    return res.status(400).json({ error: 'Serviço de proxy não especificado ou inválido.' });
-  } catch (err) {
-    console.error('Erro no proxy de prospecção:', err);
-    return res.status(500).json({ error: err.message });
+    if (!valido) {
+      console.log(`[Background] Lead "${item.title}" marcado como inválido pelo Gemini. Pulando.`);
+      continue;
+    }
+
+    qualificados++;
+
+    // Salvar em potenciais_clientes
+    const { error: errPC } = await supabase.from('potenciais_clientes').insert({
+      nome_empresa: item.title,
+      segmento: item.categoryName || nichoBuscado,
+      telefone: item._telefoneLimpo,
+      email: item.email || null,
+      site: item.website || null,
+      cidade: item.city || cidadeBuscada,
+      estado: item.state || 'BR',
+      origem: 'raspagem',
+      status: 'prospecto',
+      dados_personalizados: {
+        stars: item.stars,
+        reviews: item.reviewsCount,
+        maps_url: item.url,
+        gancho_whatsapp: gancho
+      }
+    });
+
+    if (errPC) {
+      console.error(`[Background] Erro ao salvar potencial_cliente "${item.title}":`, errPC.message);
+    }
+
+    // Salvar também no CRM de Leads
+    const { error: errLead } = await supabase.from('leads').insert({
+      nome: item.title,
+      telefone: item._telefoneLimpo,
+      email: item.email || null,
+      momento_compra: 'frio',
+      observacoes: `Lead qualificado automaticamente via Prospecção Inteligente.\nNicho: ${perfil}\nGancho: ${gancho}`,
+      status: 'novo',
+      origem: 'prospeccao'
+    });
+
+    if (errLead) {
+      console.warn(`[Background] Erro ao salvar lead CRM "${item.title}":`, errLead.message);
+    }
+
+    // Agendar na fila de envios com espaçamento linear + variação humana
+    let minutosAdd = Math.floor(i * (totalMinutosJanela / Math.max(totalLeads, 1)));
+    const variacao = Math.floor(Math.random() * 8);
+    minutosAdd = Math.min(minutosAdd + variacao, totalMinutosJanela);
+
+    const agendadoPara = new Date(dataInicio10h.getTime() + minutosAdd * 60 * 1000);
+
+    const { error: errFila } = await supabase.from('prospeccao_fila_envio').insert({
+      nome_empresa: item.title,
+      telefone: item._telefoneLimpo,
+      mensagem: gancho || 'Olá! Conheça os equipamentos premium da Brave Equipment.',
+      agendado_para: agendadoPara.toISOString(),
+      status: 'pendente',
+      tentativas: 0,
+      perfil_detectado: perfil,
+      cidade_origem: item.city || cidadeBuscada,
+      segmento_origem: item.categoryName || nichoBuscado
+    });
+
+    if (errFila) {
+      console.error(`[Background] Erro ao agendar na fila "${item.title}":`, errFila.message);
+    } else {
+      console.log(`[Background] Lead "${item.title}" agendado para ${agendadoPara.toISOString()}`);
+    }
   }
+
+  // Registrar histórico da execução
+  await supabase.from('prospeccao_historico').insert({
+    nicho_buscado: nichoBuscado,
+    cidade_buscada: cidadeBuscada,
+    leads_encontrados: totalEncontrados,
+    leads_qualificados: qualificados,
+    status: 'sucesso',
+    detalhes: `Run ${runId}: ${totalEncontrados} encontrados → ${qualificados} qualificados e agendados na fila de envios.`
+  });
+
+  console.log(`[Background] Processamento concluído. ${qualificados}/${totalEncontrados} leads qualificados.`);
 }
