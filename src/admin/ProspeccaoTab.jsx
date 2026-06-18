@@ -38,7 +38,12 @@ export default function ProspeccaoTab() {
     automacao_cidades: [],
     automacao_cidade_atual_index: 0,
     automacao_limite: 25,
-    automacao_webhook_whatsapp: ''
+    automacao_webhook_whatsapp: '',
+    webhook_botconversa_crossfit: '',
+    webhook_botconversa_hyrox: '',
+    webhook_botconversa_academia: '',
+    webhook_botconversa_studio: '',
+    mensagem_ativacao: 'Oi, tudo bem? 👋'
   });
   const [cidadesInput, setCidadesInput] = useState('');
   const [nichosInput, setNichosInput] = useState('');
@@ -99,7 +104,12 @@ export default function ProspeccaoTab() {
           automacao_cidades: data.automacao_cidades || [],
           automacao_cidade_atual_index: data.automacao_cidade_atual_index || 0,
           automacao_limite: data.automacao_limite || 25,
-          automacao_webhook_whatsapp: data.automacao_webhook_whatsapp || ''
+          automacao_webhook_whatsapp: data.automacao_webhook_whatsapp || '',
+          webhook_botconversa_crossfit: data.webhook_botconversa_crossfit || '',
+          webhook_botconversa_hyrox:    data.webhook_botconversa_hyrox    || '',
+          webhook_botconversa_academia: data.webhook_botconversa_academia || '',
+          webhook_botconversa_studio:   data.webhook_botconversa_studio   || '',
+          mensagem_ativacao: data.mensagem_ativacao || 'Oi, tudo bem? 👋'
         });
         setCidadesInput((data.automacao_cidades || []).join('\n'));
         setNichosInput((data.automacao_nichos || ['Box de CrossFit', 'Estúdio de Treinamento', 'Centro de Treinamento Hyrox', 'Academia']).join('\n'));
@@ -159,6 +169,11 @@ export default function ProspeccaoTab() {
           automacao_cidades: cidadesArray,
           automacao_limite: parseInt(config.automacao_limite || 25),
           automacao_webhook_whatsapp: config.automacao_webhook_whatsapp.trim(),
+          webhook_botconversa_crossfit: config.webhook_botconversa_crossfit.trim(),
+          webhook_botconversa_hyrox:    config.webhook_botconversa_hyrox.trim(),
+          webhook_botconversa_academia: config.webhook_botconversa_academia.trim(),
+          webhook_botconversa_studio:   config.webhook_botconversa_studio.trim(),
+          mensagem_ativacao: config.mensagem_ativacao.trim() || 'Oi, tudo bem? 👋',
           updated_at: new Date().toISOString()
         })
         .eq('id', 1);
@@ -1245,6 +1260,106 @@ export default function ProspeccaoTab() {
               >
                 {salvandoConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                 {salvandoConfig ? 'Salvando...' : 'Salvar Configurações da Automação'}
+              </button>
+            </div>
+          </div>
+
+          {/* ─── Card: Integração BotConversa ─── */}
+          <div className="bg-dark-900 border border-purple-500/20 rounded-2xl p-6 space-y-5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-purple-500/10 rounded-xl shrink-0">
+                <Zap className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Fluxos BotConversa por Perfil</h3>
+                <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                  Configure um webhook do BotConversa para cada perfil de cliente. Quando um lead for qualificado, o sistema
+                  enviará automaticamente os dados para o fluxo correto — incluindo a{' '}
+                  <strong className="text-purple-400">mensagem de ativação</strong> (para acionar o bot automático do negócio)
+                  e o <strong className="text-purple-400">gancho personalizado pela IA</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Estratégia Visual */}
+            <div className="bg-dark-950 border border-dark-800 rounded-xl p-4">
+              <p className="text-[10px] font-black text-purple-400 uppercase tracking-wider mb-3">🧠 Estratégia de Duplo Disparo</p>
+              <div className="flex items-center gap-2 flex-wrap text-[10px] text-zinc-400">
+                <span className="bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 font-mono">MSG 0 → Oi, tudo bem? 👋</span>
+                <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
+                <span className="bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 text-zinc-500">Bot deles responde (60s)</span>
+                <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
+                <span className="bg-purple-500/10 border border-purple-500/20 rounded-lg px-2.5 py-1.5 text-purple-300 font-mono">MSG 1 → Gancho IA personalizado</span>
+                <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
+                <span className="bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 text-zinc-500">Fluxo de relacionamento</span>
+              </div>
+            </div>
+
+            {/* Mensagem de Ativação */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                Mensagem de Ativação (MSG 0 — enviada antes do gancho)
+              </label>
+              <input
+                type="text"
+                placeholder="Oi, tudo bem? 👋"
+                value={config.mensagem_ativacao}
+                onChange={e => setConfig(prev => ({ ...prev, mensagem_ativacao: e.target.value }))}
+                className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/40 transition-all"
+              />
+              <p className="text-[10px] text-zinc-600">Mensagem simples enviada antes do gancho para ativar o bot automático do negócio.</p>
+            </div>
+
+            {/* Webhooks por perfil */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { key: 'webhook_botconversa_crossfit', label: '🏋️ CrossFit', color: 'text-green-400', border: 'focus:border-green-500/40', placeholder: 'Webhook BotConversa — Fluxo CrossFit' },
+                { key: 'webhook_botconversa_hyrox',    label: '🏃 Hyrox',    color: 'text-pink-400',  border: 'focus:border-pink-500/40',  placeholder: 'Webhook BotConversa — Fluxo Hyrox' },
+                { key: 'webhook_botconversa_academia', label: '🏛️ Academia', color: 'text-blue-400',  border: 'focus:border-blue-500/40',  placeholder: 'Webhook BotConversa — Fluxo Academia' },
+                { key: 'webhook_botconversa_studio',   label: '🎨 Studio',   color: 'text-amber-400', border: 'focus:border-amber-500/40', placeholder: 'Webhook BotConversa — Fluxo Studio' },
+              ].map(({ key, label, color, border, placeholder }) => (
+                <div key={key} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>{label}</label>
+                    {config[key] ? (
+                      <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">✓ Configurado</span>
+                    ) : (
+                      <span className="text-[9px] text-zinc-600 font-black uppercase tracking-wider">Não configurado</span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={placeholder}
+                    value={config[key]}
+                    onChange={e => setConfig(prev => ({ ...prev, [key]: e.target.value }))}
+                    className={`w-full bg-dark-850 border border-dark-700 text-white text-[11px] rounded-xl px-3 py-2.5 focus:outline-none ${border} transition-all font-mono`}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Payload enviado ao BotConversa */}
+            <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-2">
+              <p className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">📦 Payload enviado ao BotConversa (campos disponíveis)</p>
+              <pre className="text-[10px] text-zinc-400 font-mono leading-relaxed select-all">{`{
+  "telefone":          "11999999999",
+  "nome_empresa":      "Box CrossFit Alpha",
+  "mensagem_ativacao": "Oi, tudo bem? 👋",
+  "gancho_inicial":    "Mensagem personalizada da IA",
+  "perfil_detectado":  "crossfit | hyrox | academia | studio",
+  "cidade_origem":     "São Paulo",
+  "segmento_origem":   "Box de CrossFit"
+}`}</pre>
+            </div>
+
+            <div className="pt-2 border-t border-dark-800 flex justify-end">
+              <button
+                onClick={saveAutomacaoConfig}
+                disabled={salvandoConfig}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {salvandoConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                {salvandoConfig ? 'Salvando...' : 'Salvar Fluxos BotConversa'}
               </button>
             </div>
           </div>

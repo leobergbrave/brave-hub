@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     // Buscar configurações com segurança no Supabase
     const { data: config, error: configError } = await supabase
       .from('prospeccao_config')
-      .select('apify_token, gemini_key, automacao_ativa, automacao_nichos, automacao_nicho_atual_index, automacao_cidades, automacao_cidade_atual_index, automacao_limite, automacao_webhook_whatsapp')
+      .select('apify_token, gemini_key, automacao_ativa, automacao_nichos, automacao_nicho_atual_index, automacao_cidades, automacao_cidade_atual_index, automacao_limite, automacao_webhook_whatsapp, webhook_botconversa_crossfit, webhook_botconversa_hyrox, webhook_botconversa_academia, webhook_botconversa_studio, mensagem_ativacao')
       .eq('id', 1)
       .single();
 
@@ -458,10 +458,12 @@ Retorne APENAS um JSON limpo (sem markdown):
 
     const agendadoPara = new Date(dataInicio10h.getTime() + minutosAdd * 60 * 1000);
 
+    const mensagemFinal = gancho || 'Olá! Conheça os equipamentos premium da Brave Equipment.';
+
     const { error: errFila } = await supabase.from('prospeccao_fila_envio').insert({
       nome_empresa: item.title,
       telefone: item._telefoneLimpo,
-      mensagem: gancho || 'Olá! Conheça os equipamentos premium da Brave Equipment.',
+      mensagem: mensagemFinal,
       agendado_para: agendadoPara.toISOString(),
       status: 'pendente',
       tentativas: 0,
@@ -474,6 +476,38 @@ Retorne APENAS um JSON limpo (sem markdown):
       console.error(`[Background] Erro ao agendar na fila "${item.title}":`, errFila.message);
     } else {
       console.log(`[Background] Lead "${item.title}" agendado para ${agendadoPara.toISOString()}`);
+    }
+
+    // ── Disparar Fluxo BotConversa pelo perfil detectado ──────────────────────
+    const webhookBotConversa = {
+      crossfit: config.webhook_botconversa_crossfit,
+      hyrox:    config.webhook_botconversa_hyrox,
+      academia: config.webhook_botconversa_academia,
+      studio:   config.webhook_botconversa_studio
+    }[perfil] || config.webhook_botconversa_crossfit; // fallback para crossfit
+
+    if (webhookBotConversa) {
+      try {
+        const payloadBC = {
+          telefone:          item._telefoneLimpo,
+          nome_empresa:      item.title,
+          mensagem_ativacao: config.mensagem_ativacao || 'Oi, tudo bem? 👋',
+          gancho_inicial:    mensagemFinal,
+          perfil_detectado:  perfil,
+          cidade_origem:     item.city || cidadeBuscada,
+          segmento_origem:   item.categoryName || nichoBuscado
+        };
+        const reBC = await fetch(webhookBotConversa, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadBC)
+        });
+        console.log(`[BotConversa] Disparo para "${item.title}" (${perfil}): HTTP ${reBC.status}`);
+      } catch (errBC) {
+        console.warn(`[BotConversa] Falha ao disparar para "${item.title}":`, errBC.message);
+      }
+    } else {
+      console.log(`[BotConversa] Nenhum webhook configurado para o perfil "${perfil}". Pulando.`);
     }
   }
 
