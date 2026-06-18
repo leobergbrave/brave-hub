@@ -486,7 +486,7 @@ Retorne APENAS um JSON limpo (sem markdown):
         const payloadBC = {
           telefone:          item._telefoneLimpo,
           nome_empresa:      item.title,
-          mensagem_ativacao: config.mensagem_ativacao || 'Oi, tudo bem? 👋',
+          mensagem_ativacao: config.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?',
           gancho_inicial:    mensagemFinal,
           perfil_detectado:  perfil,
           cidade_origem:     item.city || cidadeBuscada,

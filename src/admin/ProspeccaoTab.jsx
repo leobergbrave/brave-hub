@@ -40,7 +40,7 @@ export default function ProspeccaoTab() {
     automacao_limite: 25,
     automacao_webhook_whatsapp: '',
     webhook_botconversa: '',
-    mensagem_ativacao: 'Oi, tudo bem? 👋'
+    mensagem_ativacao: 'Oi pessoal {{nome_empresa}}, tudo bem?'
   });
   const [cidadesInput, setCidadesInput] = useState('');
   const [nichosInput, setNichosInput] = useState('');
@@ -103,7 +103,7 @@ export default function ProspeccaoTab() {
           automacao_limite: data.automacao_limite || 25,
           automacao_webhook_whatsapp: data.automacao_webhook_whatsapp || '',
           webhook_botconversa: data.webhook_botconversa || '',
-          mensagem_ativacao: data.mensagem_ativacao || 'Oi, tudo bem? 👋'
+          mensagem_ativacao: data.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?'
         });
         setCidadesInput((data.automacao_cidades || []).join('\n'));
         setNichosInput((data.automacao_nichos || ['Box de CrossFit', 'Estúdio de Treinamento', 'Centro de Treinamento Hyrox', 'Academia']).join('\n'));
@@ -164,7 +164,7 @@ export default function ProspeccaoTab() {
           automacao_limite: parseInt(config.automacao_limite || 25),
           automacao_webhook_whatsapp: config.automacao_webhook_whatsapp.trim(),
           webhook_botconversa: config.webhook_botconversa.trim(),
-          mensagem_ativacao: config.mensagem_ativacao.trim() || 'Oi, tudo bem? 👋',
+          mensagem_ativacao: config.mensagem_ativacao.trim() || 'Oi pessoal {{nome_empresa}}, tudo bem?',
           updated_at: new Date().toISOString()
         })
         .eq('id', 1);
