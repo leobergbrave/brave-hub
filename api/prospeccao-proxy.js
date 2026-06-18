@@ -373,17 +373,32 @@ async function processarLeadsApify({ supabase, token, datasetId, runId, config }
     let perfil = 'crossfit';
     let valido = true;
 
-    // Classificar com Gemini (APENAS nicho/valido/hyrox — o gancho é fixo via config)
+    // Classificar e gerar gancho personalizado com Gemini
     if (config.gemini_key) {
       try {
-        const prompt = `Você é classificador de estabelecimentos fitness para a Brave Equipment.
-Analise:
+        // Prompt base: instrução do usuário (se preenchida) ou padrão
+        const instrucaoGancho = config.prompt_personalizacao ||
+`Crie uma mensagem curta de WhatsApp (2-4 linhas) em português que:
+- Demonstre que pesquisamos e acessamos os dados e qualidades da empresa
+- Mencione algo específico como a categoria, reputação, ou localização
+- NÃO faça perguntas
+- Seja natural e calorosa, como uma abordagem humana
+- Comece com algo como "Vi que o..." ou "Acessei o perfil de..." ou "Notei que..."`.trim();
+
+        const prompt = `Você é analista comercial da Brave Equipment (equipamentos fitness premium).
+
+Analisando a empresa:
 Nome: ${item.title}
 Categoria: ${item.categoryName || 'academia'}
-Descrição: ${item.subTitle || ''}
+Descrição: ${item.subTitle || 'Não informada'}
+Avaliacão: ${item.stars ? item.stars + ' estrelas' : 'sem dados'} (${item.reviewsCount || 0} avaliações)
+Cidade: ${item.city || cidadeBuscada}, ${item.state || 'BR'}
+
+Instrução:
+${instrucaoGancho}
 
 Retorne APENAS um JSON limpo (sem markdown):
-{"valido":true,"nicho":"crossfit","oferece_hyrox":false}`;
+{"valido":true,"nicho":"crossfit","oferece_hyrox":false,"gancho_whatsapp":"mensagem aqui"}`;
 
         const key = config.gemini_key.trim();
         const resGemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`, {
@@ -399,28 +414,12 @@ Retorne APENAS um JSON limpo (sem markdown):
           const parsed = JSON.parse(jsonText);
           valido = parsed.valido !== false;
           perfil = parsed.oferece_hyrox ? 'hyrox' : (parsed.nicho || 'crossfit');
+          gancho = parsed.gancho_whatsapp || '';
         }
       } catch (errGem) {
-        console.warn(`[Background] Gemini falhou para "${item.title}": ${errGem.message}. Usando defaults.`);
+        console.warn(`[Background] Gemini falhou para "${item.title}": ${errGem.message}. Usando fallback.`);
       }
     }
-
-    // Montar o gancho a partir do template fixo configurado pelo usuário
-    const templateGancho = config.prompt_personalizacao ||
-`Sou Léo Berg e faço parte do time comercial da *BRAVE - Equipamentos Fitness*
-
-Somos fornecedores oficiais das maiores competições no Brasil 🇺🇦 como TCB e Copa Sur (CrossFit).
-
-Quero te convidar a nos seguir👇
-https://www.instagram.com/bravefitnessbr/
-
-Você já nos conhece?`;
-
-    gancho = templateGancho
-      .replace(/\{nome_empresa\}/gi, item.title)
-      .replace(/\{\{nome_empresa\}\}/gi, item.title)
-      .replace(/\{perfil\}/gi, perfil)
-      .replace(/\{cidade\}/gi, item.city || cidadeBuscada);
 
     if (!valido) {
       console.log(`[Background] Lead "${item.title}" marcado como inválido pelo Gemini. Pulando.`);

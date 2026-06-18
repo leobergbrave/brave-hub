@@ -1664,30 +1664,23 @@ export default function ProspeccaoTab() {
 
               {/* Prompt de Personalização */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block">Mensagem Gancho — MSG 1 (Apresentação da Brave)</label>
+                <label className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block">Instrução ao Gemini — MSG 1 (Gancho Personalizado por Empresa)</label>
                 <textarea
                   rows={5}
-                  placeholder={`Sou Léo Berg e faço parte do time comercial da *BRAVE - Equipamentos Fitness*
-
-Somos fornecedores oficiais das maiores competições no Brasil 🇺🇦 como TCB e Copa Sur (CrossFit).
-
-Quero te convidar a nos seguir👇
-https://www.instagram.com/bravefitnessbr/
-
-Você já nos conhece?`}
+                  placeholder={`Crie uma mensagem curta de WhatsApp (2-4 linhas) em português que:\n- Demonstre que pesquisamos e acessamos os dados e qualidades da empresa\n- Mencione algo específico como a categoria, reputação, ou localização\n- NÃO faça perguntas\n- Seja natural e calorosa, como uma abordagem humana\n- Comece com algo como "Vi que o..." ou "Acessei o perfil de..." ou "Notei que..."`}
                   value={config.prompt_personalizacao}
                   onChange={e => setConfig(prev => ({ ...prev, prompt_personalizacao: e.target.value }))}
                   className="w-full bg-dark-850 border border-purple-500/20 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/40 transition-all leading-relaxed"
                   rows={8}
                 />
                 <div className="flex flex-wrap gap-2 text-[10px]">
-                  <span className="text-zinc-600">Variáveis disponíveis:</span>
-                  {['{nome_empresa}', '{perfil}', '{cidade}'].map(v => (
-                    <code key={v} className="bg-dark-800 border border-dark-700 text-purple-400 px-1.5 py-0.5 rounded font-mono">{v}</code>
+                  <span className="text-zinc-600">Dados da empresa enviados ao Gemini:</span>
+                  {['Nome', 'Categoria', 'Descrição', 'Estrelas', 'Avaliações', 'Cidade'].map(v => (
+                    <code key={v} className="bg-dark-800 border border-dark-700 text-zinc-400 px-1.5 py-0.5 rounded font-mono text-[9px]">{v}</code>
                   ))}
                 </div>
                 <p className="text-[10px] text-zinc-600">
-                  Esta mensagem é enviada como <strong className="text-zinc-400">MSG 1</strong> (gancho) para todos os leads, logo após a mensagem de ativação. Se o campo estiver vazio, o texto padrão de apresentação da Brave será usado.
+                  O Gemini analisa o perfil completo da empresa e gera uma <strong className="text-zinc-400">MSG 1 única</strong> para cada lead — demonstrando que pesquisamos a empresa, sem fazer perguntas. Se o campo estiver vazio, usa a instrução padrão acima.
                 </p>
               </div>
 
