@@ -1664,15 +1664,31 @@ export default function ProspeccaoTab() {
 
               {/* Prompt de Personalização */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Prompt de Personalização da IA (Abordagem WhatsApp)</label>
+                <label className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block">Mensagem Gancho — MSG 1 (Apresentação da Brave)</label>
                 <textarea
                   rows={5}
-                  placeholder="Escreva a instrução para o Gemini criar o gancho de abordagem..."
+                  placeholder={`Sou Léo Berg e faço parte do time comercial da *BRAVE - Equipamentos Fitness*
+
+Somos fornecedores oficiais das maiores competições no Brasil 🇺🇦 como TCB e Copa Sur (CrossFit).
+
+Quero te convidar a nos seguir👇
+https://www.instagram.com/bravefitnessbr/
+
+Você já nos conhece?`}
                   value={config.prompt_personalizacao}
                   onChange={e => setConfig(prev => ({ ...prev, prompt_personalizacao: e.target.value }))}
-                  className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-neon/40 transition-all leading-relaxed"
+                  className="w-full bg-dark-850 border border-purple-500/20 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/40 transition-all leading-relaxed"
+                  rows={8}
                 />
-                <p className="text-[10px] text-zinc-600">A IA lerá os dados de site, categoria e estrelas do local e gerará um pitching com base na sua instrução acima.</p>
+                <div className="flex flex-wrap gap-2 text-[10px]">
+                  <span className="text-zinc-600">Variáveis disponíveis:</span>
+                  {['{nome_empresa}', '{perfil}', '{cidade}'].map(v => (
+                    <code key={v} className="bg-dark-800 border border-dark-700 text-purple-400 px-1.5 py-0.5 rounded font-mono">{v}</code>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-600">
+                  Esta mensagem é enviada como <strong className="text-zinc-400">MSG 1</strong> (gancho) para todos os leads, logo após a mensagem de ativação. Se o campo estiver vazio, o texto padrão de apresentação da Brave será usado.
+                </p>
               </div>
 
               {/* Botão de Ação */}
