@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
 
     // Identificar qual serviço de proxy está sendo solicitado
-    const service = req.method === 'POST' ? req.body.service : req.query.service;
+    const service = req.body?.service || req.query?.service;
 
     // ─── PROXY: GEMINI ────────────────────────────────────────────────────────
     if (service === 'gemini') {
@@ -287,7 +287,7 @@ Sua tarefa é retornar estritamente um JSON no seguinte formato (sem formataçã
 
           console.log(`[Automação] Disparando busca para: "${termoDeBusca}" no Apify...`);
 
-          const response = await fetch(`https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${token}&webhooks=${base64Webhooks}`, {
+          const response = await fetch(`https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${token}&webhooks=${encodeURIComponent(base64Webhooks)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
