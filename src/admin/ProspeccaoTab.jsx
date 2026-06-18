@@ -39,10 +39,7 @@ export default function ProspeccaoTab() {
     automacao_cidade_atual_index: 0,
     automacao_limite: 25,
     automacao_webhook_whatsapp: '',
-    webhook_botconversa_crossfit: '',
-    webhook_botconversa_hyrox: '',
-    webhook_botconversa_academia: '',
-    webhook_botconversa_studio: '',
+    webhook_botconversa: '',
     mensagem_ativacao: 'Oi, tudo bem? 👋'
   });
   const [cidadesInput, setCidadesInput] = useState('');
@@ -105,10 +102,7 @@ export default function ProspeccaoTab() {
           automacao_cidade_atual_index: data.automacao_cidade_atual_index || 0,
           automacao_limite: data.automacao_limite || 25,
           automacao_webhook_whatsapp: data.automacao_webhook_whatsapp || '',
-          webhook_botconversa_crossfit: data.webhook_botconversa_crossfit || '',
-          webhook_botconversa_hyrox:    data.webhook_botconversa_hyrox    || '',
-          webhook_botconversa_academia: data.webhook_botconversa_academia || '',
-          webhook_botconversa_studio:   data.webhook_botconversa_studio   || '',
+          webhook_botconversa: data.webhook_botconversa || '',
           mensagem_ativacao: data.mensagem_ativacao || 'Oi, tudo bem? 👋'
         });
         setCidadesInput((data.automacao_cidades || []).join('\n'));
@@ -169,10 +163,7 @@ export default function ProspeccaoTab() {
           automacao_cidades: cidadesArray,
           automacao_limite: parseInt(config.automacao_limite || 25),
           automacao_webhook_whatsapp: config.automacao_webhook_whatsapp.trim(),
-          webhook_botconversa_crossfit: config.webhook_botconversa_crossfit.trim(),
-          webhook_botconversa_hyrox:    config.webhook_botconversa_hyrox.trim(),
-          webhook_botconversa_academia: config.webhook_botconversa_academia.trim(),
-          webhook_botconversa_studio:   config.webhook_botconversa_studio.trim(),
+          webhook_botconversa: config.webhook_botconversa.trim(),
           mensagem_ativacao: config.mensagem_ativacao.trim() || 'Oi, tudo bem? 👋',
           updated_at: new Date().toISOString()
         })
@@ -1310,32 +1301,50 @@ export default function ProspeccaoTab() {
               <p className="text-[10px] text-zinc-600">Mensagem simples enviada antes do gancho para ativar o bot automático do negócio.</p>
             </div>
 
-            {/* Webhooks por perfil */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { key: 'webhook_botconversa_crossfit', label: '🏋️ CrossFit', color: 'text-green-400', border: 'focus:border-green-500/40', placeholder: 'Webhook BotConversa — Fluxo CrossFit' },
-                { key: 'webhook_botconversa_hyrox',    label: '🏃 Hyrox',    color: 'text-pink-400',  border: 'focus:border-pink-500/40',  placeholder: 'Webhook BotConversa — Fluxo Hyrox' },
-                { key: 'webhook_botconversa_academia', label: '🏛️ Academia', color: 'text-blue-400',  border: 'focus:border-blue-500/40',  placeholder: 'Webhook BotConversa — Fluxo Academia' },
-                { key: 'webhook_botconversa_studio',   label: '🎨 Studio',   color: 'text-amber-400', border: 'focus:border-amber-500/40', placeholder: 'Webhook BotConversa — Fluxo Studio' },
-              ].map(({ key, label, color, border, placeholder }) => (
-                <div key={key} className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>{label}</label>
-                    {config[key] ? (
-                      <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">✓ Configurado</span>
-                    ) : (
-                      <span className="text-[9px] text-zinc-600 font-black uppercase tracking-wider">Não configurado</span>
-                    )}
+            {/* Webhook Único */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">
+                  Webhook BotConversa (Fluxo Único com Condições)
+                </label>
+                {config.webhook_botconversa ? (
+                  <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">✓ Configurado</span>
+                ) : (
+                  <span className="text-[9px] text-zinc-600 font-black uppercase tracking-wider">Não configurado</span>
+                )}
+              </div>
+              <input
+                type="text"
+                placeholder="https://app.botconversa.com.br/api/v1/webhooks-automation/catch/..."
+                value={config.webhook_botconversa}
+                onChange={e => setConfig(prev => ({ ...prev, webhook_botconversa: e.target.value }))}
+                className="w-full bg-dark-850 border border-purple-500/30 text-white text-[11px] rounded-xl px-3 py-3 focus:outline-none focus:border-purple-500/60 transition-all font-mono"
+              />
+              <p className="text-[10px] text-zinc-600">
+                Um único fluxo recebe todos os leads. Use o campo{' '}
+                <code className="text-purple-400 bg-dark-800 px-1 rounded">perfil_detectado</code>{' '}
+                para criar condições dentro do BotConversa e rotear para o branch correto.
+              </p>
+            </div>
+
+            {/* Como configurar as condições no BotConversa */}
+            <div className="bg-dark-950 border border-purple-500/10 rounded-xl p-4 space-y-3">
+              <p className="text-[10px] font-black text-purple-400 uppercase tracking-wider">⚙️ Como configurar as condições no BotConversa</p>
+              <div className="space-y-2">
+                {[
+                  { perfil: 'crossfit', label: '🏗️ CrossFit', exemplo: 'perfil_detectado  igual a  crossfit' },
+                  { perfil: 'hyrox',    label: '🏃 Hyrox',    exemplo: 'perfil_detectado  igual a  hyrox' },
+                  { perfil: 'academia', label: '🏛️ Academia', exemplo: 'perfil_detectado  igual a  academia' },
+                  { perfil: 'studio',   label: '🎨 Studio',   exemplo: 'perfil_detectado  igual a  studio' },
+                ].map(({ perfil, label, exemplo }) => (
+                  <div key={perfil} className="flex items-center gap-3 text-[10px]">
+                    <span className="text-zinc-500 font-bold shrink-0">SE</span>
+                    <code className="flex-1 bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 text-zinc-300 font-mono">{exemplo}</code>
+                    <span className="text-zinc-500 shrink-0">→</span>
+                    <span className="text-zinc-400 shrink-0">{label}</span>
                   </div>
-                  <input
-                    type="text"
-                    placeholder={placeholder}
-                    value={config[key]}
-                    onChange={e => setConfig(prev => ({ ...prev, [key]: e.target.value }))}
-                    className={`w-full bg-dark-850 border border-dark-700 text-white text-[11px] rounded-xl px-3 py-2.5 focus:outline-none ${border} transition-all font-mono`}
-                  />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
             {/* Payload enviado ao BotConversa */}
@@ -1359,7 +1368,7 @@ export default function ProspeccaoTab() {
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {salvandoConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                {salvandoConfig ? 'Salvando...' : 'Salvar Fluxos BotConversa'}
+                {salvandoConfig ? 'Salvando...' : 'Salvar Fluxo BotConversa'}
               </button>
             </div>
           </div>

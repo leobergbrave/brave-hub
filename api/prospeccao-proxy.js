@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     // Buscar configurações com segurança no Supabase
     const { data: config, error: configError } = await supabase
       .from('prospeccao_config')
-      .select('apify_token, gemini_key, automacao_ativa, automacao_nichos, automacao_nicho_atual_index, automacao_cidades, automacao_cidade_atual_index, automacao_limite, automacao_webhook_whatsapp, webhook_botconversa_crossfit, webhook_botconversa_hyrox, webhook_botconversa_academia, webhook_botconversa_studio, mensagem_ativacao')
+      .select('apify_token, gemini_key, automacao_ativa, automacao_nichos, automacao_nicho_atual_index, automacao_cidades, automacao_cidade_atual_index, automacao_limite, automacao_webhook_whatsapp, webhook_botconversa, mensagem_ativacao')
       .eq('id', 1)
       .single();
 
@@ -478,13 +478,8 @@ Retorne APENAS um JSON limpo (sem markdown):
       console.log(`[Background] Lead "${item.title}" agendado para ${agendadoPara.toISOString()}`);
     }
 
-    // ── Disparar Fluxo BotConversa pelo perfil detectado ──────────────────────
-    const webhookBotConversa = {
-      crossfit: config.webhook_botconversa_crossfit,
-      hyrox:    config.webhook_botconversa_hyrox,
-      academia: config.webhook_botconversa_academia,
-      studio:   config.webhook_botconversa_studio
-    }[perfil] || config.webhook_botconversa_crossfit; // fallback para crossfit
+    // ── Disparar Fluxo BotConversa (webhook único com campo perfil_detectado) ───
+    const webhookBotConversa = config.webhook_botconversa;
 
     if (webhookBotConversa) {
       try {
@@ -507,7 +502,7 @@ Retorne APENAS um JSON limpo (sem markdown):
         console.warn(`[BotConversa] Falha ao disparar para "${item.title}":`, errBC.message);
       }
     } else {
-      console.log(`[BotConversa] Nenhum webhook configurado para o perfil "${perfil}". Pulando.`);
+      console.log(`[BotConversa] Webhook não configurado. Pulando.`);
     }
   }
 
