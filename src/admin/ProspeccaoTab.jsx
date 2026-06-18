@@ -373,7 +373,8 @@ export default function ProspeccaoTab() {
           email: lead.email || null,
           momento_compra: 'frio',
           observacoes: observacao,
-          status: 'novo'
+          status: 'novo',
+          origem: 'prospeccao'
         });
 
       if (errorInsert) throw errorInsert;

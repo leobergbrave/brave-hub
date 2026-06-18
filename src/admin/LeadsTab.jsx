@@ -511,6 +511,12 @@ export default function LeadsTab() {
   const [atualizandoStatus, setAtualizandoStatus] = useState(null);
   const [mes, setMes] = useState('todos');
 
+  // Estados para Filtro de Origem e Ações em Lote
+  const [filtroOrigem, setFiltroOrigem] = useState('todos');
+  const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+  const [disparandoEmLote, setDisparandoEmLote] = useState(false);
+  const [progressoLote, setProgressoLote] = useState({ total: 0, atual: 0 });
+
   const changeMonth = (dir) => {
     const base = mes === 'todos'
       ? new Date()
@@ -527,6 +533,7 @@ export default function LeadsTab() {
     setLoading(true);
     const { data: leadsData } = await supabase.from('leads').select('*').order('criado_em', { ascending: false });
     setLeads(leadsData || []);
+    setSelectedLeadIds([]); // Limpar seleção ao recarregar
     setLoading(false);
   }, []);
 
@@ -561,6 +568,103 @@ export default function LeadsTab() {
     setAtualizandoStatus(null);
   };
 
+  const toggleSelectLead = (id) => {
+    setSelectedLeadIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllFiltered = () => {
+    const filtradosIds = leadsFiltrados.map(l => l.id);
+    const todosSelecionados = filtradosIds.every(id => selectedLeadIds.includes(id));
+    
+    if (todosSelecionados) {
+      setSelectedLeadIds(prev => prev.filter(id => !filtradosIds.includes(id)));
+    } else {
+      setSelectedLeadIds(prev => {
+        const novos = filtradosIds.filter(id => !prev.includes(id));
+        return [...prev, ...novos];
+      });
+    }
+  };
+
+  const mudarStatusEmLote = async (novoStatus) => {
+    if (selectedLeadIds.length === 0) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ status: novoStatus })
+        .in('id', selectedLeadIds);
+
+      if (error) throw error;
+      setLeads(prev => prev.map(l => selectedLeadIds.includes(l.id) ? { ...l, status: novoStatus } : l));
+      setSelectedLeadIds([]);
+    } catch (e) {
+      console.error('Erro ao mudar status em lote:', e);
+      alert('Erro ao alterar status em lote.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const excluirEmLote = async () => {
+    if (selectedLeadIds.length === 0) return;
+    if (!confirm(`Deseja excluir permanentemente os ${selectedLeadIds.length} leads selecionados?`)) return;
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .delete()
+        .in('id', selectedLeadIds);
+
+      if (error) throw error;
+      setLeads(prev => prev.filter(l => !selectedLeadIds.includes(l.id)));
+      setSelectedLeadIds([]);
+    } catch (e) {
+      console.error('Erro ao excluir em lote:', e);
+      alert('Erro ao excluir leads em lote.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const dispararEmLote = async () => {
+    if (selectedLeadIds.length === 0) return;
+    if (!confirm(`Deseja disparar o fluxo BotConversa para os ${selectedLeadIds.length} leads selecionados?`)) return;
+
+    setDisparandoEmLote(true);
+    setProgressoLote({ total: selectedLeadIds.length, atual: 0 });
+
+    const leadsParaDisparo = leads.filter(l => selectedLeadIds.includes(l.id));
+
+    for (let i = 0; i < leadsParaDisparo.length; i++) {
+      const lead = leadsParaDisparo[i];
+      setProgressoLote(prev => ({ ...prev, atual: i + 1 }));
+
+      try {
+        await supabase.functions.invoke('cadastrar-lead', {
+          body: {
+            nome: lead.nome,
+            telefone: lead.telefone,
+            momento_compra: lead.momento_compra,
+            produtos_interesse: lead.produtos_interesse,
+            consultor: lead.consultor,
+          },
+        });
+      } catch (err) {
+        console.error(`Erro ao disparar fluxo para lead ${lead.nome}:`, err);
+      }
+
+      await new Promise(r => setTimeout(r, 800));
+    }
+
+    setDisparandoEmLote(false);
+    setSelectedLeadIds([]);
+    load();
+  };
+
   const leadsPorMes = leads.filter(l => {
     if (mes === 'todos') return true;
     const criado = l.criado_em?.slice(0, 7); // 'YYYY-MM'
@@ -570,7 +674,8 @@ export default function LeadsTab() {
   const leadsFiltrados = leadsPorMes.filter(l => {
     const matchStatus = filtroStatus === 'todos' || l.status === filtroStatus;
     const matchBusca = !busca || l.nome.toLowerCase().includes(busca.toLowerCase()) || l.telefone.includes(busca);
-    return matchStatus && matchBusca;
+    const matchOrigem = filtroOrigem === 'todos' || (l.origem || 'manual') === filtroOrigem;
+    return matchStatus && matchBusca && matchOrigem;
   });
 
   return (
@@ -608,25 +713,44 @@ export default function LeadsTab() {
         </div>
       </div>
 
-      {/* Informações da Funcionalidade: Vendedor Dinâmico */}
+      {/* Informações da Funcionalidade: Vendedor Dinâmico & Lote/Filtro CRM */}
       <div className="bg-dark-800/40 border border-dark-700/60 rounded-2xl p-5 mb-6">
         <div className="flex items-start gap-3.5">
-          <div className="p-2 bg-neon/10 rounded-xl text-neon">
+          <div className="p-2 bg-neon/10 rounded-xl text-neon shrink-0">
             <Info className="w-5 h-5" />
           </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold text-white mb-1">ℹ️ Funcionalidade: Vendedor Dinâmico (Bling)</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed mb-3">
-              Agora o sistema identifica automaticamente o vendedor/consultor responsável no Bling a partir do lead do CRM.
-              Se houver divergências de escrita (como omitir acentos ou sobrenomes), o sistema realiza correspondência inteligente (ex: "Lais" ou "Lais Carlos" se associa a "Laís Carlos" no Bling). Caso não haja correspondência, o padrão será "Léo Berg" (dono da chave de API).
-            </p>
-            <div className="bg-dark-900/50 rounded-xl p-3 border border-dark-800">
-              <span className="text-[10px] font-black uppercase text-neon tracking-wider block mb-1.5">🧪 Como Testar:</span>
-              <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-1">
-                <li>Clique em <strong>Novo Lead</strong> e preencha os dados selecionando um consultor (ex: <code>Thiago Freitas</code>).</li>
-                <li>Na aba <strong>Orçamentos</strong>, localize o orçamento gerado para esse lead e clique em <strong>Gerar no Bling</strong> (ou aprove o orçamento rápido).</li>
-                <li>Verifique no painel do Bling se a proposta de venda comercial foi corretamente associada ao vendedor cadastrado.</li>
-              </ol>
+          <div className="flex-1 space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-white mb-1">ℹ️ Funcionalidade: Origem dos Leads & Ações em Lote</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Agora o CRM permite rastrear a origem dos leads (Cadastro Manual ou Prospecção Automática). Você pode filtrar os leads por origem, selecionar múltiplos contatos de uma vez usando os checkboxes na lateral esquerda e executar ações em lote de forma sequencial controlada (como disparar o fluxo de mensagens no BotConversa, atualizar o estágio do funil ou excluir permanentemente).
+              </p>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white mb-1">ℹ️ Funcionalidade: Vendedor Dinâmico (Bling)</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                O sistema identifica o vendedor responsável no Bling a partir do lead do CRM. Se houver divergências de escrita (como omitir acentos ou sobrenomes), realiza correspondência inteligente (ex: "Lais" ou "Lais Carlos" se associa a "Laís Carlos" no Bling). O padrão é "Léo Berg" caso não haja correspondência.
+              </p>
+            </div>
+            
+            <div className="bg-dark-900/50 rounded-xl p-4 border border-dark-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <span className="text-[10px] font-black uppercase text-neon tracking-wider block mb-1.5">🧪 Como Testar Filtro & Lote (Fácil):</span>
+                <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-1">
+                  <li>Use o filtro **"Todas as Origens"** para separar leads manuais dos importados por prospecção.</li>
+                  <li>Marque os checkboxes na lateral esquerda de 2 ou mais leads.</li>
+                  <li>Use a barra flutuante no topo para mudar o status de todos juntos ou disparar o BotConversa em lote.</li>
+                  <li>Acompanhe o envio sequencial pela barra de progresso visual.</li>
+                </ol>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase text-neon tracking-wider block mb-1.5">🧪 Como Testar Vendedor Dinâmico:</span>
+                <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-1">
+                  <li>Crie um lead manual selecionando um consultor (ex: <code>Thiago Freitas</code>).</li>
+                  <li>Na aba <strong>Orçamentos</strong>, localize o orçamento gerado e clique em <strong>Gerar no Bling</strong>.</li>
+                  <li>Verifique no painel do Bling se a proposta foi associada ao vendedor Thiago Freitas.</li>
+                </ol>
+              </div>
             </div>
           </div>
         </div>
@@ -647,6 +771,22 @@ export default function LeadsTab() {
             className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl pl-9 pr-4 py-2 focus:outline-none focus:border-neon/50 transition-all placeholder:text-dark-500"
           />
         </div>
+        
+        {/* Filtro de Origem */}
+        <div className="relative">
+          <select
+            value={filtroOrigem}
+            onChange={e => setFiltroOrigem(e.target.value)}
+            className="appearance-none bg-dark-800 border border-dark-600 text-white text-sm rounded-xl pl-3 pr-8 py-2 focus:outline-none focus:border-neon/50 transition-all cursor-pointer"
+          >
+            <option value="todos">Todas as origens</option>
+            <option value="manual">Cadastro Manual</option>
+            <option value="prospeccao">Prospecção Automática</option>
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+        </div>
+
+        {/* Filtro de Status */}
         <div className="relative">
           <select
             value={filtroStatus}
@@ -662,6 +802,117 @@ export default function LeadsTab() {
         </div>
       </div>
 
+      {/* Barra de Ações em Lote */}
+      {selectedLeadIds.length > 0 && (
+        <div className="bg-dark-900 border border-neon/45 rounded-2xl p-4 mb-4 flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-neon/5 animate-fade-in">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="h-2 w-2 bg-neon rounded-full animate-pulse"></span>
+            <span className="font-bold text-white">Ações em Lote:</span>
+            <span className="text-zinc-400 font-medium font-mono">{selectedLeadIds.length} selecionados</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Disparo BotConversa Lote */}
+            <button
+              onClick={dispararEmLote}
+              disabled={disparandoEmLote || loading}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-neon text-dark-950 hover:bg-neon/90 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {disparandoEmLote ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Enviando ({progressoLote.atual}/{progressoLote.total})
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  Disparar Mensagens em Lote
+                </>
+              )}
+            </button>
+
+            {/* Mudar Status Lote */}
+            <div className="relative">
+              <select
+                onChange={e => {
+                  if (e.target.value) {
+                    mudarStatusEmLote(e.target.value);
+                    e.target.value = ''; // Reset
+                  }
+                }}
+                disabled={disparandoEmLote || loading}
+                className="appearance-none bg-dark-800 border border-dark-700 text-zinc-300 text-xs font-semibold rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:border-neon/50 cursor-pointer disabled:opacity-50"
+              >
+                <option value="">Alterar Status em Lote...</option>
+                {STATUS_PIPELINE.map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+            </div>
+
+            {/* Excluir Lote */}
+            <button
+              onClick={excluirEmLote}
+              disabled={disparandoEmLote || loading}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/25 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Excluir Selecionados
+            </button>
+
+            {/* Limpar Seleção */}
+            <button
+              onClick={() => setSelectedLeadIds([])}
+              disabled={disparandoEmLote || loading}
+              className="p-2 bg-dark-800 border border-dark-700 hover:text-white rounded-lg text-zinc-500 transition-all cursor-pointer"
+              title="Limpar seleção"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Progresso de Envio do Lote */}
+      {disparandoEmLote && (
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-4 mb-4 space-y-2 animate-fade-in">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-zinc-400 font-bold flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-neon" />
+              Disparando mensagens no BotConversa...
+            </span>
+            <span className="text-neon font-black font-mono">
+              {Math.round((progressoLote.atual / progressoLote.total) * 100)}% ({progressoLote.atual}/{progressoLote.total})
+            </span>
+          </div>
+          <div className="w-full bg-dark-800 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-neon h-full transition-all duration-300"
+              style={{ width: `${(progressoLote.atual / progressoLote.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Seleção Rápida */}
+      {!loading && leadsFiltrados.length > 0 && (
+        <div className="flex items-center justify-between bg-dark-900/40 border border-dark-800 rounded-xl px-4 py-2.5 mb-4 text-xs text-zinc-500">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={leadsFiltrados.length > 0 && leadsFiltrados.every(l => selectedLeadIds.includes(l.id))}
+              onChange={toggleSelectAllFiltered}
+              className="rounded border-dark-700 text-neon focus:ring-0 cursor-pointer bg-dark-800"
+            />
+            <span>Selecionar todos os {leadsFiltrados.length} leads filtrados</span>
+          </label>
+          {selectedLeadIds.length > 0 && (
+            <span className="text-neon font-bold font-mono">{selectedLeadIds.length} selecionados</span>
+          )}
+        </div>
+      )}
+
       {/* Lista */}
       {loading ? (
         <div className="flex items-center gap-2 text-zinc-500 py-12 justify-center">
@@ -675,119 +926,143 @@ export default function LeadsTab() {
         </div>
       ) : (
         <div className="space-y-2">
-          {leadsFiltrados.map(lead => (
-            <div key={lead.id} className="bg-dark-800/60 border border-dark-700/50 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 hover:border-dark-600 transition-all">
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="font-bold text-white text-sm">{lead.nome}</span>
-                  <MomentoBadge momento={lead.momento_compra} />
-                  <StatusBadge status={lead.status} />
-                </div>
-                <div className="flex items-center gap-3 text-xs text-zinc-500">
-                  <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.telefone}</span>
-                  <span>{new Date(lead.criado_em).toLocaleDateString('pt-BR')}</span>
-                  {lead.consultor && <span>· {lead.consultor}</span>}
-                </div>
-                {lead.produtos_interesse?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {lead.produtos_interesse.map(p => (
-                      <span key={p} className="text-[10px] bg-dark-700 border border-dark-600 text-zinc-400 px-2 py-0.5 rounded">{p}</span>
-                    ))}
+          {leadsFiltrados.map(lead => {
+            const isSelected = selectedLeadIds.includes(lead.id);
+            return (
+              <div
+                key={lead.id}
+                className={`bg-dark-800/60 border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-dark-600 transition-all ${
+                  isSelected ? 'border-neon/45 bg-neon/5' : 'border-dark-700/50'
+                }`}
+              >
+                {/* Checkbox de seleção */}
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleSelectLead(lead.id)}
+                  className="rounded border-dark-700 text-neon focus:ring-0 cursor-pointer bg-dark-800 h-4 w-4 shrink-0"
+                />
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="font-bold text-white text-sm">{lead.nome}</span>
+                    <MomentoBadge momento={lead.momento_compra} />
+                    <StatusBadge status={lead.status} />
+                    {/* Badge de Origem */}
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                      lead.origem === 'prospeccao'
+                        ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        : 'bg-zinc-850 text-zinc-500 border border-dark-700'
+                    }`}>
+                      {lead.origem === 'prospeccao' ? 'Prospecção' : 'Manual'}
+                    </span>
                   </div>
-                )}
-                {lead.observacoes && (
-                  <p className="text-[11px] text-zinc-500 mt-1.5 italic">{lead.observacoes}</p>
-                )}
-              </div>
+                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                    <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {lead.telefone}</span>
+                    <span>{new Date(lead.criado_em).toLocaleDateString('pt-BR')}</span>
+                    {lead.consultor && <span>· {lead.consultor}</span>}
+                  </div>
+                  {lead.produtos_interesse?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {lead.produtos_interesse.map(p => (
+                        <span key={p} className="text-[10px] bg-dark-700 border border-dark-600 text-zinc-400 px-2 py-0.5 rounded">{p}</span>
+                      ))}
+                    </div>
+                  )}
+                  {lead.observacoes && (
+                    <p className="text-[11px] text-zinc-500 mt-1.5 italic">{lead.observacoes}</p>
+                  )}
+                </div>
 
-              {/* Ações */}
-              <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                {/* Aprovar lead (manual) */}
-                {lead.status !== 'aprovado' && (
+                {/* Ações */}
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  {/* Aprovar lead (manual) */}
+                  {lead.status !== 'aprovado' && (
+                    <button
+                      onClick={() => changeStatus(lead, 'aprovado')}
+                      disabled={atualizandoStatus === lead.id}
+                      title="Marcar como Aprovado"
+                      className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 border border-dark-600 transition-all disabled:opacity-40 cursor-pointer"
+                    >
+                      <ThumbsUp className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Link do orçamento */}
+                  {lead.link_rapido_codigo && (
+                    <a
+                      href={`/q/${lead.link_rapido_codigo}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Abrir link de orçamento"
+                      className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-neon hover:bg-neon/10 border border-dark-600 transition-all"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                  {lead.orcamento_slug && (
+                    <a
+                      href={`/orcamento/${lead.orcamento_slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Ver orçamento gerado"
+                      className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 border border-dark-600 transition-all"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+
+                  {/* Editar orçamento no Gerador */}
+                  {lead.produtos_interesse?.length > 0 && (
+                    <a
+                      href={`/?nome=${encodeURIComponent(lead.nome)}&produtos=${lead.produtos_interesse.join(',')}&telefone=${encodeURIComponent(lead.telefone || '')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Editar orçamento"
+                      className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-neon hover:bg-neon/10 border border-dark-600 transition-all"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </a>
+                  )}
+
+                  {/* Deletar lead */}
                   <button
-                    onClick={() => changeStatus(lead, 'aprovado')}
-                    disabled={atualizandoStatus === lead.id}
-                    title="Marcar como Aprovado"
-                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 border border-dark-600 transition-all disabled:opacity-40 cursor-pointer"
+                    onClick={() => deleteLead(lead)}
+                    title="Excluir lead"
+                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-dark-600 transition-all cursor-pointer"
                   >
-                    <ThumbsUp className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
-                )}
 
-                {/* Link do orçamento */}
-                {lead.link_rapido_codigo && (
-                  <a
-                    href={`/q/${lead.link_rapido_codigo}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Abrir link de orçamento"
-                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-neon hover:bg-neon/10 border border-dark-600 transition-all"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                )}
-                {lead.orcamento_slug && (
-                  <a
-                    href={`/orcamento/${lead.orcamento_slug}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Ver orçamento gerado"
-                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 border border-dark-600 transition-all"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                )}
-
-                {/* Editar orçamento no Gerador */}
-                {lead.produtos_interesse?.length > 0 && (
-                  <a
-                    href={`/?nome=${encodeURIComponent(lead.nome)}&produtos=${lead.produtos_interesse.join(',')}&telefone=${encodeURIComponent(lead.telefone || '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Editar orçamento"
-                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-neon hover:bg-neon/10 border border-dark-600 transition-all"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </a>
-                )}
-
-                {/* Deletar lead */}
-                <button
-                  onClick={() => deleteLead(lead)}
-                  title="Excluir lead"
-                  className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-dark-600 transition-all cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-
-                {/* Reenviar fluxo */}
-                <button
-                  onClick={() => reenviarFluxo(lead)}
-                  disabled={atualizandoStatus === lead.id}
-                  title="Reenviar fluxo BotConversa"
-                  className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 border border-dark-600 transition-all disabled:opacity-40 cursor-pointer"
-                >
-                  {atualizandoStatus === lead.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                </button>
-
-                {/* Mudar status */}
-                <div className="relative">
-                  <select
-                    value={lead.status}
-                    onChange={e => changeStatus(lead, e.target.value)}
+                  {/* Reenviar fluxo */}
+                  <button
+                    onClick={() => reenviarFluxo(lead)}
                     disabled={atualizandoStatus === lead.id}
-                    className="appearance-none bg-dark-700 border border-dark-600 text-zinc-300 text-[11px] font-medium rounded-lg pl-2.5 pr-6 py-1.5 focus:outline-none focus:border-neon/50 transition-all cursor-pointer disabled:opacity-40"
+                    title="Reenviar fluxo BotConversa"
+                    className="p-2 rounded-lg bg-dark-700 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 border border-dark-600 transition-all disabled:opacity-40 cursor-pointer"
                   >
-                    {STATUS_PIPELINE.map(s => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none" />
+                    {atualizandoStatus === lead.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  </button>
+
+                  {/* Mudar status */}
+                  <div className="relative">
+                    <select
+                      value={lead.status}
+                      onChange={e => changeStatus(lead, e.target.value)}
+                      disabled={atualizandoStatus === lead.id}
+                      className="appearance-none bg-dark-700 border border-dark-600 text-zinc-300 text-[11px] font-medium rounded-lg pl-2.5 pr-6 py-1.5 focus:outline-none focus:border-neon/50 transition-all cursor-pointer disabled:opacity-40"
+                    >
+                      {STATUS_PIPELINE.map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none" />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

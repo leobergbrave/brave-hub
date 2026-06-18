@@ -188,7 +188,8 @@ Sua tarefa é retornar estritamente um JSON no seguinte formato (sem formataçã
                 email: item.email || null,
                 momento_compra: 'frio',
                 observacoes: `Lead qualificado automaticamente via Prospecção Inteligente.\nNicho detectado: ${perfil}\nGancho WhatsApp: ${gancho}`,
-                status: 'novo'
+                status: 'novo',
+                origem: 'prospeccao'
               });
 
               // Calcular agendamento linear com espaçamento humano (entre 10h e 19h)
