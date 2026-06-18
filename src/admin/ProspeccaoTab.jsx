@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, Settings, Zap, MapPin, Play, Loader2, Info, CheckCircle2,
   Trash2, Mail, Phone, Globe, Award, Filter, ExternalLink, RefreshCw,
-  PlusCircle, Sparkles, X, ChevronRight, AlertTriangle
+  PlusCircle, Sparkles, X, ChevronRight, AlertTriangle, Cpu, Clock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -31,10 +31,28 @@ export default function ProspeccaoTab() {
     gemini_key: '',
     instantly_key: '',
     instantly_campaign_id: '',
-    prompt_personalizacao: ''
+    prompt_personalizacao: '',
+    automacao_ativa: false,
+    automacao_nichos: ['Box de CrossFit', 'Estúdio de Treinamento', 'Centro de Treinamento Hyrox', 'Academia'],
+    automacao_nicho_atual_index: 0,
+    automacao_cidades: [],
+    automacao_cidade_atual_index: 0,
+    automacao_limite: 25,
+    automacao_webhook_whatsapp: ''
   });
+  const [cidadesInput, setCidadesInput] = useState('');
+  const [nichosInput, setNichosInput] = useState('');
+  
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [salvandoConfig, setSalvandoConfig] = useState(false);
+
+  // Estados de Automação
+  const [historico, setHistorico] = useState([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [fila, setFila] = useState([]);
+  const [loadingFila, setLoadingFila] = useState(false);
+  const [testandoAutomacao, setTestandoAutomacao] = useState(false);
+  const [processandoFila, setProcessandoFila] = useState(false);
 
   // Form de Raspagem
   const [nicho, setNicho] = useState('Box de Crossfit');
@@ -74,8 +92,17 @@ export default function ProspeccaoTab() {
           gemini_key: data.gemini_key || '',
           instantly_key: data.instantly_key || '',
           instantly_campaign_id: data.instantly_campaign_id || '',
-          prompt_personalizacao: data.prompt_personalizacao || ''
+          prompt_personalizacao: data.prompt_personalizacao || '',
+          automacao_ativa: data.automacao_ativa || false,
+          automacao_nichos: data.automacao_nichos || ['Box de CrossFit', 'Estúdio de Treinamento', 'Centro de Treinamento Hyrox', 'Academia'],
+          automacao_nicho_atual_index: data.automacao_nicho_atual_index || 0,
+          automacao_cidades: data.automacao_cidades || [],
+          automacao_cidade_atual_index: data.automacao_cidade_atual_index || 0,
+          automacao_limite: data.automacao_limite || 25,
+          automacao_webhook_whatsapp: data.automacao_webhook_whatsapp || ''
         });
+        setCidadesInput((data.automacao_cidades || []).join('\n'));
+        setNichosInput((data.automacao_nichos || ['Box de CrossFit', 'Estúdio de Treinamento', 'Centro de Treinamento Hyrox', 'Academia']).join('\n'));
       }
     } catch (e) {
       console.error('Erro ao buscar config de prospecção:', e);
@@ -91,20 +118,57 @@ export default function ProspeccaoTab() {
     try {
       const { error } = await supabase
         .from('prospeccao_config')
-        .upsert({
-          id: 1,
+        .update({
           apify_token: config.apify_token.trim(),
           gemini_key: config.gemini_key.trim(),
           instantly_key: config.instantly_key.trim(),
           instantly_campaign_id: config.instantly_campaign_id.trim(),
           prompt_personalizacao: config.prompt_personalizacao.trim(),
           updated_at: new Date().toISOString()
-        });
+        })
+        .eq('id', 1);
       if (error) throw error;
       showToast('✅ Configurações salvas com sucesso!');
     } catch (e) {
       console.error('Erro ao salvar config de prospecção:', e);
       showToast('❌ Erro ao salvar configurações.');
+    } finally {
+      setSalvandoConfig(false);
+    }
+  };
+
+  // ─── Salvar Configurações da Automação ──────────────────────────────────────
+  const saveAutomacaoConfig = async () => {
+    setSalvandoConfig(true);
+    try {
+      const cidadesArray = cidadesInput
+        .split('\n')
+        .map(c => c.trim())
+        .filter(c => c.length > 0);
+
+      const nichosArray = nichosInput
+        .split('\n')
+        .map(n => n.trim())
+        .filter(n => n.length > 0);
+
+      const { error } = await supabase
+        .from('prospeccao_config')
+        .update({
+          automacao_ativa: config.automacao_ativa,
+          automacao_nichos: nichosArray,
+          automacao_cidades: cidadesArray,
+          automacao_limite: parseInt(config.automacao_limite || 25),
+          automacao_webhook_whatsapp: config.automacao_webhook_whatsapp.trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 1);
+
+      if (error) throw error;
+      showToast('✅ Configurações da automação salvas!');
+      fetchConfig();
+    } catch (e) {
+      console.error('Erro ao salvar config de automação:', e);
+      showToast('❌ Erro ao salvar.');
     } finally {
       setSalvandoConfig(false);
     }
@@ -128,10 +192,149 @@ export default function ProspeccaoTab() {
     }
   }, [showToast]);
 
+  // ─── Fetch Histórico de Automação ──────────────────────────────────────────
+  const fetchHistorico = useCallback(async () => {
+    setLoadingHistorico(true);
+    try {
+      const { data, error } = await supabase
+        .from('prospeccao_historico')
+        .select('*')
+        .order('criado_em', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setHistorico(data || []);
+    } catch (e) {
+      console.error('Erro ao buscar histórico:', e);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  }, []);
+
+  // ─── Fetch Fila de Envios ──────────────────────────────────────────────────
+  const fetchFila = useCallback(async () => {
+    setLoadingFila(true);
+    try {
+      const { data, error } = await supabase
+        .from('prospeccao_fila_envio')
+        .select('*')
+        .order('agendado_para', { ascending: true })
+        .limit(100);
+      if (error) throw error;
+      setFila(data || []);
+    } catch (e) {
+      console.error('Erro ao buscar fila:', e);
+    } finally {
+      setLoadingFila(false);
+    }
+  }, []);
+
+  // ─── Simular Cron de Extração (06h AM) ──────────────────────────────────────
+  const testarAgendamento = async () => {
+    setTestandoAutomacao(true);
+    try {
+      showToast('🧪 Simulando Cron de Extração...');
+      const res = await fetch('/api/prospeccao-proxy?service=apify&action=cron');
+      const data = await res.json();
+      if (res.ok) {
+        showToast('🚀 Automação diária disparada!');
+        fetchHistorico();
+        setTimeout(() => fetchFila(), 5000); // Dar tempo do webhook iniciar
+      } else {
+        throw new Error(data.error || 'Erro no agendamento');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast(`❌ Erro no teste: ${e.message}`);
+    } finally {
+      setTestandoAutomacao(false);
+    }
+  };
+
+  // ─── Simular Cron de Fila (Disparos 10h-19h) ────────────────────────────────
+  const testarProcessarFila = async () => {
+    setProcessandoFila(true);
+    try {
+      showToast('⚡ Processando mensagens pendentes...');
+      const res = await fetch('/api/prospeccao-proxy?service=apify&action=fila');
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`✅ Fila processada! Enviados: ${data.enviados || 0}, Falhas: ${data.falhas || 0}`);
+        fetchFila();
+      } else {
+        throw new Error(data.message || 'Erro');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('❌ Erro ao disparar mensagens.');
+    } finally {
+      setProcessandoFila(false);
+    }
+  };
+
+  // ─── Disparar Registro Individual da Fila ──────────────────────────────────
+  const dispararFilaLead = async (lead) => {
+    try {
+      showToast('⚡ Enviando mensagem individual...');
+      if (!config.automacao_webhook_whatsapp) {
+        showToast('⚠️ Configure o webhook de WhatsApp da automação.');
+        return;
+      }
+      const response = await fetch(config.automacao_webhook_whatsapp.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome_empresa: lead.nome_empresa,
+          telefone: lead.telefone,
+          mensagem: lead.mensagem,
+          perfil_detectado: lead.perfil_detectado,
+          cidade_origem: lead.cidade_origem,
+          segmento_origem: lead.segmento_origem
+        })
+      });
+
+      if (response.ok) {
+        showToast('✅ Mensagem enviada!');
+        await supabase
+          .from('prospeccao_fila_envio')
+          .update({
+            status: 'enviado',
+            enviado_em: new Date().toISOString(),
+            tentativas: lead.tentativas + 1
+          })
+          .eq('id', lead.id);
+        fetchFila();
+      } else {
+        const errText = await response.text();
+        throw new Error(errText);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('❌ Falha ao enviar.');
+    }
+  };
+
+  // ─── Remover Item da Fila ──────────────────────────────────────────────────
+  const removerItemFila = async (id) => {
+    try {
+      const { error } = await supabase
+        .from('prospeccao_fila_envio')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      showToast('🗑️ Lead removido da fila de envio.');
+      fetchFila();
+    } catch (e) {
+      console.error(e);
+      showToast('❌ Falha ao remover da fila.');
+    }
+  };
+
   useEffect(() => {
     fetchConfig();
     fetchLeads();
-  }, [fetchConfig, fetchLeads]);
+    fetchHistorico();
+    fetchFila();
+  }, [fetchConfig, fetchLeads, fetchHistorico, fetchFila]);
 
   // ─── Filtros de Leads ──────────────────────────────────────────────────────
   const leadsFiltrados = useMemo(() => {
@@ -490,6 +693,7 @@ export default function ProspeccaoTab() {
           {[
             { id: 'leads', label: 'Leads Encontrados', icon: Award },
             { id: 'raspar', label: 'Nova Raspagem', icon: Play },
+            { id: 'automacao', label: 'Automação Diária', icon: Cpu },
             { id: 'config', label: 'Configurações API', icon: Settings }
           ].map(t => (
             <button
@@ -845,6 +1049,420 @@ export default function ProspeccaoTab() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══════════════════════ SUB-ABA: AUTOMACÃO DIÁRIA ══════════════════════ */}
+      {activeSubTab === 'automacao' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* ─── Painel Informativo ─── */}
+          <div className="bg-dark-900 border border-neon/30 rounded-2xl p-6 space-y-4 shadow-xl shadow-neon/5">
+            <div className="flex items-start gap-3">
+              <Cpu className="w-5 h-5 text-neon shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-white mb-1">Painel de Automação Diária (Prospecção Inteligente)</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Esta funcionalidade roda de forma 100% autônoma na nuvem (Vercel Cron + Supabase). Ela automatiza o pipeline de captação
+                  e envio de mensagens frias via WhatsApp, garantindo um fluxo constante de novos potenciais clientes sem esforço manual.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-dark-800 text-xs">
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-black text-neon uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" /> 1. Extração de Dados
+                </h4>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Diariamente às <strong>06:00 AM</strong>, o robô raspa o Google Maps buscando por um Nicho na Cidade do dia.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-black text-neon uppercase tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5" /> 2. Filtro & IA Gemini
+                </h4>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Filtra leads repetidos ou inválidos. O <strong>Gemini 3.5 Flash</strong> analisa o site e gera um gancho de abordagem sob medida. 
+                  <em> Destaque especial para locais com modalidade Hyrox.</em>
+                </p>
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-black text-neon uppercase tracking-wider flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5" /> 3. Fila de Envios Humanos
+                </h4>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Das <strong>10:00 AM às 19:00 PM</strong>, as mensagens são enfileiradas e disparadas via webhook com intervalos randômicos de 1 a 15 min.
+                </p>
+              </div>
+            </div>
+            {/* Aviso Vercel Hobby e Cron-Job.org */}
+            <div className="mt-4 p-4 bg-dark-950/80 border border-amber-500/20 rounded-xl flex items-start gap-3 text-xs">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold text-amber-400 block">Configuração para Contas Vercel Hobby (Gratuita)</span>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  A Vercel Hobby permite apenas 1 Cron Job diário nativo (utilizado para iniciar a extração das 06:00 AM).
+                  Para processar os disparos agendados na fila ao longo do dia, configure uma chamada periódica gratuita em um serviço de cron externo como o{' '}
+                  <a href="https://cron-job.org" target="_blank" rel="noopener noreferrer" className="text-neon hover:underline inline-flex items-center gap-0.5">
+                    cron-job.org <ExternalLink className="w-2.5 h-2.5" />
+                  </a>{' '}
+                  para bater na URL abaixo a cada <strong>5 ou 10 minutos</strong>:
+                </p>
+                <div className="bg-dark-900 border border-dark-700/60 p-2.5 rounded-lg font-mono text-[10px] text-zinc-300 select-all break-all">
+                  https://brave-hub-two.vercel.app/api/prospeccao-proxy?service=apify&action=fila
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Configurações da Automação ─── */}
+          <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-dark-800 pb-4">
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-neon" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Configurar Parâmetros & Rotação</h3>
+                  <p className="text-xs text-zinc-500">Ajuste o comportamento do fluxo automático de prospecção</p>
+                </div>
+              </div>
+
+              {/* Ativar/Desativar Switch */}
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <span className="text-xs text-zinc-400 font-bold">Automação Ativa</span>
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={config.automacao_ativa}
+                    onChange={e => setConfig(prev => ({ ...prev, automacao_ativa: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-6 bg-dark-800 rounded-full peer peer-focus:ring-0 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-zinc-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon peer-checked:after:bg-dark-950"></div>
+                </div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Webhook do WhatsApp */}
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Webhook de WhatsApp Comercial</label>
+                <input
+                  type="text"
+                  placeholder="https://sua-api-whatsapp.com/webhook..."
+                  value={config.automacao_webhook_whatsapp}
+                  onChange={e => setConfig(prev => ({ ...prev, automacao_webhook_whatsapp: e.target.value }))}
+                  className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-neon/40 transition-all font-mono"
+                />
+                <p className="text-[10px] text-zinc-500">Endpoint que receberá o JSON com os dados do lead para realizar o disparo das mensagens.</p>
+              </div>
+
+              {/* Cidades Rotacionais */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                    Cidades Rotacionais ({cidadesInput.split('\n').filter(Boolean).length} cadastradas)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setCidadesInput([
+                      'Curitiba', 'Porto Alegre', 'Florianópolis', 'Londrina', 'Caxias do Sul', 'Joinville', 'Maringá', 'Blumenau',
+                      'São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Vitória', 'Campinas', 'Ribeirão Preto', 'Sorocaba', 'Uberlândia',
+                      'Brasília', 'Goiânia', 'Cuiabá', 'Campo Grande',
+                      'Salvador', 'Recife', 'Fortaleza', 'São Luís', 'Maceió', 'Teresina', 'Natal', 'João Pessoa', 'Aracaju'
+                    ].join('\n'))}
+                    className="text-[9px] text-neon hover:underline cursor-pointer"
+                  >
+                    Carregar Sugeridas (Regiões Sul, Sudeste, Centro-Oeste e Cap. Nordeste)
+                  </button>
+                </div>
+                <textarea
+                  rows={6}
+                  placeholder="Escreva uma cidade por linha (Ex: Sorocaba)..."
+                  value={cidadesInput}
+                  onChange={e => setCidadesInput(e.target.value)}
+                  className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-neon/40 transition-all font-mono leading-relaxed"
+                />
+              </div>
+
+              {/* Nichos Rotacionais */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                    Nichos a Prospectar ({nichosInput.split('\n').filter(Boolean).length} cadastrados)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setNichosInput([
+                      'Box de CrossFit',
+                      'Estúdio de Treinamento',
+                      'Centro de Treinamento Hyrox',
+                      'Academia'
+                    ].join('\n'))}
+                    className="text-[9px] text-neon hover:underline cursor-pointer"
+                  >
+                    Resetar Nichos Recomendados
+                  </button>
+                </div>
+                <textarea
+                  rows={6}
+                  placeholder="Escreva um nicho por linha..."
+                  value={nichosInput}
+                  onChange={e => setNichosInput(e.target.value)}
+                  className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-neon/40 transition-all font-mono leading-relaxed"
+                />
+              </div>
+
+              {/* Limite de Leads */}
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex justify-between">
+                  <span>Limite Diário de Captação (Apify)</span>
+                  <span className="text-neon font-black">{config.automacao_limite || 25} leads por execução</span>
+                </label>
+                <input
+                  type="range"
+                  min={5}
+                  max={50}
+                  step={5}
+                  value={config.automacao_limite}
+                  onChange={e => setConfig(prev => ({ ...prev, automacao_limite: parseInt(e.target.value) }))}
+                  className="w-full h-1 bg-dark-800 rounded-lg appearance-none cursor-pointer accent-neon"
+                />
+                <p className="text-[10px] text-zinc-500">
+                  💡 <strong>Atenção:</strong> Recomendamos manter em <strong>25 leads diários</strong> para garantir que a cota gratuita do Apify de US$ 5/mês dure o mês inteiro sem custos adicionais.
+                </p>
+              </div>
+            </div>
+
+            {/* Botão de Salvar Configs */}
+            <div className="pt-4 border-t border-dark-800 flex justify-end">
+              <button
+                onClick={saveAutomacaoConfig}
+                disabled={salvandoConfig}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-neon text-dark-950 font-bold text-xs hover:bg-neon/90 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {salvandoConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                {salvandoConfig ? 'Salvando...' : 'Salvar Configurações da Automação'}
+              </button>
+            </div>
+          </div>
+
+          {/* ─── Painel de Testes Práticos (Autocura & Validação Fácil) ─── */}
+          <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Play className="w-5 h-5 text-neon" />
+              <div>
+                <h3 className="text-sm font-bold text-white">Painel de Testes Rápidos</h3>
+                <p className="text-xs text-zinc-500">Dispare os gatilhos crons manualmente para validar o comportamento e depurar sem precisar esperar o agendador</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Simular extração */}
+              <div className="bg-dark-850 border border-dark-750 p-4 rounded-xl flex flex-col justify-between space-y-3">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 text-neon" />
+                    Extração & Agendamento (06:00)
+                  </h4>
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Dispara a extração do Apify na cidade atual da rotação, qualifica pelo Gemini e agenda os envios na fila.
+                  </p>
+                </div>
+                <button
+                  onClick={testarAgendamento}
+                  disabled={testandoAutomacao}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-neon text-dark-950 font-bold text-xs hover:bg-neon/90 transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  {testandoAutomacao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                  Simular Agendamento (Extração)
+                </button>
+              </div>
+
+              {/* Processar Fila */}
+              <div className="bg-dark-850 border border-dark-750 p-4 rounded-xl flex flex-col justify-between space-y-3">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                    Disparar Fila de WhatsApp (10:00 - 19:00)
+                  </h4>
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Processa as mensagens que já alcançaram seu horário agendado e dispara via webhook de WhatsApp cadastrado.
+                  </p>
+                </div>
+                <button
+                  onClick={testarProcessarFila}
+                  disabled={processandoFila}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-emerald-500 text-dark-950 font-bold text-xs hover:bg-emerald-400 transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  {processandoFila ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                  Processar Fila Agora
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Fila de Envios do Dia ─── */}
+          <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-neon" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Fila de Envios Agendados</h3>
+                  <p className="text-xs text-zinc-500">Leads qualificados agendados para receber abordagem hoje</p>
+                </div>
+              </div>
+              <button
+                onClick={fetchFila}
+                className="p-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {loadingFila ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-neon animate-spin" />
+              </div>
+            ) : fila.length === 0 ? (
+              <div className="text-center py-12 bg-dark-850/40 rounded-xl border border-dark-800/40">
+                <Clock className="w-6 h-6 text-zinc-700 mx-auto mb-2" />
+                <p className="text-xs text-zinc-500">Nenhum lead agendado na fila.</p>
+                <p className="text-[10px] text-zinc-650 mt-0.5">Use o botão "Simular Agendamento" para extrair e enfileirar leads de teste.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-dark-800 text-[10px] font-black text-zinc-500 uppercase tracking-wider">
+                      <th className="pb-3">Empresa / Cidade</th>
+                      <th className="pb-3">Contato</th>
+                      <th className="pb-3">Mensagem (IA)</th>
+                      <th className="pb-3">Agendado Para</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-dark-800/45 text-xs text-zinc-300">
+                    {fila.map(item => {
+                      const isHyrox = item.perfil_detectado === 'hyrox';
+                      const statusBadge = {
+                        pendente: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                        enviado: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                        falhou: 'bg-red-500/10 text-red-400 border-red-500/20'
+                      };
+
+                      return (
+                        <tr key={item.id} className="hover:bg-dark-850/30 transition-colors">
+                          <td className="py-3.5 pr-2">
+                            <div className="font-bold text-white truncate max-w-[160px]">{item.nome_empresa}</div>
+                            <div className="text-[10px] text-zinc-500 flex items-center gap-1.5 mt-0.5">
+                              <span className="truncate max-w-[100px]">{item.cidade_origem}</span>
+                              <span className="text-zinc-700">·</span>
+                              {isHyrox ? (
+                                <span className="inline-flex items-center gap-1 bg-pink-500/10 text-pink-400 border border-pink-500/20 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md">
+                                  <span className="h-1.5 w-1.5 bg-pink-500 rounded-full animate-pulse"></span>
+                                  Hyrox
+                                </span>
+                              ) : (
+                                <span className="text-zinc-650 uppercase text-[9px]">{item.perfil_detectado}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3.5 pr-2 font-mono text-zinc-400">{item.telefone}</td>
+                          <td className="py-3.5 pr-2 max-w-[200px]">
+                            <p className="truncate text-zinc-450" title={item.mensagem}>{item.mensagem}</p>
+                          </td>
+                          <td className="py-3.5 pr-2 text-zinc-400">
+                            {new Date(item.agendado_para).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}h
+                            <span className="text-[10px] text-zinc-650 ml-1">({new Date(item.agendado_para).toLocaleDateString('pt-BR')})</span>
+                          </td>
+                          <td className="py-3.5 pr-2">
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${statusBadge[item.status] || 'bg-zinc-800'}`}>
+                              {item.status}
+                            </span>
+                            {item.tentativas > 0 && (
+                              <span className="text-[9px] text-zinc-605 block mt-0.5">({item.tentativas} tent.)</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              {item.status === 'pendente' && (
+                                <button
+                                  onClick={() => dispararFilaLead(item)}
+                                  title="Enviar imediatamente"
+                                  className="p-1.5 bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Zap className="w-3.5 h-3.5 text-neon" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => removerItemFila(item.id)}
+                                title="Remover da fila"
+                                className="p-1.5 bg-dark-800 border border-dark-700 text-zinc-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ─── Histórico de Logs / Execuções ─── */}
+          <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-neon" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Histórico de Execuções</h3>
+                  <p className="text-xs text-zinc-500">Últimos logs da automação diária de prospecção</p>
+                </div>
+              </div>
+              <button
+                onClick={fetchHistorico}
+                className="p-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {loadingHistorico ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-neon animate-spin" />
+              </div>
+            ) : historico.length === 0 ? (
+              <div className="text-center py-8 text-zinc-500 text-xs">
+                Nenhuma execução registrada no histórico ainda.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                {historico.map(log => {
+                  const statusColor = log.status === 'sucesso' ? 'text-emerald-400' : 'text-red-400';
+                  return (
+                    <div key={log.id} className="bg-dark-850/45 border border-dark-800/80 rounded-xl p-4 flex flex-col md:flex-row justify-between md:items-center gap-3 text-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-white">Extração: {log.nicho_buscado}</span>
+                          <span className="text-zinc-600">·</span>
+                          <span className="text-zinc-400">{log.cidade_buscada}</span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed max-w-xl">{log.detalhes}</p>
+                      </div>
+                      <div className="flex items-center md:flex-col md:items-end gap-3 md:gap-1.5 text-[10px] shrink-0">
+                        <span className={`font-black uppercase tracking-wider ${statusColor}`}>{log.status}</span>
+                        <span className="text-zinc-500">{new Date(log.criado_em).toLocaleString('pt-BR')}</span>
+                        <div className="text-zinc-400 bg-dark-800 px-2 py-0.5 rounded border border-dark-700/60">
+                          Qualificados: <strong className="text-neon font-black">{log.leads_qualificados}</strong> / {log.leads_encontrados}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
