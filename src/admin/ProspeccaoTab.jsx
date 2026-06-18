@@ -233,12 +233,16 @@ export default function ProspeccaoTab() {
     setTestandoAutomacao(true);
     try {
       showToast('🧪 Simulando Cron de Extração...');
-      const res = await fetch('/api/prospeccao-proxy?service=apify&action=cron');
+      const res = await fetch('/api/prospeccao-proxy?service=apify&action=cron&force=true');
       const data = await res.json();
       if (res.ok) {
-        showToast('🚀 Automação diária disparada!');
-        fetchHistorico();
-        setTimeout(() => fetchFila(), 5000); // Dar tempo do webhook iniciar
+        if (data.status === 'inactive') {
+          showToast('⚠️ Automação inativa nas configurações.');
+        } else {
+          showToast('🚀 Automação diária disparada!');
+          fetchHistorico();
+          setTimeout(() => fetchFila(), 5000); // Dar tempo do webhook iniciar
+        }
       } else {
         throw new Error(data.error || 'Erro no agendamento');
       }

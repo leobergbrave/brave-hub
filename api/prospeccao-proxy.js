@@ -256,7 +256,8 @@ Sua tarefa é retornar estritamente um JSON no seguinte formato (sem formataçã
 
         // AÇÃO: CRON (Disparada diariamente)
         if (action === 'cron') {
-          if (!config.automacao_ativa) {
+          const force = req.query.force === 'true';
+          if (!config.automacao_ativa && !force) {
             return res.status(200).json({ status: 'inactive', message: 'Automação diária desativada.' });
           }
 
