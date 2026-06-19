@@ -139,7 +139,7 @@ export default function LandingPagesTab() {
         ...f.config,
         produtos: [...(f.config.produtos || []), {
           nome: 'Novo Produto', badge: 'Novidade', badgeCls: 'bg-orange-500',
-          tagline: '', emoji: '🏋️', alias: '', features: [''],
+          tagline: '', emoji: '🏋️', alias: '', img_url: '', features: [''],
         }],
       },
     }));
@@ -431,6 +431,16 @@ export default function LandingPagesTab() {
                         onChange={v => setProd(pIdx, 'alias', v)}
                         placeholder="remo"
                       />
+                      <Input
+                        label="URL da foto do produto"
+                        value={prod.img_url || ''}
+                        onChange={v => setProd(pIdx, 'img_url', v)}
+                        placeholder="https://..."
+                      />
+                      {prod.img_url && (
+                        <img src={prod.img_url} alt={prod.nome}
+                          className="w-full h-40 object-cover rounded-xl border border-dark-600 mt-1" />
+                      )}
 
                       {/* Features */}
                       <div className="space-y-2">

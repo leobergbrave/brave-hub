@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Check, ChevronRight, MessageCircle, Mail, Loader2, Users } from 'lucide-react';
+import { ChevronRight, MessageCircle, Mail, Loader2, Users, Star } from 'lucide-react';
 
 const IconInstagram = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -46,27 +46,24 @@ const DEFAULT_CONFIG = {
     texto: 'Começamos essa trajetória juntos em 2024 com o primeiro evento de corrida híbrida do Brasil. Construir uma marca de treinamento híbrido com a Brave é fácil e rápido.',
     autor: 'Gui Weisshaupt e Giselle Santos',
     empresa: 'Sócios do HTC Brasil',
+    img_url: '',
   },
   parceiros: ['HTC Brasil', 'O3', 'BRUK'],
   showcase: [
-    { nome: 'Sled Tech 15 Metros', emoji: '🛷' },
-    { nome: 'Turf',                emoji: '🏟️' },
-    { nome: 'Kettlebells Oficiais', emoji: '🏋️' },
-    { nome: 'Bags',                 emoji: '🎒' },
+    { nome: 'Sled Tech 15 Metros', emoji: '🛷', img_url: '' },
+    { nome: 'Turf',                emoji: '🏟️', img_url: '' },
+    { nome: 'Kettlebells Oficiais', emoji: '🏋️', img_url: '' },
+    { nome: 'Bags',                 emoji: '🎒', img_url: '' },
   ],
 };
 
 export default function LpBoxHibrido() {
-  const [cfg, setCfg]           = useState(DEFAULT_CONFIG);
-  const [loading, setLoading]   = useState(true);
-  const [tierIdx, setTierIdx]   = useState(0);
+  const [cfg, setCfg]         = useState(DEFAULT_CONFIG);
+  const [loading, setLoading] = useState(true);
+  const [tierIdx, setTierIdx] = useState(0);
 
   useEffect(() => {
-    supabase
-      .from('landing_pages_config')
-      .select('*')
-      .eq('id', 'box-hibrido-full')
-      .maybeSingle()
+    supabase.from('landing_pages_config').select('*').eq('id', 'box-hibrido-full').maybeSingle()
       .then(({ data }) => {
         if (data) {
           setCfg({
@@ -85,8 +82,8 @@ export default function LpBoxHibrido() {
   }, []);
 
   if (loading) return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
     </div>
   );
 
@@ -95,20 +92,20 @@ export default function LpBoxHibrido() {
   const msgTier = `Olá! Tenho interesse no Box Híbrido Full para ${tier.alunos} alunos. Pode me enviar uma cotação?`;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white antialiased">
+    <div className="min-h-screen bg-white text-gray-900 font-sans antialiased">
 
       {/* ── HEADER ──────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/5">
+      <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
           <div>
             <img src="/logo.png" alt="Brave Fitness" className="h-9 object-contain" />
-            <p className="text-[10px] text-zinc-600 mt-0.5 tracking-wider">{cfg.hero.breadcrumb}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5 tracking-wide">{cfg.hero.breadcrumb}</p>
           </div>
           <a
             href={wa(cfg.wa_msg_geral)}
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-orange-500 hover:bg-orange-400 text-white text-sm font-bold px-5 py-2.5 rounded-full transition-colors"
+            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-5 py-2.5 rounded-full transition-colors shadow-sm"
           >
             Solicitar Cotação
           </a>
@@ -116,21 +113,18 @@ export default function LpBoxHibrido() {
       </header>
 
       {/* ── HERO ────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden py-20 px-5">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full bg-orange-500/6 blur-[140px]" />
-        </div>
-        <div className="relative max-w-4xl mx-auto text-center">
-          <h1 className="text-6xl md:text-8xl font-black tracking-tight mb-5 leading-none">
+      <section className="bg-gray-50 border-b border-gray-200 py-20 px-5">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-6xl md:text-8xl font-black text-gray-900 tracking-tight mb-5 leading-none">
             {cfg.hero.headline}
           </h1>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto mb-12 leading-relaxed">
+          <p className="text-gray-500 text-lg max-w-2xl mx-auto mb-12 leading-relaxed">
             {cfg.hero.desc}
           </p>
 
           {/* ── SELETOR DE ALUNOS ── */}
-          <div className="inline-flex flex-col items-center gap-4 bg-white/3 border border-white/8 rounded-3xl p-6 mb-8">
-            <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-widest">
+          <div className="inline-flex flex-col items-center gap-5 bg-white border border-gray-200 rounded-3xl p-7 shadow-sm mb-8">
+            <div className="flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest">
               <Users className="w-3.5 h-3.5" />
               Quantos alunos no seu box?
             </div>
@@ -141,8 +135,8 @@ export default function LpBoxHibrido() {
                   onClick={() => setTierIdx(i)}
                   className={`w-14 h-14 rounded-2xl font-black text-sm transition-all ${
                     tierIdx === i
-                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
-                      : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white border border-white/8'
+                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-200'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-900'
                   }`}
                 >
                   {t.alunos}
@@ -151,85 +145,87 @@ export default function LpBoxHibrido() {
             </div>
 
             {/* PREÇOS */}
-            <div className="flex flex-col sm:flex-row items-center gap-6 pt-2 border-t border-white/8 w-full justify-center">
+            <div className="flex flex-col sm:flex-row items-center gap-8 pt-4 border-t border-gray-100 w-full justify-center">
               <div className="text-center">
-                <p className="text-zinc-600 text-[10px] uppercase tracking-widest mb-1">À vista</p>
-                <p className="text-3xl font-black text-emerald-400">{fmt(tier.preco_avista)}</p>
+                <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">À vista</p>
+                <p className="text-3xl font-black text-emerald-600">{fmt(tier.preco_avista)}</p>
               </div>
               {tier.parcelas_valor > 0 && (
                 <>
-                  <div className="text-zinc-700 text-xl font-light hidden sm:block">ou</div>
+                  <div className="text-gray-300 text-xl font-light hidden sm:block">ou</div>
                   <div className="text-center">
-                    <p className="text-zinc-600 text-[10px] uppercase tracking-widest mb-1">Parcelado</p>
-                    <p className="text-xl font-black text-white">
-                      {tier.parcelas_num}x de <span className="text-orange-400">{fmt(tier.parcelas_valor)}</span>
+                    <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Parcelado</p>
+                    <p className="text-xl font-black text-gray-900">
+                      {tier.parcelas_num}x de <span className="text-orange-500">{fmt(tier.parcelas_valor)}</span>
                     </p>
-                    <p className="text-zinc-600 text-[10px] mt-0.5">no cartão de crédito</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5">no cartão de crédito</p>
                   </div>
                 </>
               )}
               {tier.preco_avista === 0 && (
-                <div className="text-center">
-                  <p className="text-zinc-500 text-sm">Fale conosco para cotação personalizada</p>
-                </div>
+                <p className="text-gray-500 text-sm">Fale conosco para cotação personalizada</p>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a
-              href={wa(msgTier)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-white font-black text-lg px-9 py-4 rounded-2xl transition-colors shadow-2xl shadow-orange-500/25"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Adquira Seu Box Completo
-            </a>
-          </div>
+          <a
+            href={wa(msgTier)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-black text-lg px-9 py-4 rounded-xl transition-colors shadow-lg shadow-orange-200"
+          >
+            <MessageCircle className="w-5 h-5" />
+            Adquira Seu Box Completo
+          </a>
         </div>
       </section>
 
       {/* ── BADGES ──────────────────────────────────────────── */}
-      <section className="py-10 px-5 border-y border-white/5">
+      <section className="py-10 px-5 border-b border-gray-100 bg-white">
         <div className="max-w-4xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-5">
           {cfg.badges.map((b, i) => (
-            <div key={i} className="flex items-center gap-4 bg-white/3 border border-white/6 rounded-2xl px-5 py-4">
+            <div key={i} className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-2xl px-5 py-4">
               <span className="text-3xl shrink-0">{b.emoji}</span>
-              <p className="text-white font-bold text-sm leading-snug">{b.texto}</p>
+              <p className="text-gray-800 font-bold text-sm leading-snug">{b.texto}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── SHOWCASE ────────────────────────────────────────── */}
-      <section className="py-20 px-5">
+      <section className="py-20 px-5 bg-gray-50 border-b border-gray-200">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <span className="inline-block text-orange-400 text-[11px] font-black tracking-[0.2em] uppercase border border-orange-400/30 bg-orange-400/8 px-4 py-1.5 rounded-full mb-4">
-              Conheça Nossos Equipamentos
+            <span className="inline-block text-orange-600 text-[11px] font-black tracking-[0.2em] uppercase border border-orange-200 bg-orange-50 px-4 py-1.5 rounded-full mb-4">
+              Conheça os Equipamentos
             </span>
-            <h2 className="text-4xl font-black text-white">
-              Consulte Todos os Produtos do<br />
-              <span className="text-orange-400">BOX HÍBRIDO FULL {tier.alunos} ALUNOS</span>
+            <h2 className="text-4xl font-black text-gray-900">
+              Box Híbrido Full <span className="text-orange-500">{tier.alunos} Alunos</span>
             </h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
             {cfg.showcase.map((item, i) => {
               const msgItem = `Olá! Quero saber mais sobre o ${item.nome} da Brave para meu box.`;
               return (
-                <div key={i} className="bg-[#111] border border-white/6 rounded-2xl overflow-hidden hover:border-orange-500/30 transition-all group flex flex-col">
-                  <div className="h-40 bg-gradient-to-br from-white/3 to-transparent flex items-center justify-center border-b border-white/5">
-                    <span className="text-5xl opacity-60 group-hover:opacity-90 transition-opacity">{item.emoji}</span>
+                <div key={i} className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:border-orange-300 hover:shadow-md transition-all group flex flex-col">
+                  <div className="h-44 bg-gray-50 border-b border-gray-100 overflow-hidden flex items-center justify-center relative">
+                    {item.img_url ? (
+                      <img
+                        src={item.img_url}
+                        alt={item.nome}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <>
+                        <span className="text-5xl opacity-25">{item.emoji}</span>
+                        <span className="absolute bottom-2 text-[10px] text-gray-400">Foto em breve</span>
+                      </>
+                    )}
                   </div>
                   <div className="p-4 flex-1 flex flex-col">
-                    <p className="text-white font-bold text-sm mb-3 flex-1">{item.nome}</p>
-                    <a
-                      href={wa(msgItem)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-orange-400 hover:text-orange-300 font-bold transition-colors flex items-center gap-1"
-                    >
+                    <p className="text-gray-900 font-bold text-sm mb-3 flex-1">{item.nome}</p>
+                    <a href={wa(msgItem)} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-orange-500 hover:text-orange-600 font-bold transition-colors flex items-center gap-1">
                       Saiba Mais <ChevronRight className="w-3 h-3" />
                     </a>
                   </div>
@@ -241,33 +237,43 @@ export default function LpBoxHibrido() {
       </section>
 
       {/* ── DEPOIMENTO ──────────────────────────────────────── */}
-      <section className="py-20 px-5 bg-white/[0.015]">
+      <section className="py-20 px-5 bg-white">
         <div className="max-w-3xl mx-auto text-center">
-          <span className="inline-block text-zinc-500 text-[11px] font-black tracking-[0.2em] uppercase mb-8">
-            Depoimento de Quem Usa BRAVE
-          </span>
-          <blockquote className="text-xl md:text-2xl text-white font-medium leading-relaxed mb-8 relative">
-            <span className="text-orange-400 text-5xl leading-none absolute -top-4 -left-2 opacity-40">"</span>
-            {cfg.testimonial.texto}
-            <span className="text-orange-400 text-5xl leading-none opacity-40">"</span>
+          <div className="flex justify-center gap-1 mb-6">
+            {[...Array(5)].map((_, i) => (
+              <Star key={i} className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+            ))}
+          </div>
+          <blockquote className="text-xl md:text-2xl text-gray-700 font-medium leading-relaxed mb-8 italic">
+            "{cfg.testimonial.texto}"
           </blockquote>
-          <div>
-            <p className="text-white font-bold">{cfg.testimonial.autor}</p>
-            <p className="text-zinc-500 text-sm">{cfg.testimonial.empresa}</p>
+          <div className="flex items-center justify-center gap-4">
+            {cfg.testimonial.img_url ? (
+              <img src={cfg.testimonial.img_url} alt={cfg.testimonial.autor}
+                className="w-14 h-14 rounded-full object-cover border-2 border-gray-100" />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-gray-200">
+                <Users className="w-6 h-6" />
+              </div>
+            )}
+            <div className="text-left">
+              <p className="text-gray-900 font-bold">{cfg.testimonial.autor}</p>
+              <p className="text-gray-500 text-sm">{cfg.testimonial.empresa}</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* ── PARCEIROS ───────────────────────────────────────── */}
-      <section className="py-16 px-5">
+      <section className="py-14 px-5 bg-gray-50 border-y border-gray-200">
         <div className="max-w-3xl mx-auto text-center">
-          <p className="text-zinc-600 text-[11px] font-black tracking-[0.2em] uppercase mb-8">
+          <p className="text-gray-400 text-[11px] font-black tracking-[0.2em] uppercase mb-8">
             Principais Nomes do Treinamento Híbrido no Brasil
           </p>
-          <div className="flex items-center justify-center gap-8 flex-wrap">
+          <div className="flex items-center justify-center gap-6 flex-wrap">
             {cfg.parceiros.map((p, i) => (
-              <div key={i} className="px-6 py-3 bg-white/3 border border-white/8 rounded-xl">
-                <p className="text-white font-black text-sm tracking-wide">{p}</p>
+              <div key={i} className="px-6 py-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+                <p className="text-gray-700 font-black text-sm tracking-wide">{p}</p>
               </div>
             ))}
           </div>
@@ -275,35 +281,24 @@ export default function LpBoxHibrido() {
       </section>
 
       {/* ── CTA FINAL ───────────────────────────────────────── */}
-      <section className="py-24 px-5 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-orange-500/6 blur-[120px]" />
-        </div>
-        <div className="relative max-w-2xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-black text-white mb-3 leading-tight">
+      <section className="py-24 px-5 bg-gray-900">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-4 leading-tight">
             Pronto Para Ter os Melhores<br />
             <span className="text-orange-400">Equipamentos Híbrido</span><br />
             no Seu Box?
           </h2>
-          <p className="text-gray-500 text-sm mb-10">
+          <p className="text-gray-400 text-sm mb-10 leading-relaxed">
             Um especialista BRAVE entra em contato pelo WhatsApp com uma proposta exclusiva para o seu projeto.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a
-              href={wa(msgTier)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xl px-10 py-5 rounded-2xl transition-colors shadow-2xl shadow-emerald-500/20"
-            >
+            <a href={wa(msgTier)} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-3 bg-green-500 hover:bg-green-400 text-white font-black text-xl px-10 py-5 rounded-2xl transition-colors">
               <MessageCircle className="w-6 h-6" />
               Adquira Seu Box Completo
             </a>
-            <a
-              href={wa(cfg.wa_msg_geral)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 border border-white/10 hover:border-white/20 text-white font-bold text-base px-8 py-5 rounded-2xl transition-all"
-            >
+            <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 border border-white/20 hover:border-white/40 text-white font-bold text-base px-8 py-5 rounded-2xl transition-all">
               Solicitar Cotação
             </a>
           </div>
@@ -311,13 +306,14 @@ export default function LpBoxHibrido() {
       </section>
 
       {/* ── FOOTER ──────────────────────────────────────────── */}
-      <footer className="border-t border-white/5 py-12 px-5">
+      <footer className="bg-gray-900 border-t border-white/5 py-12 px-5">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
             <div>
-              <img src="/logo.png" alt="Brave Fitness" className="h-8 object-contain mb-3" />
-              <p className="text-gray-600 text-sm">CNPJ: 33.167.844/0001-80</p>
-              <a href="mailto:comercial@bravefitness.com.br" className="text-gray-600 text-sm hover:text-gray-400 transition-colors flex items-center gap-1.5 mt-1">
+              <img src="/logo.png" alt="Brave Fitness" className="h-8 object-contain mb-3 brightness-0 invert" />
+              <p className="text-gray-500 text-sm">CNPJ: 33.167.844/0001-80</p>
+              <a href="mailto:comercial@bravefitness.com.br"
+                className="text-gray-500 text-sm hover:text-gray-300 flex items-center gap-1.5 mt-1 transition-colors">
                 <Mail className="w-3.5 h-3.5" />
                 comercial@bravefitness.com.br
               </a>
@@ -330,14 +326,14 @@ export default function LpBoxHibrido() {
                 { href: wa(cfg.wa_msg_geral),                  Icon: MessageCircle },
               ].map(({ href, Icon }, i) => (
                 <a key={i} href={href} target="_blank" rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-full border border-white/8 flex items-center justify-center text-gray-600 hover:text-white hover:border-white/20 transition-all">
+                  className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-gray-500 hover:text-white hover:border-white/30 transition-all">
                   <Icon className="w-4 h-4" />
                 </a>
               ))}
             </div>
           </div>
           <div className="pt-6 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-gray-700 text-sm">© 2026 Brave Fitness. Todos os direitos reservados.</p>
+            <p className="text-gray-600 text-sm">© 2025 Brave Fitness. Todos os direitos reservados.</p>
             <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
               className="text-sm font-bold text-orange-400 hover:text-orange-300 transition-colors">
               Solicitar Cotação →
