@@ -253,69 +253,86 @@ export default async function handler(req, res) {
         }
 
         const webhookUrl = config.automacao_webhook_whatsapp.trim();
+        const agora = new Date();
 
-        const { data: pendentes, error: errFila } = await supabase
+        // Busca todos os atrasados, ordenados do mais velho ao mais novo
+        const { data: atrasados, error: errFila } = await supabase
           .from('prospeccao_fila_envio')
           .select('*')
           .eq('status', 'pendente')
-          .lte('agendado_para', new Date().toISOString());
+          .lte('agendado_para', agora.toISOString())
+          .order('agendado_para', { ascending: true });
 
         if (errFila) throw errFila;
 
-        if (!pendentes || pendentes.length === 0) {
-          return res.status(200).json({ message: 'Nenhuma mensagem pendente na fila para disparo.' });
+        if (!atrasados || atrasados.length === 0) {
+          return res.status(200).json({ message: 'Nenhuma mensagem pendente na fila para disparo.', enviados: 0, falhas: 0, reagendados: 0 });
         }
 
-        console.log(`[Fila] ${pendentes.length} mensagens prontas para disparo.`);
-
+        // Envia apenas o PRIMEIRO (mais antigo)
+        const lead = atrasados[0];
         let enviados = 0;
         let falhas = 0;
 
-        for (const lead of pendentes) {
-          try {
-            const response = await fetch(webhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                nome_empresa:      lead.nome_empresa,
-                telefone:          lead.telefone,
-                mensagem_ativacao: config.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?',
-                gancho_inicial:    lead.mensagem,
-                perfil_detectado:  lead.perfil_detectado,
-                cidade_origem:     lead.cidade_origem,
-                segmento_origem:   lead.segmento_origem
-              })
-            });
+        try {
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nome_empresa:      lead.nome_empresa,
+              telefone:          lead.telefone,
+              mensagem_ativacao: config.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?',
+              gancho_inicial:    lead.mensagem,
+              perfil_detectado:  lead.perfil_detectado,
+              cidade_origem:     lead.cidade_origem,
+              segmento_origem:   lead.segmento_origem
+            })
+          });
 
-            const novasTentativas = lead.tentativas + 1;
-            if (response.ok) {
-              enviados++;
-              await supabase.from('prospeccao_fila_envio').update({
-                status: 'enviado',
-                enviado_em: new Date().toISOString(),
-                tentativas: novasTentativas
-              }).eq('id', lead.id);
-            } else {
-              falhas++;
-              const errText = await response.text();
-              await supabase.from('prospeccao_fila_envio').update({
-                status: novasTentativas >= 3 ? 'falhou' : 'pendente',
-                tentativas: novasTentativas,
-                erro_mensagem: `HTTP ${response.status}: ${errText.substring(0, 200)}`
-              }).eq('id', lead.id);
-            }
-          } catch (errDisparo) {
+          const novasTentativas = lead.tentativas + 1;
+          if (response.ok) {
+            enviados++;
+            await supabase.from('prospeccao_fila_envio').update({
+              status: 'enviado',
+              enviado_em: new Date().toISOString(),
+              tentativas: novasTentativas
+            }).eq('id', lead.id);
+          } else {
             falhas++;
-            const novasTentativas = lead.tentativas + 1;
+            const errText = await response.text();
             await supabase.from('prospeccao_fila_envio').update({
               status: novasTentativas >= 3 ? 'falhou' : 'pendente',
               tentativas: novasTentativas,
-              erro_mensagem: errDisparo.message
+              erro_mensagem: `HTTP ${response.status}: ${errText.substring(0, 200)}`
             }).eq('id', lead.id);
           }
+        } catch (errDisparo) {
+          falhas++;
+          const novasTentativas = lead.tentativas + 1;
+          await supabase.from('prospeccao_fila_envio').update({
+            status: novasTentativas >= 3 ? 'falhou' : 'pendente',
+            tentativas: novasTentativas,
+            erro_mensagem: errDisparo.message
+          }).eq('id', lead.id);
         }
 
-        return res.status(200).json({ message: 'Fila processada.', enviados, falhas });
+        // Reagendar os demais atrasados com intervalo mínimo de 5 min cada
+        // Itens no futuro (agendado_para > agora) não são tocados
+        const restantes = atrasados.slice(1);
+        let reagendados = 0;
+        for (let i = 0; i < restantes.length; i++) {
+          const novoHorario = new Date(agora.getTime() + (i + 1) * 5 * 60 * 1000);
+          await supabase.from('prospeccao_fila_envio')
+            .update({ agendado_para: novoHorario.toISOString() })
+            .eq('id', restantes[i].id);
+          reagendados++;
+        }
+
+        if (reagendados > 0) {
+          console.log(`[Fila] ${reagendados} mensagens atrasadas reagendadas com intervalo de 5 min.`);
+        }
+
+        return res.status(200).json({ message: 'Fila processada.', enviados, falhas, reagendados });
       }
 
       // ── AÇÃO: DISPARO MANUAL (Nova Raspagem manual via formulário) ─────────────
