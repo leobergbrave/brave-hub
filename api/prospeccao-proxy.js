@@ -228,12 +228,13 @@ export default async function handler(req, res) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                nome_empresa: lead.nome_empresa,
-                telefone: lead.telefone,
-                mensagem: lead.mensagem,
-                perfil_detectado: lead.perfil_detectado,
-                cidade_origem: lead.cidade_origem,
-                segmento_origem: lead.segmento_origem
+                nome_empresa:      lead.nome_empresa,
+                telefone:          lead.telefone,
+                mensagem_ativacao: config.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?',
+                gancho_inicial:    lead.mensagem,
+                perfil_detectado:  lead.perfil_detectado,
+                cidade_origem:     lead.cidade_origem,
+                segmento_origem:   lead.segmento_origem
               })
             });
 
@@ -497,32 +498,6 @@ Retorne APENAS um JSON limpo (sem markdown):
       console.log(`[Background] Lead "${item.title}" agendado para ${agendadoPara.toISOString()}`);
     }
 
-    // ── Disparar Fluxo BotConversa (webhook único com campo perfil_detectado) ───
-    const webhookBotConversa = config.webhook_botconversa;
-
-    if (webhookBotConversa) {
-      try {
-        const payloadBC = {
-          telefone:          item._telefoneLimpo,
-          nome_empresa:      item.title,
-          mensagem_ativacao: config.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?',
-          gancho_inicial:    mensagemFinal,
-          perfil_detectado:  perfil,
-          cidade_origem:     item.city || cidadeBuscada,
-          segmento_origem:   item.categoryName || nichoBuscado
-        };
-        const reBC = await fetch(webhookBotConversa, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payloadBC)
-        });
-        console.log(`[BotConversa] Disparo para "${item.title}" (${perfil}): HTTP ${reBC.status}`);
-      } catch (errBC) {
-        console.warn(`[BotConversa] Falha ao disparar para "${item.title}":`, errBC.message);
-      }
-    } else {
-      console.log(`[BotConversa] Webhook não configurado. Pulando.`);
-    }
   }
 
   // Registrar histórico da execução
