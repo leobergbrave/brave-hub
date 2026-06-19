@@ -81,17 +81,8 @@ export default function LpErgometros() {
 
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
-        <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-5 py-4">
           <img src="/logo-lp.png" alt="Brave Fitness" className="h-10 object-contain" />
-          <a
-            href={wa(cfg.wa_msg_geral)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-sm px-5 py-2.5 rounded-full transition-colors shadow-lg shadow-neon/20"
-          >
-            <FileText className="w-4 h-4" />
-            Solicitar Cotação
-          </a>
         </div>
       </header>
 
@@ -111,16 +102,6 @@ export default function LpErgometros() {
           <p className="text-zinc-400 text-base md:text-lg max-w-xl leading-relaxed mb-8 md:mb-10">
             {cfg.hero.desc}
           </p>
-
-          <a
-            href={wa(cfg.wa_msg_geral)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-sm md:text-base px-7 py-3.5 md:px-8 md:py-4 rounded-full transition-colors shadow-xl shadow-neon/25"
-          >
-            <FileText className="w-4 h-4 md:w-5 md:h-5" />
-            Solicitar Cotação
-          </a>
 
           <div className="mt-10 md:mt-16 grid grid-cols-1 md:grid-cols-3 gap-4">
             {PILARES.map(({ Icon, titulo, desc }, i) => (
@@ -143,7 +124,7 @@ export default function LpErgometros() {
             <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight">
               Nossa Linha <span className="text-neon">Completa</span>
             </h2>
-            <p className="text-zinc-500 mt-3 text-sm md:text-base">Clique em "Solicitar Cotação" para receber uma proposta personalizada.</p>
+            <p className="text-zinc-500 mt-3 text-sm md:text-base">Linha completa de ergômetros para box CrossFit.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
@@ -168,7 +149,7 @@ export default function LpErgometros() {
                   <div className="p-6 flex flex-col flex-1">
                     <h3 className="font-black text-xl text-white mb-1">{produto.nome}</h3>
                     <p className="text-neon text-sm font-semibold mb-5">{produto.tagline}</p>
-                    <ul className="space-y-2 flex-1 mb-6">
+                    <ul className="space-y-2">
                       {(produto.features || []).map((f, j) => (
                         <li key={j} className="flex items-start gap-2.5 text-sm text-zinc-400">
                           <Check className="w-4 h-4 text-neon mt-0.5 shrink-0" />
@@ -176,19 +157,6 @@ export default function LpErgometros() {
                         </li>
                       ))}
                     </ul>
-                    <div className="space-y-2">
-                      <a href={wa(msgProduto)} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full bg-neon hover:bg-neon-dim text-dark-950 font-black py-3 rounded-xl transition-colors">
-                        <MessageCircle className="w-4 h-4" />
-                        Solicitar Cotação
-                      </a>
-                      {produto.alias && (
-                        <a href={`/?produtos=${produto.alias}`}
-                          className="flex items-center justify-center w-full border border-dark-600 hover:border-neon/30 text-zinc-500 hover:text-neon font-semibold py-2.5 rounded-xl transition-all text-sm">
-                          Gerar Orçamento Detalhado
-                        </a>
-                      )}
-                    </div>
                   </div>
                 </div>
               );
@@ -244,12 +212,8 @@ export default function LpErgometros() {
               ))}
             </div>
           </div>
-          <div className="pt-6 border-t border-dark-700 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="pt-6 border-t border-dark-700 text-center md:text-left">
             <p className="text-zinc-700 text-sm">© 2025 Brave Fitness. Todos os direitos reservados.</p>
-            <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
-              className="text-sm font-bold text-neon hover:text-neon-dim transition-colors">
-              Solicitar Cotação →
-            </a>
           </div>
         </div>
       </footer>

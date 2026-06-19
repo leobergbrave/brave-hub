@@ -103,16 +103,11 @@ export default function LpBoxHibrido() {
 
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
-        <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-5 py-4">
           <div>
             <img src="/logo-lp.png" alt="Brave Fitness" className="h-10 object-contain" />
             <p className="text-[10px] text-zinc-600 mt-0.5 tracking-wide">{cfg.hero.breadcrumb}</p>
           </div>
-          <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-sm px-5 py-2.5 rounded-full transition-colors shadow-lg shadow-neon/20">
-            <FileText className="w-4 h-4" />
-            Solicitar Cotação
-          </a>
         </div>
       </header>
 
@@ -298,15 +293,11 @@ export default function LpBoxHibrido() {
           <p className="text-zinc-500 text-sm md:text-base mb-8 md:mb-10 leading-relaxed">
             Um especialista BRAVE entra em contato pelo WhatsApp com uma proposta exclusiva.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="flex justify-center">
             <a href={wa(msgTier)} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-3 bg-neon hover:bg-neon-dim text-dark-950 font-black text-base md:text-xl px-8 md:px-10 py-4 md:py-5 rounded-full transition-colors shadow-2xl shadow-neon/20 animate-pulse-neon">
               <MessageCircle className="w-5 h-5 md:w-6 md:h-6" />
               Adquira Seu Box Completo
-            </a>
-            <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 border border-dark-600 hover:border-neon/30 text-zinc-400 hover:text-neon font-bold text-sm md:text-base px-7 py-4 md:px-8 md:py-5 rounded-full transition-all">
-              Solicitar Cotação
             </a>
           </div>
         </div>
@@ -339,12 +330,8 @@ export default function LpBoxHibrido() {
               ))}
             </div>
           </div>
-          <div className="pt-6 border-t border-dark-700 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="pt-6 border-t border-dark-700 text-center md:text-left">
             <p className="text-zinc-700 text-sm">© 2025 Brave Fitness. Todos os direitos reservados.</p>
-            <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
-              className="text-sm font-bold text-neon hover:text-neon-dim transition-colors">
-              Solicitar Cotação →
-            </a>
           </div>
         </div>
       </footer>
