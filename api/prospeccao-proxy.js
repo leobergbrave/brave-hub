@@ -61,39 +61,57 @@ export default async function handler(req, res) {
       // ── AÇÃO: WEBHOOK (Callback do Apify após execução) ─────────────────────
       // O Apify faz um POST em ?service=apify&action=webhook com { eventData, resource }
       if (action === 'webhook') {
-        console.log('[Webhook Apify] Recebendo callback do Apify...');
-        console.log('[Webhook Apify] Body keys:', Object.keys(req.body || {}));
+        const rawBody = req.body || {};
+        console.log('[Webhook Apify] Body keys:', Object.keys(rawBody));
+        console.log('[Webhook Apify] Raw body (truncated):', JSON.stringify(rawBody).slice(0, 400));
 
         // Parsear eventData e resource (podem vir como string ou objeto)
-        let eventData = req.body?.eventData;
-        let resource = req.body?.resource;
+        let eventData = rawBody.eventData;
+        let resource = rawBody.resource;
 
-        if (typeof eventData === 'string') {
-          try { eventData = JSON.parse(eventData); } catch (e) { /* já é string */ }
-        }
-        if (typeof resource === 'string') {
-          try { resource = JSON.parse(resource); } catch (e) { /* já é string */ }
-        }
+        if (typeof eventData === 'string') { try { eventData = JSON.parse(eventData); } catch (_) {} }
+        if (typeof resource === 'string')  { try { resource = JSON.parse(resource);  } catch (_) {} }
 
-        const runId = resource?.id;
-        const datasetId = resource?.defaultDatasetId;
-        const status = resource?.status;
+        // Extrair runId: resource.id tem prioridade, fallback para eventData
+        let runId = resource?.id
+          || eventData?.eventData?.actorRunId
+          || eventData?.actorRunId
+          || rawBody.actorRunId;
+
+        let datasetId = resource?.defaultDatasetId;
+        let status = resource?.status;
 
         console.log(`[Webhook Apify] runId=${runId} status=${status} datasetId=${datasetId}`);
 
         // Responder imediatamente ao Apify para não timeout
         res.status(200).json({ message: 'Webhook recebido. Processando...' });
 
-        // Processar em background (após resposta enviada)
-        if (status !== 'SUCCEEDED' || !datasetId) {
-          console.log('[Webhook Apify] Execução não bem-sucedida ou sem dataset. Registrando histórico de erro.');
+        // Se temos runId mas não temos datasetId, buscar detalhes do run na API do Apify
+        if (runId && (!datasetId || !status || status !== 'SUCCEEDED')) {
+          try {
+            const runInfoResp = await fetch(
+              `https://api.apify.com/v2/actor-runs/${runId}?token=${token}`
+            );
+            if (runInfoResp.ok) {
+              const runInfo = await runInfoResp.json();
+              status    = runInfo.data?.status    || status;
+              datasetId = runInfo.data?.defaultDatasetId || datasetId;
+              console.log(`[Webhook Apify] Run info buscado via API: status=${status} datasetId=${datasetId}`);
+            }
+          } catch (errRunInfo) {
+            console.warn('[Webhook Apify] Falha ao buscar run info:', errRunInfo.message);
+          }
+        }
+
+        if (!runId || status !== 'SUCCEEDED' || !datasetId) {
+          console.log('[Webhook Apify] Execução inválida ou sem dataset. Registrando erro.');
           await supabase.from('prospeccao_historico').insert({
             nicho_buscado: 'Automático',
             cidade_buscada: 'Desconhecida',
             leads_encontrados: 0,
             leads_qualificados: 0,
             status: 'erro',
-            detalhes: `Execução do Apify com status: ${status || 'desconhecido'}. runId: ${runId || 'N/A'}`
+            detalhes: `Apify status: ${status || 'desconhecido'}. runId: ${runId || 'N/A'}. datasetId: ${datasetId || 'N/A'}`
           });
           return;
         }
