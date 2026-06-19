@@ -39,8 +39,7 @@ export default function ProspeccaoTab() {
     automacao_cidade_atual_index: 0,
     automacao_limite: 25,
     automacao_webhook_whatsapp: '',
-    webhook_botconversa: '',
-    mensagem_ativacao: 'Oi pessoal {{nome_empresa}}, tudo bem?'
+    webhook_botconversa: ''
   });
   const [cidadesInput, setCidadesInput] = useState('');
   const [nichosInput, setNichosInput] = useState('');
@@ -106,8 +105,7 @@ export default function ProspeccaoTab() {
           automacao_cidade_atual_index: data.automacao_cidade_atual_index || 0,
           automacao_limite: data.automacao_limite || 25,
           automacao_webhook_whatsapp: data.automacao_webhook_whatsapp || '',
-          webhook_botconversa: data.webhook_botconversa || '',
-          mensagem_ativacao: data.mensagem_ativacao || 'Oi pessoal {{nome_empresa}}, tudo bem?'
+          webhook_botconversa: data.webhook_botconversa || ''
         });
         setCidadesInput((data.automacao_cidades || []).join('\n'));
         setNichosInput((data.automacao_nichos || ['Box de CrossFit', 'Estúdio de Treinamento', 'Centro de Treinamento Hyrox', 'Academia']).join('\n'));
@@ -167,7 +165,6 @@ export default function ProspeccaoTab() {
           automacao_cidades: cidadesArray,
           automacao_limite: parseInt(config.automacao_limite || 25),
           automacao_webhook_whatsapp: config.automacao_webhook_whatsapp.trim(),
-          mensagem_ativacao: config.mensagem_ativacao.trim() || 'Oi pessoal {{nome_empresa}}, tudo bem?',
           updated_at: new Date().toISOString()
         })
         .eq('id', 1);
@@ -1302,21 +1299,6 @@ export default function ProspeccaoTab() {
               </div>
             </div>
 
-            {/* Mensagem de Ativação */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                Mensagem de Ativação (MSG 0 — enviada antes do gancho)
-              </label>
-              <input
-                type="text"
-                placeholder="Oi, tudo bem? 👋"
-                value={config.mensagem_ativacao}
-                onChange={e => setConfig(prev => ({ ...prev, mensagem_ativacao: e.target.value }))}
-                className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/40 transition-all"
-              />
-              <p className="text-[10px] text-zinc-600">Use <code className="text-purple-400 bg-dark-800 px-1 rounded">{'{{nome_empresa}}'}</code> para inserir o nome da empresa. Ex: <span className="text-zinc-500 italic">Oi, {'{{nome_empresa}'}{'}'} ! Tudo bem? 👋</span></p>
-            </div>
-
             {/* Como configurar as condições no BotConversa */}
             <div className="bg-dark-950 border border-purple-500/10 rounded-xl p-4 space-y-3">
               <p className="text-[10px] font-black text-purple-400 uppercase tracking-wider">⚙️ Como configurar as condições no BotConversa</p>
@@ -1341,13 +1323,12 @@ export default function ProspeccaoTab() {
             <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-2">
               <p className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">📦 Payload enviado ao BotConversa (campos disponíveis)</p>
               <pre className="text-[10px] text-zinc-400 font-mono leading-relaxed select-all">{`{
-  "telefone":          "11999999999",
-  "nome_empresa":      "Box CrossFit Alpha",
-  "mensagem_ativacao": "Oi, tudo bem? 👋",
-  "gancho_inicial":    "Mensagem personalizada da IA",
-  "perfil_detectado":  "crossfit | hyrox | academia | studio",
-  "cidade_origem":     "São Paulo",
-  "segmento_origem":   "Box de CrossFit"
+  "telefone":         "5541999999999",
+  "nome_empresa":     "Box CrossFit Alpha",
+  "gancho_ia":        "Mensagem personalizada gerada pelo Gemini",
+  "perfil_detectado": "crossfit | hyrox | academia | studio",
+  "cidade_origem":    "Curitiba",
+  "segmento_origem":  "Box de CrossFit"
 }`}</pre>
             </div>
 

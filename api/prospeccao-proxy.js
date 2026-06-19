@@ -281,8 +281,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({
               nome_empresa:      lead.nome_empresa,
               telefone:          lead.telefone,
-              mensagem_ativacao: (config.mensagem_ativacao || 'Oi, {{nome_empresa}}! Tudo bem? 👋').replace(/\{\{nome_empresa\}\}/g, lead.nome_empresa || ''),
-              gancho_inicial:    lead.mensagem,
+              gancho_ia:         lead.mensagem,
               perfil_detectado:  lead.perfil_detectado,
               cidade_origem:     lead.cidade_origem,
               segmento_origem:   lead.segmento_origem
