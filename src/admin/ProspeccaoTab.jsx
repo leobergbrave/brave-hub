@@ -55,6 +55,8 @@ export default function ProspeccaoTab() {
   const [loadingFila, setLoadingFila] = useState(false);
   const [testandoAutomacao, setTestandoAutomacao] = useState(false);
   const [processandoFila, setProcessandoFila] = useState(false);
+  const [resultadoTeste, setResultadoTeste] = useState(null);
+  const [resultadoFila, setResultadoFila] = useState(null);
 
   // Form de Raspagem
   const [nicho, setNicho] = useState('Box de Crossfit');
@@ -236,24 +238,25 @@ export default function ProspeccaoTab() {
   // ─── Simular Cron de Extração (06h AM) ──────────────────────────────────────
   const testarAgendamento = async () => {
     setTestandoAutomacao(true);
+    setResultadoTeste(null);
     try {
-      showToast('🧪 Simulando Cron de Extração...');
       const res = await fetch('/api/prospeccao-proxy?service=apify&action=cron&force=true');
       const data = await res.json();
+      setResultadoTeste({ ok: res.ok, status: res.status, data });
       if (res.ok) {
         if (data.status === 'inactive') {
           showToast('⚠️ Automação inativa nas configurações.');
         } else {
-          showToast('🚀 Automação diária disparada!');
+          showToast('🚀 Extração iniciada!');
           fetchHistorico();
-          setTimeout(() => fetchFila(), 5000); // Dar tempo do webhook iniciar
+          setTimeout(() => fetchFila(), 8000);
         }
       } else {
-        throw new Error(data.error || 'Erro no agendamento');
+        showToast(`❌ ${data.error || 'Erro no agendamento'}`);
       }
     } catch (e) {
-      console.error(e);
-      showToast(`❌ Erro no teste: ${e.message}`);
+      setResultadoTeste({ ok: false, status: 0, data: { error: e.message } });
+      showToast(`❌ ${e.message}`);
     } finally {
       setTestandoAutomacao(false);
     }
@@ -262,19 +265,20 @@ export default function ProspeccaoTab() {
   // ─── Simular Cron de Fila (Disparos 10h-19h) ────────────────────────────────
   const testarProcessarFila = async () => {
     setProcessandoFila(true);
+    setResultadoFila(null);
     try {
-      showToast('⚡ Processando mensagens pendentes...');
       const res = await fetch('/api/prospeccao-proxy?service=apify&action=fila');
       const data = await res.json();
+      setResultadoFila({ ok: res.ok, status: res.status, data });
       if (res.ok) {
         showToast(`✅ Fila processada! Enviados: ${data.enviados || 0}, Falhas: ${data.falhas || 0}`);
         fetchFila();
       } else {
-        throw new Error(data.message || 'Erro');
+        showToast(`❌ ${data.error || data.message || 'Erro na fila'}`);
       }
     } catch (e) {
-      console.error(e);
-      showToast('❌ Erro ao disparar mensagens.');
+      setResultadoFila({ ok: false, status: 0, data: { error: e.message } });
+      showToast(`❌ ${e.message}`);
     } finally {
       setProcessandoFila(false);
     }
@@ -1359,8 +1363,13 @@ export default function ProspeccaoTab() {
                   className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-neon text-dark-950 font-bold text-xs hover:bg-neon/90 transition-all disabled:opacity-40 cursor-pointer"
                 >
                   {testandoAutomacao ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                  Simular Agendamento (Extração)
+                  {testandoAutomacao ? 'Extraindo...' : 'Simular Agendamento (Extração)'}
                 </button>
+                {resultadoTeste && (
+                  <div className={`text-[10px] font-mono rounded-lg px-3 py-2 mt-1 ${resultadoTeste.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                    <span className="font-bold">HTTP {resultadoTeste.status}</span> — {JSON.stringify(resultadoTeste.data).slice(0, 120)}
+                  </div>
+                )}
               </div>
 
               {/* Processar Fila */}
@@ -1380,8 +1389,13 @@ export default function ProspeccaoTab() {
                   className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-emerald-500 text-dark-950 font-bold text-xs hover:bg-emerald-400 transition-all disabled:opacity-40 cursor-pointer"
                 >
                   {processandoFila ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-                  Processar Fila Agora
+                  {processandoFila ? 'Processando...' : 'Processar Fila Agora'}
                 </button>
+                {resultadoFila && (
+                  <div className={`text-[10px] font-mono rounded-lg px-3 py-2 mt-1 ${resultadoFila.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                    <span className="font-bold">HTTP {resultadoFila.status}</span> — {JSON.stringify(resultadoFila.data).slice(0, 120)}
+                  </div>
+                )}
               </div>
             </div>
           </div>
