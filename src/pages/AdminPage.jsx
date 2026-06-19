@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap, Heart, Award, Layers, Users, Mail, BookUser, Search } from 'lucide-react';
+import { Package, Truck, Tag, Receipt, BarChart3, Megaphone, Menu, X, Sparkles, Zap, Heart, Award, Layers, Users, Mail, BookUser, Search, Globe } from 'lucide-react';
 
 import ProdutosTab from '../admin/ProdutosTab';
 import FreteTab from '../admin/FreteTab';
@@ -16,6 +16,7 @@ import CockpitTab from '../admin/CockpitTab';
 import PosVendaTab from '../admin/PosVendaTab';
 import ClientesTab from '../admin/ClientesTab';
 import ProspeccaoTab from '../admin/ProspeccaoTab';
+import LandingPagesTab from '../admin/LandingPagesTab';
 
 
 const NAV_SECTIONS = [
@@ -36,7 +37,8 @@ const NAV_SECTIONS = [
       { id: 'disparos',  label: 'Disparos WhatsApp',  icon: Zap },
       { id: 'marketing', label: 'Follow Up LEADS',      icon: Megaphone },
       { id: 'posvendas', label: 'Follow Up CLIENTES',   icon: Heart },
-      { id: 'emails',    label: 'Emails',               icon: Mail },
+      { id: 'emails',        label: 'Emails',               icon: Mail },
+      { id: 'landingpages',  label: 'Landing Pages',        icon: Globe },
     ],
   },
   {
@@ -92,7 +94,8 @@ export default function AdminPage() {
       case 'frete':      return <FreteTab />;
       case 'orcamentos': return <OrcamentosTab />;
       case 'marketing':  return <MarketingTab onBadgeUpdate={setFollowUpBadge} />;
-      case 'emails':     return <EmailsTab />;
+      case 'emails':        return <EmailsTab />;
+      case 'landingpages':  return <LandingPagesTab />;
       default: return null;
     }
   };
