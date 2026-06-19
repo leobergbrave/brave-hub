@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Globe, Edit2, ExternalLink, Plus, Trash2, ChevronDown, ChevronRight,
-  Save, Loader2, RefreshCw, Check, X, Phone, FileText, Layout, Package
+  Save, Loader2, RefreshCw, Check, X, Phone, FileText, Layout, Package, Code2
 } from 'lucide-react';
 
 const BADGE_CORES = [
@@ -51,6 +51,8 @@ export default function LandingPagesTab() {
   const [salvando, setSalvando]       = useState(false);
   const [prodAberto, setProdAberto]   = useState(null);
   const [secao, setSecao]             = useState('geral');
+  const [jsonRaw, setJsonRaw]         = useState('');
+  const [jsonErro, setJsonErro]       = useState('');
   const [toast, setToast]             = useState('');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
@@ -66,7 +68,10 @@ export default function LandingPagesTab() {
 
   const iniciarEdicao = (pagina) => {
     setEditando(pagina.id);
-    setForm({ ...pagina, config: JSON.parse(JSON.stringify(pagina.config || {})) });
+    const cfg = JSON.parse(JSON.stringify(pagina.config || {}));
+    setForm({ ...pagina, config: cfg });
+    setJsonRaw(JSON.stringify(cfg, null, 2));
+    setJsonErro('');
     setSecao('geral');
     setProdAberto(null);
   };
@@ -274,6 +279,7 @@ export default function LandingPagesTab() {
               { id: 'geral',    label: 'Geral',    Icon: Phone },
               { id: 'hero',     label: 'Hero',     Icon: Layout },
               { id: 'produtos', label: 'Produtos', Icon: Package },
+              { id: 'avancado', label: 'Avançado', Icon: Code2 },
             ].map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -465,6 +471,40 @@ export default function LandingPagesTab() {
                 <Plus className="w-4 h-4" />
                 Adicionar Produto
               </button>
+            </div>
+          )}
+
+          {/* ── SEÇÃO AVANÇADO (JSON) ── */}
+          {secao === 'avancado' && (
+            <div className="bg-dark-800/60 border border-dark-700 rounded-2xl p-6 space-y-4">
+              <div>
+                <h3 className="text-white font-bold text-sm flex items-center gap-2 mb-1">
+                  <Code2 className="w-4 h-4 text-orange-400" />
+                  Editor JSON Avançado
+                </h3>
+                <p className="text-zinc-600 text-xs">Edite diretamente o config JSON — útil para preços, tiers, depoimentos e campos específicos de cada página.</p>
+              </div>
+              {jsonErro && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg px-4 py-3 font-mono">
+                  {jsonErro}
+                </div>
+              )}
+              <textarea
+                value={jsonRaw}
+                onChange={e => {
+                  setJsonRaw(e.target.value);
+                  setJsonErro('');
+                  try {
+                    const parsed = JSON.parse(e.target.value);
+                    setForm(f => ({ ...f, config: parsed }));
+                  } catch {
+                    setJsonErro('JSON inválido — corrija antes de salvar.');
+                  }
+                }}
+                rows={24}
+                spellCheck={false}
+                className="w-full bg-dark-950 border border-dark-600 text-emerald-400 text-xs rounded-xl px-4 py-4 font-mono focus:outline-none focus:border-orange-500/50 transition-colors resize-none leading-relaxed"
+              />
             </div>
           )}
 
