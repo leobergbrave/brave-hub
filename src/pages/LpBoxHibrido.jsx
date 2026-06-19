@@ -96,7 +96,7 @@ export default function LpBoxHibrido() {
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
         <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
           <div>
-            <img src="/logo.png" alt="Brave Fitness" className="h-10 object-contain" />
+            <img src="/logo-lp.png" alt="Brave Fitness" className="h-10 object-contain" />
             <p className="text-[10px] text-zinc-600 mt-0.5 tracking-wide">{cfg.hero.breadcrumb}</p>
           </div>
           <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
@@ -308,7 +308,7 @@ export default function LpBoxHibrido() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
             <div>
-              <img src="/logo.png" alt="Brave Fitness" className="h-8 object-contain mb-3" />
+              <img src="/logo-lp.png" alt="Brave Fitness" className="h-8 object-contain mb-3" />
               <p className="text-zinc-600 text-sm">CNPJ: 33.167.844/0001-80</p>
               <a href="mailto:comercial@bravefitness.com.br"
                 className="text-zinc-600 text-sm hover:text-zinc-400 flex items-center gap-1.5 mt-1 transition-colors">
