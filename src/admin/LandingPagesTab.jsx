@@ -15,11 +15,11 @@ function convertImgUrl(url) {
 }
 
 const BADGE_CORES = [
-  { label: 'Verde',   cls: 'bg-emerald-500' },
-  { label: 'Laranja', cls: 'bg-orange-500'  },
-  { label: 'Roxo',    cls: 'bg-purple-500'  },
-  { label: 'Azul',    cls: 'bg-blue-500'    },
-  { label: 'Vermelho',cls: 'bg-red-500'     },
+  { label: 'Verde Neon',  cls: 'bg-neon text-dark-950'    },
+  { label: 'Laranja',     cls: 'bg-orange-500 text-white' },
+  { label: 'Roxo',        cls: 'bg-purple-500 text-white' },
+  { label: 'Azul',        cls: 'bg-blue-600 text-white'   },
+  { label: 'Vermelho',    cls: 'bg-red-500 text-white'    },
 ];
 
 function Input({ label, value, onChange, placeholder, type = 'text' }) {
@@ -420,7 +420,7 @@ export default function LandingPagesTab() {
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Cor do badge</label>
                           <select
-                            value={prod.badgeCls || 'bg-orange-500'}
+                            value={prod.badgeCls || 'bg-orange-500 text-white'}
                             onChange={e => setProd(pIdx, 'badgeCls', e.target.value)}
                             className="w-full bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-orange-500/50"
                           >
