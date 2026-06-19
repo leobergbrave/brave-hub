@@ -163,7 +163,6 @@ export default function ProspeccaoTab() {
           automacao_cidades: cidadesArray,
           automacao_limite: parseInt(config.automacao_limite || 25),
           automacao_webhook_whatsapp: config.automacao_webhook_whatsapp.trim(),
-          webhook_botconversa: config.webhook_botconversa.trim(),
           mensagem_ativacao: config.mensagem_ativacao.trim() || 'Oi pessoal {{nome_empresa}}, tudo bem?',
           updated_at: new Date().toISOString()
         })
@@ -1262,27 +1261,13 @@ export default function ProspeccaoTab() {
                 <Zap className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Fluxos BotConversa por Perfil</h3>
+                <h3 className="text-sm font-bold text-white">Payload BotConversa (Fila de Automação)</h3>
                 <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-                  Configure um webhook do BotConversa para cada perfil de cliente. Quando um lead for qualificado, o sistema
-                  enviará automaticamente os dados para o fluxo correto — incluindo a{' '}
-                  <strong className="text-purple-400">mensagem de ativação</strong> (para acionar o bot automático do negócio)
-                  e o <strong className="text-purple-400">gancho personalizado pela IA</strong>.
+                  Configure a mensagem de ativação e o roteamento por perfil. A fila de automação envia este payload
+                  para o <strong className="text-purple-400">webhook configurado na aba Automação Diária</strong>{' '}
+                  — use o campo <code className="text-purple-400 bg-dark-800 px-1 rounded">perfil_detectado</code>{' '}
+                  para criar condições dentro do BotConversa.
                 </p>
-              </div>
-            </div>
-
-            {/* Estratégia Visual */}
-            <div className="bg-dark-950 border border-dark-800 rounded-xl p-4">
-              <p className="text-[10px] font-black text-purple-400 uppercase tracking-wider mb-3">🧠 Estratégia de Duplo Disparo</p>
-              <div className="flex items-center gap-2 flex-wrap text-[10px] text-zinc-400">
-                <span className="bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 font-mono">MSG 0 → Oi, tudo bem? 👋</span>
-                <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
-                <span className="bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 text-zinc-500">Bot deles responde (60s)</span>
-                <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
-                <span className="bg-purple-500/10 border border-purple-500/20 rounded-lg px-2.5 py-1.5 text-purple-300 font-mono">MSG 1 → Gancho IA personalizado</span>
-                <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
-                <span className="bg-dark-800 border border-dark-700 rounded-lg px-2.5 py-1.5 text-zinc-500">Fluxo de relacionamento</span>
               </div>
             </div>
 
@@ -1299,32 +1284,6 @@ export default function ProspeccaoTab() {
                 className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/40 transition-all"
               />
               <p className="text-[10px] text-zinc-600">Mensagem simples enviada antes do gancho para ativar o bot automático do negócio.</p>
-            </div>
-
-            {/* Webhook Único */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">
-                  Webhook BotConversa (Fluxo Único com Condições)
-                </label>
-                {config.webhook_botconversa ? (
-                  <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">✓ Configurado</span>
-                ) : (
-                  <span className="text-[9px] text-zinc-600 font-black uppercase tracking-wider">Não configurado</span>
-                )}
-              </div>
-              <input
-                type="text"
-                placeholder="https://app.botconversa.com.br/api/v1/webhooks-automation/catch/..."
-                value={config.webhook_botconversa}
-                onChange={e => setConfig(prev => ({ ...prev, webhook_botconversa: e.target.value }))}
-                className="w-full bg-dark-850 border border-purple-500/30 text-white text-[11px] rounded-xl px-3 py-3 focus:outline-none focus:border-purple-500/60 transition-all font-mono"
-              />
-              <p className="text-[10px] text-zinc-600">
-                Um único fluxo recebe todos os leads. Use o campo{' '}
-                <code className="text-purple-400 bg-dark-800 px-1 rounded">perfil_detectado</code>{' '}
-                para criar condições dentro do BotConversa e rotear para o branch correto.
-              </p>
             </div>
 
             {/* Como configurar as condições no BotConversa */}
@@ -1368,7 +1327,7 @@ export default function ProspeccaoTab() {
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {salvandoConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                {salvandoConfig ? 'Salvando...' : 'Salvar Fluxo BotConversa'}
+                {salvandoConfig ? 'Salvando...' : 'Salvar Configurações'}
               </button>
             </div>
           </div>
