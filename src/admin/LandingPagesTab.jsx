@@ -5,6 +5,15 @@ import {
   Save, Loader2, RefreshCw, Check, X, Phone, FileText, Layout, Package, Code2
 } from 'lucide-react';
 
+function convertImgUrl(url) {
+  if (!url) return url;
+  const m = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`;
+  const m2 = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if (m2) return `https://drive.google.com/thumbnail?id=${m2[1]}&sz=w800`;
+  return url;
+}
+
 const BADGE_CORES = [
   { label: 'Verde',   cls: 'bg-emerald-500' },
   { label: 'Laranja', cls: 'bg-orange-500'  },
@@ -438,7 +447,7 @@ export default function LandingPagesTab() {
                         placeholder="https://..."
                       />
                       {prod.img_url && (
-                        <img src={prod.img_url} alt={prod.nome}
+                        <img src={convertImgUrl(prod.img_url)} alt={prod.nome}
                           className="w-full h-40 object-cover rounded-xl border border-dark-600 mt-1" />
                       )}
 

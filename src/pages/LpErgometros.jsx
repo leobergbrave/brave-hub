@@ -18,6 +18,15 @@ const IconYoutube = () => (
   </svg>
 );
 
+function convertImgUrl(url) {
+  if (!url) return url;
+  const m = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`;
+  const m2 = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if (m2) return `https://drive.google.com/thumbnail?id=${m2[1]}&sz=w800`;
+  return url;
+}
+
 const DEFAULT_CONFIG = {
   wa_number:    '554199999999',
   wa_msg_geral: 'Olá! Vi os ergômetros da Brave e gostaria de solicitar uma cotação.',
@@ -147,7 +156,7 @@ export default function LpErgometros() {
                       {produto.badge}
                     </span>
                     {produto.img_url ? (
-                      <img src={produto.img_url} alt={produto.nome}
+                      <img src={convertImgUrl(produto.img_url)} alt={produto.nome}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center gap-3">

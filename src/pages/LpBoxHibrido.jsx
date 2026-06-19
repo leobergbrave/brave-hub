@@ -18,6 +18,15 @@ const IconYoutube = () => (
   </svg>
 );
 
+function convertImgUrl(url) {
+  if (!url) return url;
+  const m = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`;
+  const m2 = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if (m2) return `https://drive.google.com/thumbnail?id=${m2[1]}&sz=w800`;
+  return url;
+}
+
 const fmt = (v) => v > 0
   ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   : 'Consultar';
@@ -207,7 +216,7 @@ export default function LpBoxHibrido() {
                 <div key={i} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden hover:border-neon/30 transition-all group flex flex-col">
                   <div className="h-44 bg-dark-700 overflow-hidden flex items-center justify-center relative">
                     {item.img_url ? (
-                      <img src={item.img_url} alt={item.nome}
+                      <img src={convertImgUrl(item.img_url)} alt={item.nome}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (
                       <>
@@ -244,7 +253,7 @@ export default function LpBoxHibrido() {
           </blockquote>
           <div className="flex items-center justify-center gap-4">
             {cfg.testimonial.img_url ? (
-              <img src={cfg.testimonial.img_url} alt={cfg.testimonial.autor}
+              <img src={convertImgUrl(cfg.testimonial.img_url)} alt={cfg.testimonial.autor}
                 className="w-14 h-14 rounded-full object-cover border-2 border-neon/30" />
             ) : (
               <div className="w-14 h-14 rounded-full bg-dark-700 border-2 border-dark-600 flex items-center justify-center text-zinc-600">
