@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Check, MessageCircle, Mail, Loader2, Zap, Bell, DollarSign, FileText } from 'lucide-react';
+import { Check, MessageCircle, Mail, Loader2, Zap, Bell, DollarSign } from 'lucide-react';
+
+const fmtBRL = (v) => Number(v) > 0
+  ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  : null;
 
 const IconInstagram = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -37,11 +41,11 @@ const DEFAULT_CONFIG = {
     desc:       'Equipamentos desenvolvidos para suportar os treinos mais intensos, projetados com tecnologia de ponta e o melhor custo-benefício do mercado.',
   },
   produtos: [
-    { nome: 'Remo Indoor Brave',       badge: '+300 Vendidas',  badgeCls: 'bg-neon text-dark-950',    tagline: 'Força, resistência e resultados imediatos.',       emoji: '🚣', alias: 'remo',    img_url: '', features: ['Painel exclusivo com métricas confiáveis','Puxador anatômico no padrão C2','Partes em plástico resistentes','Rolamentos em tecnil'] },
-    { nome: 'Esteira Curva Pro',        badge: 'Pronta Entrega', badgeCls: 'bg-orange-500 text-white', tagline: 'O que era bom ficou ainda melhor.',                 emoji: '🏃', alias: 'estcv',   img_url: '', features: ['Mais de 300 unidades vendidas','Projeto customizado sem alavanca de tensão','Durabilidade comprovada, mecânica resistente','Não faz uso de energia elétrica','Painel com todas as métricas de trabalho','Lotes semanais, consulte disponibilidade'] },
-    { nome: 'Bike Erg Brave',           badge: 'Pronta Entrega', badgeCls: 'bg-orange-500 text-white', tagline: 'Performance e endurance no padrão Concept.',        emoji: '🚴', alias: 'bikeerg', img_url: '', features: ['Padrão similar ao Concept','Painel com sensor p1, trabalho em metragem confiável','Excelente para trabalho de endurance','Pronta entrega, condições exclusivas'] },
-    { nome: 'Air Ski Brave',            badge: 'Lançamento',     badgeCls: 'bg-purple-500 text-white', tagline: 'Tensão calibrada, corda que não estoura.',         emoji: '⛷️', alias: 'skierg',  img_url: '', features: ['Puxador em borracha no padrão C2','Painel com sensor p1, trabalho em metragem confiável','Corda interna estendida — não estoura fácil','Tensão de puxada com calibragem Brave','Plataforma inclusa','Pronta entrega'] },
-    { nome: 'Escada Ergométrica Brave', badge: 'Lançamento',     badgeCls: 'bg-purple-500 text-white', tagline: 'Lançamento exclusivo com frete grátis.',            emoji: '🪜', alias: 'escada',  img_url: '', features: ['Lançamento exclusivo promocional','Painel multifuncional resistente','Equipamento silencioso','Pronta entrega','Garantia que funciona — Padrão Brave','Frete grátis para algumas regiões'] },
+    { nome: 'Remo Indoor Brave',       badge: '+300 Vendidas',  badgeCls: 'bg-neon text-dark-950',    tagline: 'Força, resistência e resultados imediatos.',       emoji: '🚣', alias: 'remo',    img_url: '', preco_normal: 7990, preco_avista: 5990, parcelas_num: 10, parcelas_valor: 699, features: ['Painel exclusivo com métricas confiáveis','Puxador anatômico no padrão C2','Partes em plástico resistentes','Rolamentos em tecnil'] },
+    { nome: 'Esteira Curva Pro',        badge: 'Pronta Entrega', badgeCls: 'bg-orange-500 text-white', tagline: 'O que era bom ficou ainda melhor.',                 emoji: '🏃', alias: 'estcv',   img_url: '', preco_normal: 7990, preco_avista: 5990, parcelas_num: 10, parcelas_valor: 699, features: ['Mais de 300 unidades vendidas','Projeto customizado sem alavanca de tensão','Durabilidade comprovada, mecânica resistente','Não faz uso de energia elétrica','Painel com todas as métricas de trabalho','Lotes semanais, consulte disponibilidade'] },
+    { nome: 'Bike Erg Brave',           badge: 'Pronta Entrega', badgeCls: 'bg-orange-500 text-white', tagline: 'Performance e endurance no padrão Concept.',        emoji: '🚴', alias: 'bikeerg', img_url: '', preco_normal: 7990, preco_avista: 5990, parcelas_num: 10, parcelas_valor: 699, features: ['Padrão similar ao Concept','Painel com sensor p1, trabalho em metragem confiável','Excelente para trabalho de endurance','Pronta entrega, condições exclusivas'] },
+    { nome: 'Air Ski Brave',            badge: 'Lançamento',     badgeCls: 'bg-purple-500 text-white', tagline: 'Tensão calibrada, corda que não estoura.',         emoji: '⛷️', alias: 'skierg',  img_url: '', preco_normal: 7990, preco_avista: 5990, parcelas_num: 10, parcelas_valor: 699, features: ['Puxador em borracha no padrão C2','Painel com sensor p1, trabalho em metragem confiável','Corda interna estendida — não estoura fácil','Tensão de puxada com calibragem Brave','Plataforma inclusa','Pronta entrega'] },
+    { nome: 'Escada Ergométrica Brave', badge: 'Lançamento',     badgeCls: 'bg-purple-500 text-white', tagline: 'Lançamento exclusivo com frete grátis.',            emoji: '🪜', alias: 'escada',  img_url: '', preco_normal: 7990, preco_avista: 5990, parcelas_num: 10, parcelas_valor: 699, features: ['Lançamento exclusivo promocional','Painel multifuncional resistente','Equipamento silencioso','Pronta entrega','Garantia que funciona — Padrão Brave','Frete grátis para algumas regiões'] },
   ],
 };
 
@@ -62,7 +66,9 @@ export default function LpErgometros() {
           wa_number:    data.wa_number    || DEFAULT_CONFIG.wa_number,
           wa_msg_geral: data.config?.wa_msg_geral || DEFAULT_CONFIG.wa_msg_geral,
           hero:         { ...DEFAULT_CONFIG.hero, ...(data.config?.hero || {}) },
-          produtos:     data.config?.produtos?.length ? data.config.produtos : DEFAULT_CONFIG.produtos,
+          produtos:     data.config?.produtos?.length
+            ? data.config.produtos.map((p, i) => ({ ...(DEFAULT_CONFIG.produtos[i] || {}), ...p }))
+            : DEFAULT_CONFIG.produtos,
         });
       })
       .finally(() => setLoading(false));
@@ -146,10 +152,10 @@ export default function LpErgometros() {
                       </div>
                     )}
                   </div>
-                  <div className="p-6 flex flex-col flex-1">
+                  <div className="p-5 md:p-6 flex flex-col flex-1">
                     <h3 className="font-black text-xl text-white mb-1">{produto.nome}</h3>
-                    <p className="text-neon text-sm font-semibold mb-5">{produto.tagline}</p>
-                    <ul className="space-y-2">
+                    <p className="text-neon text-sm font-semibold mb-4">{produto.tagline}</p>
+                    <ul className="space-y-2 mb-5">
                       {(produto.features || []).map((f, j) => (
                         <li key={j} className="flex items-start gap-2.5 text-sm text-zinc-400">
                           <Check className="w-4 h-4 text-neon mt-0.5 shrink-0" />
@@ -157,6 +163,35 @@ export default function LpErgometros() {
                         </li>
                       ))}
                     </ul>
+
+                    {/* ── PREÇOS ── */}
+                    <div className="mt-auto pt-4 border-t border-dark-700">
+                      {fmtBRL(produto.preco_normal) && (
+                        <p className="text-zinc-600 text-xs mb-2">
+                          De <span className="line-through">{fmtBRL(produto.preco_normal)}</span>
+                        </p>
+                      )}
+                      {fmtBRL(produto.preco_avista) && (
+                        <div className="flex items-end gap-2 flex-wrap">
+                          <span className="text-neon text-3xl font-black leading-none tracking-tight">
+                            {fmtBRL(produto.preco_avista)}
+                          </span>
+                          <span className="text-[10px] font-black uppercase tracking-widest bg-neon text-dark-950 px-2 py-0.5 rounded-full mb-0.5">
+                            À vista
+                          </span>
+                        </div>
+                      )}
+                      {produto.parcelas_num > 0 && fmtBRL(produto.parcelas_valor) && (
+                        <>
+                          <div className="border-t border-dark-700/60 my-3" />
+                          <p className="text-zinc-400 text-sm">
+                            ou <span className="text-white font-black">{produto.parcelas_num}x</span> de{' '}
+                            <span className="text-neon font-black">{fmtBRL(produto.parcelas_valor)}</span>
+                          </p>
+                          <p className="text-zinc-600 text-[11px] mt-0.5">no cartão de crédito</p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

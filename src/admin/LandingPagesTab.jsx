@@ -148,7 +148,9 @@ export default function LandingPagesTab() {
         ...f.config,
         produtos: [...(f.config.produtos || []), {
           nome: 'Novo Produto', badge: 'Novidade', badgeCls: 'bg-orange-500',
-          tagline: '', emoji: '🏋️', alias: '', img_url: '', features: [''],
+          tagline: '', emoji: '🏋️', alias: '', img_url: '',
+          preco_normal: 0, preco_avista: 0, parcelas_num: 0, parcelas_valor: 0,
+          features: [''],
         }],
       },
     }));
@@ -448,8 +450,43 @@ export default function LandingPagesTab() {
                       />
                       {prod.img_url && (
                         <img src={convertImgUrl(prod.img_url)} alt={prod.nome}
-                          className="w-full h-40 object-cover rounded-xl border border-dark-600 mt-1" />
+                          className="w-full h-40 object-contain rounded-xl border border-dark-600 mt-1 bg-dark-900" />
                       )}
+
+                      {/* Preços */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Preços</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input
+                            label="Preço Normal (R$)"
+                            type="number"
+                            value={prod.preco_normal || ''}
+                            onChange={v => setProd(pIdx, 'preco_normal', parseFloat(v) || 0)}
+                            placeholder="7990"
+                          />
+                          <Input
+                            label="Promoção À Vista (R$)"
+                            type="number"
+                            value={prod.preco_avista || ''}
+                            onChange={v => setProd(pIdx, 'preco_avista', parseFloat(v) || 0)}
+                            placeholder="5990"
+                          />
+                          <Input
+                            label="Nº de Parcelas"
+                            type="number"
+                            value={prod.parcelas_num || ''}
+                            onChange={v => setProd(pIdx, 'parcelas_num', parseInt(v) || 0)}
+                            placeholder="10"
+                          />
+                          <Input
+                            label="Valor da Parcela (R$)"
+                            type="number"
+                            value={prod.parcelas_valor || ''}
+                            onChange={v => setProd(pIdx, 'parcelas_valor', parseFloat(v) || 0)}
+                            placeholder="699"
+                          />
+                        </div>
+                      </div>
 
                       {/* Features */}
                       <div className="space-y-2">
