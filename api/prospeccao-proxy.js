@@ -11,15 +11,19 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     // Buscar configurações com segurança no Supabase
+    // Usa select('*') para não quebrar quando novas colunas são adicionadas ao schema
     const { data: config, error: configError } = await supabase
       .from('prospeccao_config')
-      .select('apify_token, gemini_key, prompt_personalizacao, automacao_ativa, automacao_nichos, automacao_nicho_atual_index, automacao_cidades, automacao_cidade_atual_index, automacao_limite, automacao_webhook_whatsapp, webhook_botconversa, mensagem_ativacao')
+      .select('*')
       .eq('id', 1)
-      .single();
+      .maybeSingle();
 
-    if (configError || !config) {
-      console.error('[Proxy] Config não encontrada:', configError);
-      return res.status(400).json({ error: 'Configurações de prospecção não encontradas no banco de dados.' });
+    if (configError) {
+      console.error('[Proxy] Erro ao buscar config:', configError);
+      return res.status(500).json({ error: 'Erro ao buscar configurações: ' + configError.message });
+    }
+    if (!config) {
+      return res.status(400).json({ error: 'Configurações de prospecção não encontradas. Execute a migration no Supabase.' });
     }
 
     // Identificar serviço e ação — lê de query OU corpo da requisição
