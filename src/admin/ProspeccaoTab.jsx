@@ -1314,7 +1314,7 @@ export default function ProspeccaoTab() {
                 onChange={e => setConfig(prev => ({ ...prev, mensagem_ativacao: e.target.value }))}
                 className="w-full bg-dark-850 border border-dark-700 text-white text-xs rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500/40 transition-all"
               />
-              <p className="text-[10px] text-zinc-600">Mensagem simples enviada antes do gancho para ativar o bot automático do negócio.</p>
+              <p className="text-[10px] text-zinc-600">Use <code className="text-purple-400 bg-dark-800 px-1 rounded">{'{{nome_empresa}}'}</code> para inserir o nome da empresa. Ex: <span className="text-zinc-500 italic">Oi, {'{{nome_empresa}'}{'}'} ! Tudo bem? 👋</span></p>
             </div>
 
             {/* Como configurar as condições no BotConversa */}
