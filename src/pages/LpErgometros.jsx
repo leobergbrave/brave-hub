@@ -96,19 +96,19 @@ export default function LpErgometros() {
       </header>
 
       {/* ── HERO ────────────────────────────────────────────── */}
-      <section className="py-20 px-5 border-b border-dark-700">
+      <section className="py-12 md:py-20 px-5 border-b border-dark-700">
         <div className="max-w-5xl mx-auto">
-          <div className="inline-flex items-center gap-2 text-neon text-[11px] font-bold tracking-[0.2em] uppercase border border-neon/30 bg-neon/5 px-4 py-1.5 rounded-full mb-8">
+          <div className="inline-flex items-center gap-2 text-neon text-[11px] font-bold tracking-[0.2em] uppercase border border-neon/30 bg-neon/5 px-4 py-1.5 rounded-full mb-6 md:mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-neon inline-block" />
             {cfg.hero.badge}
           </div>
 
-          <h1 className="text-6xl md:text-8xl font-black leading-none tracking-tight mb-8 uppercase">
+          <h1 className="text-4xl sm:text-6xl md:text-8xl font-black leading-none tracking-tight mb-6 md:mb-8 uppercase">
             {cfg.hero.headline_1}<br />
             <span className="text-neon">{cfg.hero.headline_2}</span>
           </h1>
 
-          <p className="text-zinc-400 text-lg max-w-xl leading-relaxed mb-10">
+          <p className="text-zinc-400 text-base md:text-lg max-w-xl leading-relaxed mb-8 md:mb-10">
             {cfg.hero.desc}
           </p>
 
@@ -116,13 +116,13 @@ export default function LpErgometros() {
             href={wa(cfg.wa_msg_geral)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-base px-8 py-4 rounded-full transition-colors shadow-xl shadow-neon/25"
+            className="inline-flex items-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-sm md:text-base px-7 py-3.5 md:px-8 md:py-4 rounded-full transition-colors shadow-xl shadow-neon/25"
           >
-            <FileText className="w-5 h-5" />
+            <FileText className="w-4 h-4 md:w-5 md:h-5" />
             Solicitar Cotação
           </a>
 
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-10 md:mt-16 grid grid-cols-1 md:grid-cols-3 gap-4">
             {PILARES.map(({ Icon, titulo, desc }, i) => (
               <div key={i} className="bg-dark-800 border border-dark-700 rounded-2xl p-6">
                 <div className="w-9 h-9 rounded-lg bg-neon/10 border border-neon/20 flex items-center justify-center mb-4">
@@ -137,27 +137,27 @@ export default function LpErgometros() {
       </section>
 
       {/* ── PRODUTOS ────────────────────────────────────────── */}
-      <section className="py-20 px-5">
+      <section className="py-12 md:py-20 px-5">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-12">
-            <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tight">
+          <div className="mb-8 md:mb-12">
+            <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight">
               Nossa Linha <span className="text-neon">Completa</span>
             </h2>
-            <p className="text-zinc-500 mt-3">Clique em "Solicitar Cotação" para receber uma proposta personalizada.</p>
+            <p className="text-zinc-500 mt-3 text-sm md:text-base">Clique em "Solicitar Cotação" para receber uma proposta personalizada.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
             {cfg.produtos.map((produto, i) => {
               const msgProduto = `Olá! Tenho interesse no ${produto.nome} da Brave. Pode me enviar uma cotação?`;
               return (
                 <div key={i} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden flex flex-col hover:border-neon/30 transition-all group">
-                  <div className="relative h-56 bg-dark-700 overflow-hidden">
+                  <div className="relative h-56 md:h-64 bg-dark-900 overflow-hidden flex items-center justify-center">
                     <span className={`absolute top-3 left-3 z-10 text-[11px] font-black px-3 py-1 rounded-full ${produto.badgeCls || 'bg-neon text-dark-950'}`}>
                       {produto.badge}
                     </span>
                     {produto.img_url ? (
                       <img src={convertImgUrl(produto.img_url)} alt={produto.nome}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        className="w-full h-full object-contain p-3" />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                         <span className="text-6xl opacity-20">{produto.emoji}</span>
@@ -198,20 +198,20 @@ export default function LpErgometros() {
       </section>
 
       {/* ── CTA FINAL ───────────────────────────────────────── */}
-      <section className="py-24 px-5 border-t border-dark-700 relative overflow-hidden">
+      <section className="py-14 md:py-24 px-5 border-t border-dark-700 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-neon/4 blur-[100px]" />
         </div>
         <div className="relative max-w-2xl mx-auto text-center">
-          <h2 className="text-5xl font-black uppercase text-white leading-tight mb-3">
+          <h2 className="text-3xl md:text-5xl font-black uppercase text-white leading-tight mb-3">
             Seu box merece<br />o melhor.
           </h2>
-          <p className="text-zinc-500 text-lg mb-10">
+          <p className="text-zinc-500 text-base md:text-lg mb-8 md:mb-10">
             Um especialista BRAVE entra em contato pelo WhatsApp com uma proposta exclusiva.
           </p>
           <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-3 bg-neon hover:bg-neon-dim text-dark-950 font-black text-xl px-10 py-5 rounded-full transition-colors shadow-2xl shadow-neon/20 animate-pulse-neon">
-            <MessageCircle className="w-6 h-6" />
+            className="inline-flex items-center gap-3 bg-neon hover:bg-neon-dim text-dark-950 font-black text-base md:text-xl px-8 md:px-10 py-4 md:py-5 rounded-full transition-colors shadow-2xl shadow-neon/20 animate-pulse-neon">
+            <MessageCircle className="w-5 h-5 md:w-6 md:h-6" />
             Falar com um Especialista
           </a>
         </div>

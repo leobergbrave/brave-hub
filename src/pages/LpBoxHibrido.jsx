@@ -117,17 +117,17 @@ export default function LpBoxHibrido() {
       </header>
 
       {/* ── HERO ────────────────────────────────────────────── */}
-      <section className="py-20 px-5 border-b border-dark-700">
+      <section className="py-12 md:py-20 px-5 border-b border-dark-700">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 text-neon text-[11px] font-bold tracking-[0.2em] uppercase border border-neon/30 bg-neon/5 px-4 py-1.5 rounded-full mb-8">
+          <div className="inline-flex items-center gap-2 text-neon text-[11px] font-bold tracking-[0.2em] uppercase border border-neon/30 bg-neon/5 px-4 py-1.5 rounded-full mb-6 md:mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-neon inline-block" />
             Corrida Híbrida
           </div>
 
-          <h1 className="text-6xl md:text-8xl font-black tracking-tight mb-5 leading-none uppercase">
+          <h1 className="text-4xl sm:text-6xl md:text-8xl font-black tracking-tight mb-4 md:mb-5 leading-none uppercase">
             {cfg.hero.headline}
           </h1>
-          <p className="text-zinc-400 text-lg max-w-2xl mx-auto mb-12 leading-relaxed">
+          <p className="text-zinc-400 text-base md:text-lg max-w-2xl mx-auto mb-8 md:mb-12 leading-relaxed">
             {cfg.hero.desc}
           </p>
 
@@ -178,8 +178,8 @@ export default function LpBoxHibrido() {
           </div>
 
           <a href={wa(msgTier)} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-lg px-9 py-4 rounded-full transition-colors shadow-xl shadow-neon/25">
-            <MessageCircle className="w-5 h-5" />
+            className="inline-flex items-center justify-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-black text-sm md:text-lg px-7 py-3.5 md:px-9 md:py-4 rounded-full transition-colors shadow-xl shadow-neon/25">
+            <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />
             Adquira Seu Box Completo
           </a>
         </div>
@@ -198,26 +198,26 @@ export default function LpBoxHibrido() {
       </section>
 
       {/* ── SHOWCASE ────────────────────────────────────────── */}
-      <section className="py-20 px-5 border-b border-dark-700">
+      <section className="py-12 md:py-20 px-5 border-b border-dark-700">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8 md:mb-12">
             <div className="inline-flex items-center gap-2 text-neon text-[11px] font-bold tracking-[0.2em] uppercase border border-neon/30 bg-neon/5 px-4 py-1.5 rounded-full mb-5">
               <span className="w-1.5 h-1.5 rounded-full bg-neon inline-block" />
               Conheça os Equipamentos
             </div>
-            <h2 className="text-4xl font-black uppercase tracking-tight">
+            <h2 className="text-3xl md:text-4xl font-black uppercase tracking-tight">
               Box Híbrido Full <span className="text-neon">{tier.alunos} Alunos</span>
             </h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {cfg.showcase.map((item, i) => {
               const msgItem = `Olá! Quero saber mais sobre o ${item.nome} da Brave para meu box.`;
               return (
                 <div key={i} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden hover:border-neon/30 transition-all group flex flex-col">
-                  <div className="h-44 bg-dark-700 overflow-hidden flex items-center justify-center relative">
+                  <div className="h-56 md:h-48 bg-dark-900 overflow-hidden flex items-center justify-center relative">
                     {item.img_url ? (
                       <img src={convertImgUrl(item.img_url)} alt={item.nome}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        className="w-full h-full object-contain p-3" />
                     ) : (
                       <>
                         <span className="text-5xl opacity-20">{item.emoji}</span>
@@ -240,7 +240,7 @@ export default function LpBoxHibrido() {
       </section>
 
       {/* ── DEPOIMENTO ──────────────────────────────────────── */}
-      <section className="py-20 px-5 border-b border-dark-700 relative overflow-hidden">
+      <section className="py-12 md:py-20 px-5 border-b border-dark-700 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-neon/3 blur-[100px]" />
         </div>
@@ -285,27 +285,27 @@ export default function LpBoxHibrido() {
       </section>
 
       {/* ── CTA FINAL ───────────────────────────────────────── */}
-      <section className="py-24 px-5 relative overflow-hidden">
+      <section className="py-14 md:py-24 px-5 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-neon/4 blur-[100px]" />
         </div>
         <div className="relative max-w-2xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-black uppercase text-white leading-tight mb-4">
+          <h2 className="text-3xl md:text-5xl font-black uppercase text-white leading-tight mb-4">
             Pronto Para Ter os Melhores<br />
             <span className="text-neon">Equipamentos Híbrido</span><br />
             no Seu Box?
           </h2>
-          <p className="text-zinc-500 text-sm mb-10 leading-relaxed">
+          <p className="text-zinc-500 text-sm md:text-base mb-8 md:mb-10 leading-relaxed">
             Um especialista BRAVE entra em contato pelo WhatsApp com uma proposta exclusiva.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a href={wa(msgTier)} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-3 bg-neon hover:bg-neon-dim text-dark-950 font-black text-xl px-10 py-5 rounded-full transition-colors shadow-2xl shadow-neon/20 animate-pulse-neon">
-              <MessageCircle className="w-6 h-6" />
+              className="inline-flex items-center justify-center gap-3 bg-neon hover:bg-neon-dim text-dark-950 font-black text-base md:text-xl px-8 md:px-10 py-4 md:py-5 rounded-full transition-colors shadow-2xl shadow-neon/20 animate-pulse-neon">
+              <MessageCircle className="w-5 h-5 md:w-6 md:h-6" />
               Adquira Seu Box Completo
             </a>
             <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 border border-dark-600 hover:border-neon/30 text-zinc-400 hover:text-neon font-bold text-base px-8 py-5 rounded-full transition-all">
+              className="inline-flex items-center justify-center gap-2 border border-dark-600 hover:border-neon/30 text-zinc-400 hover:text-neon font-bold text-sm md:text-base px-7 py-4 md:px-8 md:py-5 rounded-full transition-all">
               Solicitar Cotação
             </a>
           </div>
