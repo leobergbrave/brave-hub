@@ -8,6 +8,7 @@ import OrcamentoRapidoPage from './pages/OrcamentoRapidoPage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
 import FormularioFiscalPage from './pages/FormularioFiscalPage.jsx'
 import CadastroClientePage from './pages/CadastroClientePage.jsx'
+import LpErgometros from './pages/LpErgometros.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/formulario-fiscal/:token" element={<FormularioFiscalPage />} />
         <Route path="/formulario-cadastro" element={<CadastroClientePage />} />
         <Route path="/cadastro" element={<CadastroClientePage />} />
+        <Route path="/lp/ergometros" element={<LpErgometros />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
