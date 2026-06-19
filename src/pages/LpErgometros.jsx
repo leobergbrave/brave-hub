@@ -23,9 +23,8 @@ const DEFAULT_CONFIG = {
   wa_msg_geral: 'Olá! Vi os ergômetros da Brave e gostaria de solicitar uma cotação.',
   hero: {
     badge:      'Linha Ergômetros 2025',
-    headline_1: 'Ergômetros',
-    headline_2: 'Profissionais',
-    headline_3: 'para o seu Box',
+    headline_1: 'Ergômetros Profissionais',
+    headline_2: 'para o seu Box',
     desc:       'Equipamentos desenvolvidos para suportar os treinos mais intensos, projetados com tecnologia de ponta e o melhor custo-benefício do mercado.',
   },
   produtos: [
@@ -97,8 +96,7 @@ export default function LpErgometros() {
 
           <h1 className="text-6xl md:text-8xl font-black leading-none tracking-tight mb-8 uppercase">
             {cfg.hero.headline_1}<br />
-            <span className="text-neon">{cfg.hero.headline_2}</span>{' '}
-            {cfg.hero.headline_3}
+            <span className="text-neon">{cfg.hero.headline_2}</span>
           </h1>
 
           <p className="text-zinc-400 text-lg max-w-xl leading-relaxed mb-10">
