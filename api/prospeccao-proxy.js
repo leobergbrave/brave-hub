@@ -124,6 +124,37 @@ export default async function handler(req, res) {
         return;
       }
 
+      // ── AÇÃO: PROCESSAR-RUN (Processar run Apify manualmente pelo runId) ────────
+      if (action === 'processar-run') {
+        const runId = req.query.runId || req.body?.runId;
+        if (!runId) return res.status(400).json({ error: 'runId obrigatório.' });
+
+        // Buscar status do run na API do Apify
+        const runInfoResp = await fetch(`https://api.apify.com/v2/actor-runs/${runId}?token=${token}`);
+        if (!runInfoResp.ok) {
+          const err = await runInfoResp.text();
+          return res.status(400).json({ error: `Erro ao buscar run: ${err.slice(0, 200)}` });
+        }
+        const runInfo = await runInfoResp.json();
+        const status    = runInfo.data?.status;
+        const datasetId = runInfo.data?.defaultDatasetId;
+
+        if (status === 'RUNNING' || status === 'READY') {
+          return res.status(200).json({ status: 'running', message: `Run ainda em execução (status: ${status}). Tente em alguns minutos.` });
+        }
+        if (status !== 'SUCCEEDED' || !datasetId) {
+          return res.status(200).json({ error: `Run com status inválido: ${status}. datasetId: ${datasetId || 'N/A'}` });
+        }
+
+        // Processar os leads de forma síncrona (aguardado na resposta)
+        try {
+          await processarLeadsApify({ supabase, token, datasetId, runId, config });
+          return res.status(200).json({ status: 'ok', message: 'Leads processados com sucesso.' });
+        } catch (errProc) {
+          return res.status(500).json({ error: `Erro ao processar leads: ${errProc.message}` });
+        }
+      }
+
       // ── AÇÃO: CRON (Disparo diário / simulação) ──────────────────────────────
       if (action === 'cron' || (req.method === 'GET' && !action)) {
         const force = req.query.force === 'true';

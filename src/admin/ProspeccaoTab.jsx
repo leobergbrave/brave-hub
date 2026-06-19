@@ -57,6 +57,8 @@ export default function ProspeccaoTab() {
   const [processandoFila, setProcessandoFila] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState(null);
   const [resultadoFila, setResultadoFila] = useState(null);
+  const [ultimoRunId, setUltimoRunId] = useState(null);
+  const [processandoRun, setProcessandoRun] = useState(false);
 
   // Form de Raspagem
   const [nicho, setNicho] = useState('Box de Crossfit');
@@ -247,9 +249,9 @@ export default function ProspeccaoTab() {
         if (data.status === 'inactive') {
           showToast('⚠️ Automação inativa nas configurações.');
         } else {
-          showToast('🚀 Extração iniciada!');
+          if (data.runId) setUltimoRunId(data.runId);
+          showToast('🚀 Extração iniciada! Aguarde 3-5 min e clique em "Processar Resultado".');
           fetchHistorico();
-          setTimeout(() => fetchFila(), 8000);
         }
       } else {
         showToast(`❌ ${data.error || 'Erro no agendamento'}`);
@@ -259,6 +261,31 @@ export default function ProspeccaoTab() {
       showToast(`❌ ${e.message}`);
     } finally {
       setTestandoAutomacao(false);
+    }
+  };
+
+  // ─── Processar run Apify manualmente pelo runId ───────────────────────────────
+  const processarRun = async () => {
+    if (!ultimoRunId) return;
+    setProcessandoRun(true);
+    try {
+      const res = await fetch(`/api/prospeccao-proxy?service=apify&action=processar-run&runId=${ultimoRunId}`);
+      const data = await res.json();
+      if (data.status === 'running') {
+        showToast('⏳ Run ainda processando. Aguarde mais alguns minutos.');
+      } else if (res.ok && data.status === 'ok') {
+        showToast('✅ Leads processados e adicionados à fila!');
+        fetchFila();
+        fetchHistorico();
+        setUltimoRunId(null);
+        setResultadoTeste(null);
+      } else {
+        showToast(`❌ ${data.error || 'Erro ao processar run'}`);
+      }
+    } catch (e) {
+      showToast(`❌ ${e.message}`);
+    } finally {
+      setProcessandoRun(false);
     }
   };
 
@@ -1369,6 +1396,16 @@ export default function ProspeccaoTab() {
                   <div className={`text-[10px] font-mono rounded-lg px-3 py-2 mt-1 ${resultadoTeste.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                     <span className="font-bold">HTTP {resultadoTeste.status}</span> — {JSON.stringify(resultadoTeste.data).slice(0, 120)}
                   </div>
+                )}
+                {ultimoRunId && (
+                  <button
+                    onClick={processarRun}
+                    disabled={processandoRun}
+                    className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all disabled:opacity-40 cursor-pointer mt-1"
+                  >
+                    {processandoRun ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                    {processandoRun ? 'Processando...' : `Processar Resultado (${ultimoRunId.slice(0, 8)}...)`}
+                  </button>
                 )}
               </div>
 
