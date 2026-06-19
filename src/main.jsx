@@ -10,6 +10,7 @@ import FormularioFiscalPage from './pages/FormularioFiscalPage.jsx'
 import CadastroClientePage from './pages/CadastroClientePage.jsx'
 import LpErgometros from './pages/LpErgometros.jsx'
 import LpBoxHibrido from './pages/LpBoxHibrido.jsx'
+import LpHyrox from './pages/LpHyrox.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -27,6 +28,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/cadastro" element={<CadastroClientePage />} />
         <Route path="/lp/ergometros"   element={<LpErgometros />} />
         <Route path="/lp/box-hibrido" element={<LpBoxHibrido />} />
+        <Route path="/lp/hyrox"      element={<LpHyrox />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
