@@ -162,6 +162,44 @@ export default async function handler(req, res) {
           return res.status(200).json({ status: 'inactive', message: 'Automação diária desativada.' });
         }
 
+        // ── Verificação de dia útil (segunda a sexta) ──────────────────────
+        if (!force) {
+          const diaSemana = new Date().getUTCDay(); // 0=dom, 6=sab
+          if (diaSemana === 0 || diaSemana === 6) {
+            return res.status(200).json({ status: 'weekend', message: 'Automação pausada: fim de semana.' });
+          }
+        }
+
+        // ── Verificação e reset do contador diário ─────────────────────────
+        const hojeUTC = new Date().toISOString().split('T')[0];
+        const leadsHoje = config.data_contagem === hojeUTC ? (config.leads_qualificados_hoje || 0) : 0;
+        const runsHoje  = config.data_contagem === hojeUTC ? (config.runs_hoje || 0) : 0;
+        const leadsAlvo = config.leads_alvo_dia || 30;
+        const maxRuns   = config.max_runs_dia || 5;
+
+        // Reset contador se mudou o dia
+        if (config.data_contagem !== hojeUTC) {
+          await supabase.from('prospeccao_config').update({
+            leads_qualificados_hoje: 0,
+            runs_hoje: 0,
+            data_contagem: hojeUTC
+          }).eq('id', 1);
+        }
+
+        if (!force && leadsHoje >= leadsAlvo) {
+          return res.status(200).json({ status: 'done', message: `Meta diária atingida: ${leadsHoje}/${leadsAlvo} leads qualificados.` });
+        }
+
+        if (!force && runsHoje >= maxRuns) {
+          return res.status(200).json({ status: 'limit', message: `Limite de ${maxRuns} extrações diárias atingido.` });
+        }
+
+        // Incrementar contador de runs
+        await supabase.from('prospeccao_config').update({
+          runs_hoje: runsHoje + 1,
+          data_contagem: hojeUTC
+        }).eq('id', 1);
+
         const nichos = config.automacao_nichos || ['Box de CrossFit'];
         const cidades = config.automacao_cidades || [];
         const nichoIdx = config.automacao_nicho_atual_index || 0;
@@ -248,6 +286,12 @@ export default async function handler(req, res) {
 
       // ── AÇÃO: FILA (Disparo de mensagens pendentes) ──────────────────────────
       if (action === 'fila') {
+        // Apenas dias úteis (segunda a sexta)
+        const diaSemanaFila = new Date().getUTCDay();
+        if (diaSemanaFila === 0 || diaSemanaFila === 6) {
+          return res.status(200).json({ message: 'Disparo pausado: fim de semana.' });
+        }
+
         if (!config.automacao_webhook_whatsapp) {
           return res.status(200).json({ message: 'Webhook de WhatsApp da automação não configurado.' });
         }
@@ -575,5 +619,76 @@ Retorne APENAS um JSON limpo (sem markdown):
     detalhes: `Run ${runId}: ${totalEncontrados} encontrados → ${qualificados} qualificados e agendados na fila de envios.`
   });
 
-  console.log(`[Background] Processamento concluído. ${qualificados}/${totalEncontrados} leads qualificados.`);
+  // ── Atualizar contador diário e checar se precisa de novo run ─────────────
+  const hojeUTC = new Date().toISOString().split('T')[0];
+  const { data: configAtual } = await supabase
+    .from('prospeccao_config').select('*').eq('id', 1).maybeSingle();
+
+  const leadsHojeAtual = (configAtual?.data_contagem === hojeUTC ? (configAtual?.leads_qualificados_hoje || 0) : 0) + qualificados;
+  const runsHojeAtual  = configAtual?.data_contagem === hojeUTC ? (configAtual?.runs_hoje || 0) : 0;
+  const leadsAlvo = configAtual?.leads_alvo_dia || 30;
+  const maxRuns   = configAtual?.max_runs_dia || 5;
+
+  await supabase.from('prospeccao_config').update({
+    leads_qualificados_hoje: leadsHojeAtual,
+    data_contagem: hojeUTC
+  }).eq('id', 1);
+
+  console.log(`[Background] Processamento concluído. ${qualificados}/${totalEncontrados} leads qualificados. Total hoje: ${leadsHojeAtual}/${leadsAlvo}`);
+
+  // Disparar novo run se ainda não atingiu a meta e está dentro do horário (antes das 09:30 UTC)
+  const horaUTC = new Date().getUTCHours();
+  const minUTC  = new Date().getUTCMinutes();
+  const dentroJanela = horaUTC < 9 || (horaUTC === 9 && minUTC < 30);
+
+  if (leadsHojeAtual < leadsAlvo && runsHojeAtual < maxRuns && dentroJanela) {
+    console.log(`[Background] Meta não atingida (${leadsHojeAtual}/${leadsAlvo}). Disparando novo run Apify...`);
+    try {
+      // Pegar próximos índices de nicho/cidade (já foram avançados pelo cron)
+      const nichos  = configAtual?.automacao_nichos  || ['Box de CrossFit'];
+      const cidades = configAtual?.automacao_cidades || [];
+      const nichoIdx  = configAtual?.automacao_nicho_atual_index  || 0;
+      const cidadeIdx = configAtual?.automacao_cidade_atual_index || 0;
+
+      if (cidades.length > 0) {
+        const nichoAtual  = nichos[nichoIdx % nichos.length];
+        const cidadeAtual = cidades[cidadeIdx % cidades.length];
+        const termoDeBusca = `${nichoAtual} em ${cidadeAtual}`;
+
+        const webhookCallbackUrl = 'https://brave-hub-two.vercel.app/api/prospeccao-proxy?service=apify&action=webhook';
+        const webhooksPayload = [{ eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'], requestUrl: webhookCallbackUrl, payloadTemplate: '{"eventData":{{eventData}},"resource":{{resource}}}' }];
+        const base64Webhooks = Buffer.from(JSON.stringify(webhooksPayload)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+        const apifyLoop = await fetch(
+          `https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${token}&webhooks=${base64Webhooks}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              searchStringsArray: [termoDeBusca],
+              maxCrawledPlacesPerSearch: parseInt(configAtual?.automacao_limite || 25),
+              scrapeWebsite: false, scrapeReviews: false, scrapePeople: false, language: 'pt-BR'
+            })
+          }
+        );
+
+        if (apifyLoop.ok) {
+          const loopData = await apifyLoop.json();
+          const loopRunId = loopData.data?.id;
+          // Avançar rotação
+          let proximoNichoIdx = nichoIdx + 1;
+          let proximaCidadeIdx = cidadeIdx;
+          if (proximoNichoIdx >= nichos.length) { proximoNichoIdx = 0; proximaCidadeIdx = (cidadeIdx + 1) % cidades.length; }
+          await supabase.from('prospeccao_config').update({
+            automacao_nicho_atual_index: proximoNichoIdx,
+            automacao_cidade_atual_index: proximaCidadeIdx,
+            runs_hoje: runsHojeAtual + 1
+          }).eq('id', 1);
+          console.log(`[Background] Loop run ${loopRunId} disparado para "${termoDeBusca}"`);
+        }
+      }
+    } catch (errLoop) {
+      console.warn('[Background] Erro ao disparar run de loop:', errLoop.message);
+    }
+  }
 }

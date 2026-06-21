@@ -8,10 +8,5 @@
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ],
-  "crons": [
-    {
-      "path": "/api/prospeccao-proxy?service=apify&action=cron",
-      "schedule": "0 9 * * *"
-    }
-  ]
+  "crons": []
 }

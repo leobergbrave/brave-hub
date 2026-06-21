@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Search, Settings, Zap, MapPin, Play, Loader2, Info, CheckCircle2,
   Trash2, Mail, Phone, Globe, Award, Filter, ExternalLink, RefreshCw,
-  PlusCircle, Sparkles, X, ChevronRight, AlertTriangle, Cpu, Clock
+  PlusCircle, Sparkles, X, ChevronRight, AlertTriangle, Cpu, Clock,
+  MessageSquare, UserCheck, ChevronDown, TrendingUp, Flame
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -52,6 +53,12 @@ export default function ProspeccaoTab() {
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [fila, setFila] = useState([]);
   const [loadingFila, setLoadingFila] = useState(false);
+
+  // Estados de Responderam
+  const [responderam, setResponderam] = useState([]);
+  const [loadingResponderam, setLoadingResponderam] = useState(false);
+  const [expandedResposta, setExpandedResposta] = useState(null);
+  const [convertendoLead, setConvertendoLead] = useState(null);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
   const [testandoAutomacao, setTestandoAutomacao] = useState(false);
   const [processandoFila, setProcessandoFila] = useState(false);
@@ -380,12 +387,53 @@ export default function ProspeccaoTab() {
     }
   };
 
+  // ─── Fetch Responderam ────────────────────────────────────────────────────
+  const fetchResponderam = useCallback(async () => {
+    setLoadingResponderam(true);
+    try {
+      const { data, error } = await supabase
+        .from('prospeccao_respostas')
+        .select('*')
+        .order('ultima_mensagem_em', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setResponderam(data || []);
+    } catch (e) {
+      console.error('Erro ao buscar respostas:', e);
+    } finally {
+      setLoadingResponderam(false);
+    }
+  }, []);
+
+  // ─── Converter resposta em Lead CRM ──────────────────────────────────────
+  const converterEmLead = useCallback(async (resposta) => {
+    setConvertendoLead(resposta.id);
+    try {
+      await supabase.from('leads').insert({
+        nome: resposta.nome_empresa,
+        telefone: resposta.telefone,
+        momento_compra: 'morno',
+        status: 'novo',
+        origem: 'prospeccao_ativa',
+        observacoes: `Respondeu ao WhatsApp de prospecção ativa.\nScore: ${resposta.score}/10\nÚltima msg: "${(resposta.mensagens?.slice(-1)[0]?.texto || '').slice(0, 200)}"`
+      });
+      await supabase.from('prospeccao_respostas').update({ status: 'convertido' }).eq('id', resposta.id);
+      setResponderam(prev => prev.map(r => r.id === resposta.id ? { ...r, status: 'convertido' } : r));
+      showToast('✅ Lead criado no CRM com sucesso!');
+    } catch (e) {
+      showToast('❌ Erro ao converter lead.');
+    } finally {
+      setConvertendoLead(null);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     fetchConfig();
     fetchLeads();
     fetchHistorico();
     fetchFila();
-  }, [fetchConfig, fetchLeads, fetchHistorico, fetchFila]);
+    fetchResponderam();
+  }, [fetchConfig, fetchLeads, fetchHistorico, fetchFila, fetchResponderam]);
 
   // ─── Supabase Realtime: fila de envios ────────────────────────────────────
   useEffect(() => {
@@ -399,6 +447,17 @@ export default function ProspeccaoTab() {
       });
     return () => { supabase.removeChannel(channel); };
   }, [fetchFila]);
+
+  // ─── Supabase Realtime: respostas ─────────────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('prospeccao-respostas-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prospeccao_respostas' }, () => {
+        fetchResponderam();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchResponderam]);
 
   // ─── Filtros de Leads ──────────────────────────────────────────────────────
   const leadsFiltrados = useMemo(() => {
@@ -754,12 +813,13 @@ export default function ProspeccaoTab() {
           </h1>
           <p className="text-zinc-500 text-sm mt-0.5">Encontre e qualifique novas academias e boxes usando IA e Google Maps</p>
         </div>
-        <div className="flex bg-dark-800/60 border border-dark-700/50 rounded-xl p-1 gap-1">
+        <div className="flex flex-wrap bg-dark-800/60 border border-dark-700/50 rounded-xl p-1 gap-1">
           {[
-            { id: 'leads', label: 'Leads Encontrados', icon: Award },
-            { id: 'raspar', label: 'Nova Raspagem', icon: Play },
-            { id: 'automacao', label: 'Automação Diária', icon: Cpu },
-            { id: 'config', label: 'Configurações API', icon: Settings }
+            { id: 'leads',       label: 'Leads Encontrados', icon: Award },
+            { id: 'raspar',      label: 'Nova Raspagem',     icon: Play },
+            { id: 'automacao',   label: 'Automação Diária',  icon: Cpu },
+            { id: 'responderam', label: 'Responderam',       icon: MessageSquare, badge: responderam.filter(r => r.status === 'interessado').length },
+            { id: 'config',      label: 'Configurações API', icon: Settings }
           ].map(t => (
             <button
               key={t.id}
@@ -772,6 +832,11 @@ export default function ProspeccaoTab() {
             >
               <t.icon className="w-3.5 h-3.5" />
               {t.label}
+              {t.badge > 0 && (
+                <span className="ml-0.5 bg-neon text-dark-950 text-[9px] font-black rounded-full px-1.5 py-0.5 leading-none">
+                  {t.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1744,6 +1809,178 @@ export default function ProspeccaoTab() {
                   {salvandoConfig ? 'Salvando...' : 'Salvar Configurações'}
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════ SUB-ABA: RESPONDERAM ══════════════════════ */}
+      {activeSubTab === 'responderam' && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-black text-white flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-neon" />
+                Leads que Responderam
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Janela de 48h + scoring progressivo — respostas automáticas monitoradas até resposta humana
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Aguardando</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-neon inline-block" /> Interessado</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-zinc-600 inline-block" /> Sem interesse</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Convertido</span>
+              </div>
+              <button onClick={fetchResponderam} className="p-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Resumo de scores */}
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: 'Aguardando', status: 'aguardando', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+              { label: 'Interessados', status: 'interessado', color: 'text-neon', bg: 'bg-neon/10 border-neon/20' },
+              { label: 'Sem Interesse', status: 'sem_interesse', color: 'text-zinc-500', bg: 'bg-dark-800 border-dark-700' },
+              { label: 'Convertidos', status: 'convertido', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+            ].map(s => (
+              <div key={s.status} className={`rounded-xl border p-3 text-center ${s.bg}`}>
+                <div className={`text-xl font-black ${s.color}`}>
+                  {responderam.filter(r => r.status === s.status).length}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Lista */}
+          {loadingResponderam ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-6 h-6 text-neon animate-spin" />
+            </div>
+          ) : responderam.length === 0 ? (
+            <div className="text-center py-16 bg-dark-900 border border-dark-800 rounded-2xl">
+              <MessageSquare className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
+              <p className="text-sm text-zinc-500 font-bold">Nenhuma resposta recebida ainda</p>
+              <p className="text-xs text-zinc-600 mt-1">Configure o webhook do Botconversa para apontar para:<br />
+                <code className="text-neon text-[10px]">https://brave-hub-two.vercel.app/api/prospeccao-resposta</code>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {responderam.map(r => {
+                const statusCfg = {
+                  aguardando:    { label: 'Aguardando',    dot: 'bg-amber-400',  text: 'text-amber-400',  border: 'border-amber-500/20' },
+                  interessado:   { label: 'Interessado',   dot: 'bg-neon',       text: 'text-neon',       border: 'border-neon/30' },
+                  sem_interesse: { label: 'Sem interesse', dot: 'bg-zinc-600',   text: 'text-zinc-500',   border: 'border-dark-700' },
+                  convertido:    { label: 'Convertido',    dot: 'bg-blue-400',   text: 'text-blue-400',   border: 'border-blue-500/20' },
+                }[r.status] || { label: r.status, dot: 'bg-zinc-600', text: 'text-zinc-500', border: 'border-dark-700' };
+
+                const horasJanela = r.janela_expira_em
+                  ? Math.max(0, Math.round((new Date(r.janela_expira_em) - new Date()) / 3600000))
+                  : null;
+
+                const ultimaMsg = r.mensagens?.slice(-1)[0];
+                const isExpanded = expandedResposta === r.id;
+
+                return (
+                  <div key={r.id} className={`bg-dark-900 border rounded-2xl overflow-hidden transition-all ${statusCfg.border}`}>
+                    {/* Linha principal */}
+                    <div className="flex items-center gap-4 p-4">
+                      {/* Score visual */}
+                      <div className="flex flex-col items-center gap-1 min-w-[48px]">
+                        <div className={`text-lg font-black ${r.score >= 5 ? 'text-neon' : r.score >= 3 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                          {r.score}<span className="text-xs font-normal text-zinc-600">/10</span>
+                        </div>
+                        <div className="w-10 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${r.score >= 7 ? 'bg-neon' : r.score >= 4 ? 'bg-amber-400' : 'bg-zinc-600'}`}
+                            style={{ width: `${r.score * 10}%` }}
+                          />
+                        </div>
+                        {r.score >= 7 && <Flame className="w-3 h-3 text-neon" />}
+                      </div>
+
+                      {/* Info do lead */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-white truncate">{r.nome_empresa}</span>
+                          <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusCfg.text} border-current/20`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot} ${r.status === 'aguardando' ? 'animate-pulse' : ''}`} />
+                            {statusCfg.label}
+                          </span>
+                          {horasJanela !== null && r.status === 'aguardando' && (
+                            <span className="text-[10px] text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                              <Clock className="w-2.5 h-2.5 inline mr-0.5" />
+                              {horasJanela}h na janela
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-zinc-500 mt-0.5 font-mono">{r.telefone}</div>
+                        {ultimaMsg && (
+                          <div className={`text-xs mt-1 truncate ${ultimaMsg.tipo === 'auto' ? 'text-zinc-600 italic' : 'text-zinc-300'}`}>
+                            {ultimaMsg.tipo === 'auto' ? '🤖 ' : '👤 '}{ultimaMsg.texto.slice(0, 90)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Ações */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {r.status === 'interessado' && (
+                          <button
+                            onClick={() => converterEmLead(r)}
+                            disabled={convertendoLead === r.id}
+                            className="flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 bg-neon text-dark-950 rounded-lg hover:bg-neon/90 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {convertendoLead === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserCheck className="w-3 h-3" />}
+                            Converter Lead
+                          </button>
+                        )}
+                        {r.status === 'aguardando' && (
+                          <button
+                            onClick={async () => {
+                              await supabase.from('prospeccao_respostas').update({ status: 'sem_interesse' }).eq('id', r.id);
+                              setResponderam(prev => prev.map(x => x.id === r.id ? { ...x, status: 'sem_interesse' } : x));
+                            }}
+                            className="text-[10px] font-bold px-3 py-1.5 bg-dark-800 border border-dark-700 text-zinc-500 hover:text-white rounded-lg transition-all cursor-pointer"
+                          >
+                            Ignorar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setExpandedResposta(isExpanded ? null : r.id)}
+                          className="p-1.5 text-zinc-600 hover:text-white rounded-lg hover:bg-dark-800 transition-all cursor-pointer"
+                        >
+                          <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Conversa expandida */}
+                    {isExpanded && (
+                      <div className="border-t border-dark-800 px-4 py-3 space-y-2 bg-dark-950/40">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2">Histórico de mensagens</p>
+                        {(r.mensagens || []).map((msg, i) => (
+                          <div key={i} className={`flex items-start gap-2 text-xs ${msg.tipo === 'auto' ? 'opacity-60' : ''}`}>
+                            <span className="text-[10px] shrink-0 mt-0.5">{msg.tipo === 'auto' ? '🤖' : '👤'}</span>
+                            <div>
+                              <span className={`font-mono text-[9px] ${msg.tipo === 'auto' ? 'text-zinc-600' : 'text-zinc-400'} mr-2`}>
+                                {new Date(msg.recebida_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                              <span className={msg.tipo === 'auto' ? 'text-zinc-500 italic' : 'text-zinc-200'}>{msg.texto}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

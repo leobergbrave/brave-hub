@@ -26,7 +26,7 @@ const NAV_SECTIONS = [
       { id: 'leads',      label: 'Leads',               icon: Users },
       { id: 'clientes',   label: 'Clientes',            icon: BookUser },
       { id: 'contatos',   label: 'Contatos',            icon: BookUser },
-      { id: 'prospeccao', label: 'Potenciais Clientes', icon: Search },
+      { id: 'prospeccao', label: 'Prospecção Ativa', icon: Search },
       { id: 'orcamentos', label: 'Orçamentos',          icon: Receipt },
     ],
   },
