@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Search, Settings, Zap, MapPin, Play, Loader2, Info, CheckCircle2,
   Trash2, Mail, Phone, Globe, Award, Filter, ExternalLink, RefreshCw,
@@ -217,15 +217,28 @@ export default function ProspeccaoTab() {
     }
   }, []);
 
+  const [filaMostrarTodos, setFilaMostrarTodos] = useState(false);
+  const filaMostrarTodosRef = useRef(false);
+
   // ─── Fetch Fila de Envios ──────────────────────────────────────────────────
-  const fetchFila = useCallback(async () => {
+  const fetchFila = useCallback(async (mostrarTodos = false) => {
     setLoadingFila(true);
     try {
-      const { data, error } = await supabase
+      const hoje = new Date();
+      const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0).toISOString();
+      const fimHoje    = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59).toISOString();
+
+      let query = supabase
         .from('prospeccao_fila_envio')
         .select('*')
         .order('agendado_para', { ascending: true })
-        .limit(100);
+        .limit(500);
+
+      if (!mostrarTodos) {
+        query = query.gte('agendado_para', inicioHoje).lte('agendado_para', fimHoje);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setFila(data || []);
     } catch (e) {
@@ -379,7 +392,7 @@ export default function ProspeccaoTab() {
     const channel = supabase
       .channel('prospeccao-fila-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'prospeccao_fila_envio' }, () => {
-        fetchFila();
+        fetchFila(filaMostrarTodosRef.current);
       })
       .subscribe((status) => {
         setRealtimeConectado(status === 'SUBSCRIBED');
@@ -1455,13 +1468,30 @@ export default function ProspeccaoTab() {
                   <p className="text-xs text-zinc-500">Leads qualificados agendados para receber abordagem hoje</p>
                 </div>
               </div>
-              <button
-                onClick={fetchFila}
-                className="p-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer"
-                title="Atualizar manualmente"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const novo = !filaMostrarTodos;
+                    filaMostrarTodosRef.current = novo;
+                    setFilaMostrarTodos(novo);
+                    fetchFila(novo);
+                  }}
+                  className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                    filaMostrarTodos
+                      ? 'bg-neon/10 border-neon/30 text-neon'
+                      : 'bg-dark-800 border-dark-700 text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {filaMostrarTodos ? 'Todos os dias' : 'Só hoje'}
+                </button>
+                <button
+                  onClick={() => fetchFila(filaMostrarTodosRef.current)}
+                  className="p-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer"
+                  title="Atualizar manualmente"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {loadingFila ? (
