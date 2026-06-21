@@ -52,6 +52,7 @@ export default function ProspeccaoTab() {
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [fila, setFila] = useState([]);
   const [loadingFila, setLoadingFila] = useState(false);
+  const [realtimeConectado, setRealtimeConectado] = useState(false);
   const [testandoAutomacao, setTestandoAutomacao] = useState(false);
   const [processandoFila, setProcessandoFila] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState(null);
@@ -372,6 +373,19 @@ export default function ProspeccaoTab() {
     fetchHistorico();
     fetchFila();
   }, [fetchConfig, fetchLeads, fetchHistorico, fetchFila]);
+
+  // ─── Supabase Realtime: fila de envios ────────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('prospeccao-fila-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prospeccao_fila_envio' }, () => {
+        fetchFila();
+      })
+      .subscribe((status) => {
+        setRealtimeConectado(status === 'SUBSCRIBED');
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchFila]);
 
   // ─── Filtros de Leads ──────────────────────────────────────────────────────
   const leadsFiltrados = useMemo(() => {
@@ -1424,13 +1438,27 @@ export default function ProspeccaoTab() {
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-neon" />
                 <div>
-                  <h3 className="text-sm font-bold text-white">Fila de Envios Agendados</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">Fila de Envios Agendados</h3>
+                    {realtimeConectado ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-neon bg-neon/10 border border-neon/20 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-neon animate-pulse inline-block" />
+                        Tempo real
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-zinc-600 bg-dark-700 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 inline-block" />
+                        Conectando...
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-zinc-500">Leads qualificados agendados para receber abordagem hoje</p>
                 </div>
               </div>
               <button
                 onClick={fetchFila}
                 className="p-2 bg-dark-850 hover:bg-dark-800 border border-dark-700 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer"
+                title="Atualizar manualmente"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
