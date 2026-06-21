@@ -73,11 +73,8 @@ export default async function handler(req, res) {
   console.log(`[Resposta] telefone=${telefone} texto="${texto.slice(0, 100)}" nome="${nomeContato}"`);
 
   if (!telefone || !texto) {
-    return res.status(200).json({ ok: false, reason: 'Payload sem telefone ou texto — verifique o formato do webhook do Botconversa' });
+    return res.status(200).json({ ok: false, tipo: 'desconhecido', reason: 'Payload sem telefone ou texto' });
   }
-
-  // Responder imediatamente para não dar timeout no Botconversa
-  res.status(200).json({ ok: true, message: 'Processando...' });
 
   const { data: config } = await supabase
     .from('prospeccao_config').select('gemini_key').eq('id', 1).maybeSingle();
@@ -126,18 +123,16 @@ export default async function handler(req, res) {
     let novaJanela = respostaExistente.janela_expira_em;
 
     if (tipoMensagem === 'auto') {
-      // Auto-reply adicional: mantém janela, pequeno bump de score
       if (novoScore === 0) {
         novoScore = 1;
         novaJanela = new Date(agora.getTime() + 48 * 60 * 60 * 1000).toISOString();
         novoStatus = 'aguardando';
       }
     } else {
-      // Resposta humana: sobe score e confirma interesse
       const bonus = novoStatus === 'aguardando' ? 5 : 3;
       novoScore = Math.min(10, novoScore + bonus);
       novoStatus = 'interessado';
-      novaJanela = null; // janela cumprida
+      novaJanela = null;
     }
 
     await supabase.from('prospeccao_respostas').update({
@@ -149,6 +144,8 @@ export default async function handler(req, res) {
     }).eq('id', respostaExistente.id);
 
     console.log(`[Resposta] Atualizado id=${respostaExistente.id} status=${novoStatus} score=${novoScore}`);
+    return res.status(200).json({ ok: true, tipo: tipoMensagem, score: novoScore, status: novoStatus });
+
   } else {
     // ── Criar novo registro ─────────────────────────────────────────────────
     let score = 0;
@@ -177,8 +174,10 @@ export default async function handler(req, res) {
 
     if (errInsert) {
       console.error('[Resposta] Erro ao inserir:', errInsert.message);
-    } else {
-      console.log(`[Resposta] Criado id=${novoRegistro?.id} status=${status} score=${score} tipo=${tipoMensagem}`);
+      return res.status(200).json({ ok: false, tipo: tipoMensagem, reason: errInsert.message });
     }
+
+    console.log(`[Resposta] Criado id=${novoRegistro?.id} status=${status} score=${score} tipo=${tipoMensagem}`);
+    return res.status(200).json({ ok: true, tipo: tipoMensagem, score, status });
   }
 }
