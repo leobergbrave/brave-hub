@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Variáveis de ambiente necessárias:
@@ -50,7 +49,7 @@ async function dispararWebhook(url: string, body: Record<string, unknown>): Prom
   }).catch(err => console.error('Erro webhook BotConversa:', err));
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
