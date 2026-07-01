@@ -192,10 +192,18 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { nome, telefone, email, momento_compra, produtos_interesse, consultor, observacoes } = await req.json();
+    const body = await req.json();
+    const { nome, telefone, email, momento_compra, produtos_interesse, consultor, observacoes, somenteDisparo, leadId } = body;
 
-    if (!nome || !telefone || !produtos_interesse?.length) {
-      return new Response(JSON.stringify({ error: 'nome, telefone e produtos_interesse são obrigatórios' }), {
+    if (!nome || !telefone) {
+      return new Response(JSON.stringify({ error: 'nome e telefone são obrigatórios' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    if (!somenteDisparo && !produtos_interesse?.length) {
+      return new Response(JSON.stringify({ error: 'produtos_interesse é obrigatório ao cadastrar lead' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
@@ -207,38 +215,59 @@ serve(async (req) => {
 
     const consultorNome = consultor || 'Léo Berg';
 
-    // 1. Salva o lead
-    const { data: leadData, error: leadError } = await supabase.from('leads').insert({
-      nome,
-      telefone: telefoneFormatado,
-      email: email || null,
-      momento_compra: momento_compra || 'morno',
-      produtos_interesse,
-      status: 'novo',
-      consultor: consultorNome,
-      observacoes: observacoes || null,
-      link_rapido_codigo: null,
-    }).select().single();
+    let leadData: any;
 
-    if (leadError) throw new Error('Erro ao salvar lead: ' + leadError.message);
+    if (somenteDisparo && leadId) {
+      // Modo reenvio: apenas busca o lead existente pelo ID, sem criar duplicado
+      const { data, error } = await supabase.from('leads').select('*').eq('id', leadId).single();
+      if (error || !data) throw new Error('Lead não encontrado: ' + (error?.message || 'ID inválido'));
+      leadData = data;
+    } else {
+      // Modo cadastro: cria novo lead
+      const { data, error: leadError } = await supabase.from('leads').insert({
+        nome,
+        telefone: telefoneFormatado,
+        email: email || null,
+        momento_compra: momento_compra || 'morno',
+        produtos_interesse,
+        status: 'novo',
+        consultor: consultorNome,
+        observacoes: observacoes || null,
+        link_rapido_codigo: null,
+      }).select().single();
+
+      if (leadError) throw new Error('Erro ao salvar lead: ' + leadError.message);
+      leadData = data;
+    }
 
     // 2. Dispara BotConversa
-    const webhookUrl = Deno.env.get('BOTCONVERSA_WEBHOOK_NOVO_LEAD');
+    // Usa BOTCONVERSA_WEBHOOK_NOVO_LEAD ou fallback para BOTCONVERSA_WEBHOOK
+    const webhookUrl = Deno.env.get('BOTCONVERSA_WEBHOOK_NOVO_LEAD') || Deno.env.get('BOTCONVERSA_WEBHOOK');
+    const produtosParaEnviar = produtos_interesse || leadData.produtos_interesse || [];
     if (webhookUrl) {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telefone: telefoneFormatado,
-          nome,
-          produtos: aliasParaNome(produtos_interesse),
-          momento: momento_compra,
-          consultor: consultorNome,
-        }),
-      }).catch(err => console.error('Erro BotConversa:', err));
+      try {
+        const webhookRes = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            telefone: telefoneFormatado,
+            nome,
+            produtos: aliasParaNome(produtosParaEnviar),
+            momento: momento_compra || leadData.momento_compra,
+            consultor: consultorNome,
+          }),
+        });
+        if (!webhookRes.ok) {
+          console.error('BotConversa HTTP error:', webhookRes.status, await webhookRes.text());
+        }
+      } catch (err) {
+        console.error('Erro BotConversa:', err);
+      }
 
       await supabase.from('leads').update({ status: 'fluxo_disparado' }).eq('id', leadData.id);
       leadData.status = 'fluxo_disparado';
+    } else {
+      console.warn('[cadastrar-lead] Nenhum webhook configurado. Configure BOTCONVERSA_WEBHOOK_NOVO_LEAD nos secrets do Supabase.');
     }
 
     // 3. Email via Resend

@@ -555,15 +555,24 @@ export default function LeadsTab() {
   const reenviarFluxo = async (lead) => {
     if (!confirm(`Reenviar fluxo para ${lead.nome}?`)) return;
     setAtualizandoStatus(lead.id);
-    await supabase.functions.invoke('cadastrar-lead', {
-      body: {
-        nome: lead.nome,
-        telefone: lead.telefone,
-        momento_compra: lead.momento_compra,
-        produtos_interesse: lead.produtos_interesse,
-        consultor: lead.consultor,
-      },
-    });
+    try {
+      const { data, error } = await supabase.functions.invoke('cadastrar-lead', {
+        body: {
+          nome: lead.nome,
+          telefone: lead.telefone,
+          momento_compra: lead.momento_compra,
+          produtos_interesse: lead.produtos_interesse,
+          consultor: lead.consultor,
+          somenteDisparo: true,
+          leadId: lead.id,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+    } catch (err) {
+      console.error(`Erro ao reenviar fluxo para ${lead.nome}:`, err);
+      alert(`Erro ao reenviar fluxo: ${err.message}`);
+    }
     await load();
     setAtualizandoStatus(null);
   };
@@ -651,6 +660,8 @@ export default function LeadsTab() {
             momento_compra: lead.momento_compra,
             produtos_interesse: lead.produtos_interesse,
             consultor: lead.consultor,
+            somenteDisparo: true,
+            leadId: lead.id,
           },
         });
       } catch (err) {
