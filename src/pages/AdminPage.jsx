@@ -24,7 +24,6 @@ const NAV_SECTIONS = [
     label: 'COMERCIAL',
     items: [
       { id: 'leads',      label: 'Leads',               icon: Users },
-      { id: 'clientes',   label: 'Clientes',            icon: BookUser },
       { id: 'contatos',   label: 'Contatos',            icon: BookUser },
       { id: 'prospeccao', label: 'Prospecção Ativa', icon: Search },
       { id: 'orcamentos', label: 'Orçamentos',          icon: Receipt },
@@ -37,8 +36,6 @@ const NAV_SECTIONS = [
       { id: 'disparos',  label: 'Disparos WhatsApp',  icon: Zap },
       { id: 'marketing', label: 'Follow Up LEADS',      icon: Megaphone },
       { id: 'posvendas', label: 'Follow Up CLIENTES',   icon: Heart },
-      { id: 'emails',        label: 'Emails',               icon: Mail },
-      { id: 'landingpages',  label: 'Landing Pages',        icon: Globe },
     ],
   },
   {
