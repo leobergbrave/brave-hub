@@ -362,6 +362,22 @@ export async function gerarProposta(req, res) {
     };
   });
 
+  // Frete por CEP (mesma lógica do orçamento; opcional)
+  const { estado, zona } = await resolverCep(req.body?.cep);
+  let regraFrete = null;
+  if (estado) {
+    const { data: exata } = await supabaseAdmin.from('regras_frete')
+      .select('multiplicador, valor_minimo').eq('estado', estado).eq('zona', zona).maybeSingle();
+    regraFrete = exata;
+    if (!regraFrete) {
+      const { data: fb } = await supabaseAdmin.from('regras_frete')
+        .select('multiplicador, valor_minimo').eq('estado', estado).limit(1).maybeSingle();
+      regraFrete = fb;
+    }
+  }
+  const pesoTotal = produtos.reduce((a, i) => a + (i.peso_kg || 0) * i.quantidade, 0);
+  const frete = calcularFrete(pesoTotal, regraFrete);
+
   const nomeLead = (nome || '').trim() || 'Cliente';
   const slugBase = nomeLead.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'proposta';
@@ -376,6 +392,8 @@ export async function gerarProposta(req, res) {
     objetivo,
     mensagem_personalizada: req.body?.mensagem || modelo.introducao || null,
     equipamentos,
+    frete,
+    estado,
     validade_em: validade_em || null,
     vendedor_telefone: vendedorTel,
     status: 'enviada',
@@ -385,10 +403,10 @@ export async function gerarProposta(req, res) {
   if (error) return res.status(500).json({ ok: false, error: 'Erro ao salvar proposta: ' + error.message });
 
   const baseUrl = baseUrlDe(req);
-  const totalAvista = round2(equipamentos.reduce((a, e) => a + e.preco_avista, 0));
+  const totalAvista = round2(equipamentos.reduce((a, e) => a + e.preco_avista, 0) + frete);
   return res.status(200).json({
     ok: true, slug, link: `${baseUrl}/pp/${slug}`,
-    resumo: { equipamentos: equipamentos.length, total_avista: totalAvista },
+    resumo: { equipamentos: equipamentos.length, estado, frete, total_avista: totalAvista },
   });
 }
 

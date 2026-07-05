@@ -66,7 +66,7 @@ export default function ModelosTab() {
 
   const abrirGerar = (modelo, tipo) => {
     setGerar({ modelo, tipo });
-    setForm({ nome: '', cep: '', telefone: '', desconto_avista: 15 });
+    setForm({ nome: '', cep: '', telefone: '', desconto_avista: 15, mensagem: modelo.introducao || '' });
     setLinkGerado(null);
     setCopiado(false);
   };
@@ -254,15 +254,21 @@ export default function ModelosTab() {
                   className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
                 <input placeholder="WhatsApp (opcional)" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })}
                   className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
-                {gerar.tipo === 'orcamento' && (
-                  <input placeholder="CEP do lead (para o frete)" value={form.cep} onChange={(e) => setForm({ ...form, cep: e.target.value })}
-                    className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
-                )}
+                <input placeholder="CEP do lead (para calcular o frete)" value={form.cep} onChange={(e) => setForm({ ...form, cep: e.target.value })}
+                  className="w-full bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
                 <label className="block">
                   <span className="text-xs text-zinc-500">Desconto à vista (%)</span>
                   <input type="number" value={form.desconto_avista} onChange={(e) => setForm({ ...form, desconto_avista: Number(e.target.value) })}
                     className="w-full mt-1 bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50" />
                 </label>
+                {gerar.tipo === 'proposta' && (
+                  <label className="block">
+                    <span className="text-xs text-zinc-500">Condições / mensagem ao lead (editável)</span>
+                    <textarea value={form.mensagem} onChange={(e) => setForm({ ...form, mensagem: e.target.value })} rows={6}
+                      placeholder="Condições de pagamento, prazo de entrega, mensagem personalizada…"
+                      className="w-full mt-1 bg-dark-800 border border-dark-600 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-neon/50 resize-y" />
+                  </label>
+                )}
                 <button onClick={executarGeracao} disabled={gerando || !form.nome.trim()}
                   className="w-full flex items-center justify-center gap-2 bg-neon text-dark-950 text-sm font-black rounded-xl px-4 py-3 hover:bg-neon/90 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50">
                   {gerando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -282,7 +288,7 @@ export default function ModelosTab() {
                   <p className="text-xs text-zinc-500">
                     {gerar.tipo === 'orcamento'
                       ? `${linkGerado.resumo.itens} itens · frete ${brl(linkGerado.resumo.frete)} · total à vista ${brl(linkGerado.resumo.total_avista)}`
-                      : `${linkGerado.resumo.equipamentos} equipamentos · total à vista ${brl(linkGerado.resumo.total_avista)}`}
+                      : `${linkGerado.resumo.equipamentos} equipamentos${linkGerado.resumo.frete ? ` · frete ${brl(linkGerado.resumo.frete)}` : ''} · total à vista ${brl(linkGerado.resumo.total_avista)}`}
                   </p>
                 )}
                 <a href={linkGerado.link} target="_blank" rel="noopener noreferrer"

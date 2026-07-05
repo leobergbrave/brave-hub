@@ -11,8 +11,11 @@ export function gerarHTML(proposta) {
   const totalAvista = equips.reduce((s, e) => s + (e.preco_avista || e.preco || 0), 0);
   const totalNormal = equips.reduce((s, e) => s + (e.preco || 0), 0);
   const economiaTotal = totalNormal - totalAvista;
+  const freteVal = Number(proposta.frete) || 0;
+  const totalAvistaFinal = totalAvista + freteVal;
+  const totalPrazoFinal = totalNormal + freteVal;
   const parcelas = equips[0]?.parcelas || 10;
-  const totalParcela = parcelas > 0 ? totalNormal / parcelas : 0;
+  const totalParcela = parcelas > 0 ? totalPrazoFinal / parcelas : 0;
   const validadeStr = proposta.validade_em
     ? new Date(proposta.validade_em + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
     : null;
@@ -254,6 +257,12 @@ export function gerarHTML(proposta) {
     .resumo-prazo-box { text-align: right; }
     .resumo-prazo-total-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
     .resumo-prazo-total { font-size: 15px; font-weight: 700; color: #bbb; }
+    .resumo-frete {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 22px; border-bottom: 1px solid var(--dark-700); font-size: 14px;
+    }
+    .resumo-frete-label { color: var(--muted); }
+    .resumo-frete-value { color: #ddd; font-weight: 600; }
 
     /* VALIDADE */
     .validade-bar {
@@ -331,10 +340,18 @@ export function gerarHTML(proposta) {
     <div class="section">
       <div class="section-label">Investimento</div>
       <div class="resumo-card">
+        ${freteVal > 0 ? `<div class="resumo-frete">
+          <span class="resumo-frete-label">Equipamentos à vista</span>
+          <span class="resumo-frete-value">${fmtBRL(totalAvista)}</span>
+        </div>
+        <div class="resumo-frete">
+          <span class="resumo-frete-label">Frete${proposta.estado ? ` (${proposta.estado})` : ''}</span>
+          <span class="resumo-frete-value">${fmtBRL(freteVal)}</span>
+        </div>` : ''}
         <div class="resumo-total">
           <div>
-            <div class="resumo-total-label">Total à vista</div>
-            <div class="resumo-total-value">${fmtBRL(totalAvista)}</div>
+            <div class="resumo-total-label">Total à vista${freteVal > 0 ? ' (com frete)' : ''}</div>
+            <div class="resumo-total-value">${fmtBRL(totalAvistaFinal)}</div>
           </div>
           ${economiaTotal > 0 ? `<div class="economia-box">
             <div class="economia-pill">✓ Economia</div>
@@ -348,7 +365,7 @@ export function gerarHTML(proposta) {
           </div>
           <div class="resumo-prazo-box">
             <div class="resumo-prazo-total-label">Total a prazo</div>
-            <div class="resumo-prazo-total">${fmtBRL(totalNormal)}</div>
+            <div class="resumo-prazo-total">${fmtBRL(totalPrazoFinal)}</div>
           </div>
         </div>
       </div>
