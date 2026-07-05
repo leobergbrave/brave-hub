@@ -216,7 +216,7 @@ export default function ProdutosTab() {
     setBlingStep('preview');
     setBlingPreview(null);
     try {
-      const res = await fetch('/api/importar-bling', {
+      const res = await fetch('/api/bling?acao=importar_bling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'produtos', mode: 'preview', apenasAtivos: true }),
@@ -240,7 +240,7 @@ export default function ProdutosTab() {
     setBlingLoading(true);
     setBlingStep('importing');
     try {
-      const res = await fetch('/api/importar-bling', {
+      const res = await fetch('/api/bling?acao=importar_bling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'produtos', mode: 'import', apenasAtivos: true }),

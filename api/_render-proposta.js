@@ -5,7 +5,7 @@ function fmtBRL(valor) {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function gerarHTML(proposta) {
+export function gerarHTML(proposta) {
   const equips = proposta.equipamentos || [];
   const primeiroNome = (proposta.lead_nome || 'Cliente').split(' ')[0];
   const totalAvista = equips.reduce((s, e) => s + (e.preco_avista || e.preco || 0), 0);
@@ -23,7 +23,8 @@ function gerarHTML(proposta) {
     const precoAvista = e.preco_avista || e.preco || 0;
     const precoNormal = e.preco || 0;
     const economia = precoNormal - precoAvista;
-    const temImagem = e.imagem_url && e.imagem_url.trim();
+    const imgLimpa = (e.imagem_url || '').trim();
+    const temImagem = imgLimpa && imgLimpa.toUpperCase() !== 'SEM_FOTO_BLING' && /^https?:\/\//i.test(imgLimpa);
 
     return `
       <div class="equip-card${e.destaque ? ' destaque' : ''}">
@@ -47,12 +48,6 @@ function gerarHTML(proposta) {
         </div>
       </div>`;
   }).join('');
-
-  const resumoItensHTML = equips.map(e => `
-    <div class="resumo-item">
-      <span class="resumo-nome">${e.nome}</span>
-      <span class="resumo-preco">${fmtBRL(e.preco_avista || e.preco || 0)}</span>
-    </div>`).join('');
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -102,7 +97,7 @@ function gerarHTML(proposta) {
     .hero {
       background: linear-gradient(160deg, #080808 0%, #0d1a08 60%, #080808 100%);
       border-bottom: 1px solid #1a2d14;
-      padding: 56px 24px 48px;
+      padding: 40px 20px 36px;
       text-align: center;
       position: relative; overflow: hidden;
     }
@@ -180,8 +175,8 @@ function gerarHTML(proposta) {
       background: var(--neon); padding: 3px 10px; border-radius: 99px;
     }
     .equip-img {
-      width: 100%; max-height: 260px; object-fit: contain;
-      background: #0a0a0a; display: block; padding: 24px;
+      width: 100%; max-height: 200px; object-fit: contain;
+      background: #0a0a0a; display: block; padding: 18px;
     }
     .equip-placeholder {
       width: 100%; height: 140px;
@@ -297,9 +292,6 @@ function gerarHTML(proposta) {
     <div class="hero-tag">Preparamos especialmente para você</div>
     <h1>${primeiroNome},<br><span>${proposta.objetivo || 'vamos equipar seu box'}</span></h1>
     <p class="hero-sub">Selecionamos os melhores equipamentos BRAVE para você. Alta performance, padrão profissional.</p>
-    <div class="hero-chips">
-      ${equips.map(e => `<span class="hero-chip">${e.nome}</span>`).join('')}
-    </div>
   </section>
 
   <div class="wrap">
@@ -325,10 +317,8 @@ function gerarHTML(proposta) {
     </div>
 
     <div class="section">
-      <div class="section-label">Resumo do investimento</div>
+      <div class="section-label">Investimento</div>
       <div class="resumo-card">
-        <div class="resumo-header">Itens da proposta</div>
-        <div class="resumo-items">${resumoItensHTML}</div>
         <div class="resumo-total">
           <div>
             <div class="resumo-total-label">Total à vista</div>

@@ -2,6 +2,19 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-05] Modelos de Orçamento a partir do Bling
+
+### O que foi feito:
+- **Validação com dados reais (Fase Link):** sonda contra a API do Bling confirmou que `GET /v3/propostas-comerciais` **ignora filtros por número** (necessário paginar, ordem decrescente), e que o detalhe traz `itens[]` com `produto.id`+`codigo`+`quantidade`+`valor`. A proposta **3747 (BOX FULL BRAVE)** mapeou **40/40 itens** no catálogo local por `bling_id`.
+- **Migrations (rodar manual no Supabase):**
+  - `20260705_orcamentos_modelo_bling.sql` — estende `orcamentos_modelo` (rastreio Bling + `itens_faltantes`, índice único parcial por `bling_proposta_id`).
+  - `20260705_propostas_leads.sql` — **cria** a tabela `propostas_leads`, que o renderizador `api/proposta-lead.js` já esperava mas nunca havia sido criada.
+- **API `api/modelos.js`** (consolidada p/ respeitar limite de funções): `?acao=importar` (número→modelo, idempotente), `?acao=gerar_orcamento` (→ `/orcamento/{slug}` com frete por CEP), `?acao=gerar_proposta` (→ `/pp/{slug}`). Token Bling self-healing.
+- **UI `src/admin/ModelosTab.jsx`** + registro no menu (Comercial → Modelos): importar por número com resultado ao vivo (incl. itens faltantes), lista de modelos e modal de geração dos dois tipos de link com copiar/abrir. Inclui bloco de objetivos/instruções/teste.
+- **Preços:** sempre os atuais do catálogo; à vista derivado (15% padrão).
+- **Validação:** `npm run build` OK; dry-run da importação da 3747 confirmou nome, 40 itens, 0 faltantes, total 44.620,40.
+- **Pendente do usuário:** rodar as 2 migrations e fazer deploy.
+
 ## [2026-06-17] Inicialização da Memória do Projeto
 
 ### O que foi feito:
