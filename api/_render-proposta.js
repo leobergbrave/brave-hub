@@ -11,6 +11,8 @@ export function gerarHTML(proposta) {
   const totalAvista = equips.reduce((s, e) => s + (e.preco_avista || e.preco || 0), 0);
   const totalNormal = equips.reduce((s, e) => s + (e.preco || 0), 0);
   const economiaTotal = totalNormal - totalAvista;
+  const parcelas = equips[0]?.parcelas || 10;
+  const totalParcela = parcelas > 0 ? totalNormal / parcelas : 0;
   const validadeStr = proposta.validade_em
     ? new Date(proposta.validade_em + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
     : null;
@@ -242,6 +244,16 @@ export function gerarHTML(proposta) {
       border-radius: 99px; margin-bottom: 4px;
     }
     .economia-valor { font-size: 18px; font-weight: 800; color: var(--neon); }
+    .resumo-prazo {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      padding: 16px 22px; border-top: 1px solid var(--dark-700);
+    }
+    .resumo-prazo-label { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+    .resumo-prazo-value { font-size: clamp(18px, 5vw, 22px); font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+    .resumo-prazo-box { text-align: right; }
+    .resumo-prazo-total-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+    .resumo-prazo-total { font-size: 15px; font-weight: 700; color: #bbb; }
 
     /* VALIDADE */
     .validade-bar {
@@ -328,6 +340,16 @@ export function gerarHTML(proposta) {
             <div class="economia-pill">✓ Economia</div>
             <div class="economia-valor">${fmtBRL(economiaTotal)}</div>
           </div>` : ''}
+        </div>
+        <div class="resumo-prazo">
+          <div>
+            <div class="resumo-prazo-label">ou a prazo no cartão</div>
+            <div class="resumo-prazo-value">${parcelas}× de ${fmtBRL(totalParcela)}</div>
+          </div>
+          <div class="resumo-prazo-box">
+            <div class="resumo-prazo-total-label">Total a prazo</div>
+            <div class="resumo-prazo-total">${fmtBRL(totalNormal)}</div>
+          </div>
         </div>
       </div>
       ${validadeStr ? `<div class="validade-bar">
