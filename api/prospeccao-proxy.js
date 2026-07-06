@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Processamento do webhook do Apify e da fila pode levar dezenas de segundos
+// (baixar dataset + qualificar no Gemini). Sem isso, roda com 10s e é cortado.
+export const config = { maxDuration: 60 };
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -83,9 +87,6 @@ export default async function handler(req, res) {
 
         console.log(`[Webhook Apify] runId=${runId} status=${status} datasetId=${datasetId}`);
 
-        // Responder imediatamente ao Apify para não timeout
-        res.status(200).json({ message: 'Webhook recebido. Processando...' });
-
         // Se temos runId mas não temos datasetId, buscar detalhes do run na API do Apify
         if (runId && (!datasetId || !status || status !== 'SUCCEEDED')) {
           try {
@@ -113,15 +114,19 @@ export default async function handler(req, res) {
             status: 'erro',
             detalhes: `Apify status: ${status || 'desconhecido'}. runId: ${runId || 'N/A'}. datasetId: ${datasetId || 'N/A'}`
           });
-          return;
+          return res.status(200).json({ message: 'Webhook recebido, mas run inválido/sem dataset.' });
         }
 
-        // Processar leads em background
-        processarLeadsApify({ supabase, token, datasetId, runId, config }).catch(err => {
-          console.error('[Webhook Apify] Erro no processamento background:', err.message);
-        });
-
-        return;
+        // Processar de forma SÍNCRONA antes de responder.
+        // No serverless (Vercel) qualquer trabalho iniciado APÓS a resposta é morto —
+        // por isso o antigo "responde e processa em background" nunca concluía a extração.
+        try {
+          await processarLeadsApify({ supabase, token, datasetId, runId, config });
+          return res.status(200).json({ message: 'Leads processados e agendados com sucesso.' });
+        } catch (err) {
+          console.error('[Webhook Apify] Erro no processamento:', err.message);
+          return res.status(500).json({ error: `Erro ao processar leads: ${err.message}` });
+        }
       }
 
       // ── AÇÃO: PROCESSAR-RUN (Processar run Apify manualmente pelo runId) ────────
