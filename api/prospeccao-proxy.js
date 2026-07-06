@@ -439,6 +439,7 @@ async function processarLeadsApify({ supabase, token, datasetId, runId, config }
 
   // Filtrar leads com telefone e que não existam ainda no banco
   const validItems = [];
+  const seenPhones = new Set(); // dedup dentro do próprio lote (Apify/Google repetem o mesmo lugar)
   for (const item of rawItems) {
     const nomeEmpresa = item.title;
     if (!nomeEmpresa) continue;
@@ -447,23 +448,26 @@ async function processarLeadsApify({ supabase, token, datasetId, runId, config }
     const telefoneLimpo = telefoneBruto.replace(/\D/g, '');
     if (telefoneLimpo.length < 8) continue;
 
-    const { data: existePC } = await supabase
-      .from('potenciais_clientes')
-      .select('id')
-      .eq('nome_empresa', nomeEmpresa)
-      .maybeSingle();
-
-    const { data: existeCRM } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('nome', nomeEmpresa)
-      .maybeSingle();
-
-    if (existePC || existeCRM) {
-      console.log(`[Background] Lead "${nomeEmpresa}" já existe. Pulando.`);
+    // 1) Dedup dentro do lote: mesmo telefone repetido no dataset desta execução
+    if (seenPhones.has(telefoneLimpo)) {
+      console.log(`[Background] Duplicado no lote: "${nomeEmpresa}" (tel ${telefoneLimpo}). Pulando.`);
       continue;
     }
 
+    // 2) Dedup contra o banco: por NOME ou TELEFONE, em potenciais_clientes e leads
+    const [pcNome, pcTel, crmNome, crmTel] = await Promise.all([
+      supabase.from('potenciais_clientes').select('id').eq('nome_empresa', nomeEmpresa).maybeSingle(),
+      supabase.from('potenciais_clientes').select('id').eq('telefone', telefoneLimpo).maybeSingle(),
+      supabase.from('leads').select('id').eq('nome', nomeEmpresa).maybeSingle(),
+      supabase.from('leads').select('id').eq('telefone', telefoneLimpo).maybeSingle(),
+    ]);
+
+    if (pcNome.data || pcTel.data || crmNome.data || crmTel.data) {
+      console.log(`[Background] Lead "${nomeEmpresa}" já existe (nome ou telefone). Pulando.`);
+      continue;
+    }
+
+    seenPhones.add(telefoneLimpo);
     item._telefoneLimpo = telefoneLimpo;
     validItems.push(item);
   }
