@@ -343,7 +343,8 @@ export default function ProspeccaoTab() {
         body: JSON.stringify({
           nome_empresa: lead.nome_empresa,
           telefone: lead.telefone,
-          mensagem: lead.mensagem,
+          gancho_ia: lead.mensagem,   // BotConversa captura o campo "gancho_ia" (mesmo da fila automática)
+          mensagem: lead.mensagem,    // mantido por compatibilidade
           perfil_detectado: lead.perfil_detectado,
           cidade_origem: lead.cidade_origem,
           segmento_origem: lead.segmento_origem
