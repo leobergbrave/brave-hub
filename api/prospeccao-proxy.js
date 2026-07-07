@@ -442,9 +442,18 @@ async function processarLeadsApify({ supabase, token, datasetId, runId, config }
   const rawItems = await resDataset.json();
   console.log(`[Background] Baixados ${rawItems.length} itens brutos do dataset.`);
 
-  // Filtrar leads com telefone e que não existam ainda no banco
+  // ─── Dedup: NUNCA contatar o mesmo telefone 2x ───
+  // A fonte da verdade de "ja contatado" e a propria fila. Carregamos todos os
+  // telefones que ja estao la (qualquer status/dia) num Set e pulamos qualquer
+  // repetido — incluindo repeticoes dentro do mesmo dataset e reprocessamentos
+  // do mesmo run (o Apify reenvia o webhook quando o processamento demora).
+  const { data: filaExistente } = await supabase
+    .from('prospeccao_fila_envio')
+    .select('telefone')
+    .limit(100000);
+  const seenPhones = new Set((filaExistente || []).map(r => String(r.telefone)));
+
   const validItems = [];
-  const seenPhones = new Set(); // dedup dentro do próprio lote (Apify/Google repetem o mesmo lugar)
   for (const item of rawItems) {
     const nomeEmpresa = item.title;
     if (!nomeEmpresa) continue;
@@ -453,22 +462,8 @@ async function processarLeadsApify({ supabase, token, datasetId, runId, config }
     const telefoneLimpo = telefoneBruto.replace(/\D/g, '');
     if (telefoneLimpo.length < 8) continue;
 
-    // 1) Dedup dentro do lote: mesmo telefone repetido no dataset desta execução
     if (seenPhones.has(telefoneLimpo)) {
-      console.log(`[Background] Duplicado no lote: "${nomeEmpresa}" (tel ${telefoneLimpo}). Pulando.`);
-      continue;
-    }
-
-    // 2) Dedup contra o banco: por NOME ou TELEFONE, em potenciais_clientes e leads
-    const [pcNome, pcTel, crmNome, crmTel] = await Promise.all([
-      supabase.from('potenciais_clientes').select('id').eq('nome_empresa', nomeEmpresa).maybeSingle(),
-      supabase.from('potenciais_clientes').select('id').eq('telefone', telefoneLimpo).maybeSingle(),
-      supabase.from('leads').select('id').eq('nome', nomeEmpresa).maybeSingle(),
-      supabase.from('leads').select('id').eq('telefone', telefoneLimpo).maybeSingle(),
-    ]);
-
-    if (pcNome.data || pcTel.data || crmNome.data || crmTel.data) {
-      console.log(`[Background] Lead "${nomeEmpresa}" já existe (nome ou telefone). Pulando.`);
+      console.log(`[Background] Telefone ja na fila (nunca contatar 2x): "${nomeEmpresa}" (${telefoneLimpo}). Pulando.`);
       continue;
     }
 
