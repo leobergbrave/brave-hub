@@ -499,6 +499,19 @@ export default function LandingPagesTab() {
                         <Input label="Nome do produto" value={prod.nome} onChange={v => setProd(pIdx, 'nome', v)} />
                         <Input label="Emoji" value={prod.emoji} onChange={v => setProd(pIdx, 'emoji', v)} placeholder="🏋️" />
                       </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Categoria (agrupa na LP — opcional)</label>
+                        <input
+                          list={`cats-${pIdx}`}
+                          value={prod.categoria || ''}
+                          onChange={e => setProd(pIdx, 'categoria', e.target.value)}
+                          placeholder="Ex: Anilhas"
+                          className="w-full bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-orange-500/50 transition-colors placeholder:text-zinc-700"
+                        />
+                        <datalist id={`cats-${pIdx}`}>
+                          {(form.config.categorias || []).map((c, i) => <option key={i} value={c.nome} />)}
+                        </datalist>
+                      </div>
                       <div className="grid grid-cols-2 gap-4">
                         <Input label="Texto do badge" value={prod.badge} onChange={v => setProd(pIdx, 'badge', v)} placeholder="Pronta Entrega" />
                         <div className="space-y-1.5">
@@ -570,6 +583,16 @@ export default function LandingPagesTab() {
                             placeholder="699"
                           />
                         </div>
+                      </div>
+
+                      {/* Preço em texto (opcional) — usado nas LPs por categoria (ex: CrossFit) */}
+                      <div className="space-y-2 bg-dark-900/40 border border-dark-700 rounded-xl p-3">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                          Preço em texto <span className="text-zinc-600 normal-case font-normal">(opcional — sobrepõe os números; ex: "A partir de R$ 999", "R$ 14 / kg", "Valores sob consulta")</span>
+                        </label>
+                        <Input label="À vista (texto)" value={prod.preco_avista_txt} onChange={v => setProd(pIdx, 'preco_avista_txt', v)} placeholder="A partir de R$ 999" />
+                        <Input label="Parcelado (texto)" value={prod.preco_prazo_txt} onChange={v => setProd(pIdx, 'preco_prazo_txt', v)} placeholder="10x a partir de R$ 1.199" />
+                        <Input label="Nota do preço" value={prod.preco_nota} onChange={v => setProd(pIdx, 'preco_nota', v)} placeholder="Disponível de 5 a 25 kg" />
                       </div>
 
                       {/* Features */}

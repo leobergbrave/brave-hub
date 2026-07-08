@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, MessageCircle, Mail, Loader2, Trophy, Package, Shield, Zap, DollarSign, Truck } from 'lucide-react';
+import { LP_CROSSFIT_DEFAULT } from '../data/lpCrossfitConfig';
 
 const IconInstagram = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -22,6 +23,10 @@ function convertImgUrl(url) {
   return url;
 }
 
+const fmtBRL = (v) => Number(v) > 0
+  ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  : null;
+
 const PILARES = [
   { Icon: Zap,        titulo: 'Fundição Própria',    desc: 'Produzimos nossas próprias fundições. Kettlebells e dumbbells com o melhor custo-benefício do mercado.' },
   { Icon: Package,    titulo: 'Linha Completa',      desc: 'Do rig às anilhas de competição: um único fornecedor para equipar todo o seu box de CrossFit.' },
@@ -29,156 +34,12 @@ const PILARES = [
   { Icon: Trophy,     titulo: 'Padrão Competição',   desc: 'Barras e anilhas em pleno acordo com a IWF — os mesmos materiais usados em provas certificadas.' },
 ];
 
-const DEFAULT_CONFIG = {
-  wa_number:    '5514981451119',
-  wa_msg_geral: 'Olá! Quero montar meu box de CrossFit com a Brave. Pode me enviar uma cotação completa?',
-  hero: {
-    badge:      'Fabricante Oficial · Linha Completa',
-    headline_1: 'Equipe seu Box',
-    headline_2: 'de CrossFit',
-    desc:       'Do rig às anilhas, do levantamento olímpico ao conditioning. A Brave é fabricante com fundição própria e entrega o seu box de CrossFit completo, com qualidade de competição e o melhor custo-benefício do mercado.',
-  },
-  categorias: [
-    {
-      nome: 'Barras Olímpicas', emoji: '🏋️', tagline: 'EVOBLACK & EVOCHROME · The new barbell',
-      produtos: [
-        { nome: 'Barra EvoBlack 8.0', emoji: '⬛', badge: 'Padrão IWF', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Tratamento Chrome Black e recartilho para LPO no CrossFit.',
-          features: ['8 sistemas de rolamento agulha', 'Aço testado até 210.000 psi', '1 ano de garantia integral'],
-          avista: 'A partir de R$ 999', prazo: '10x a partir de R$ 1.199', nota: 'Masculina 20kg · Feminina 15kg · Junior 10kg' },
-        { nome: 'Barra EvoChrome 8.0', emoji: '⚪', badge: 'Upgrade', badgeCls: 'bg-blue-600 text-white',
-          desc: 'Um upgrade de resistência e durabilidade para treinos intensos.',
-          features: ['Rolamento agulha de alta performance', 'Tratamento exclusivo em Chrome', 'Dimensões em acordo com a IWF'],
-          avista: 'A partir de R$ 999', prazo: '10x a partir de R$ 1.199', nota: 'Modelos 10 · 15 · 20 kg' },
-      ],
-    },
-    {
-      nome: 'Anilhas', emoji: '⭕', tagline: 'BUMPER · COMPETITION · HI-TEMP · FRACIONADAS',
-      produtos: [
-        { nome: 'Bumper Black 2.0', emoji: '⚫', badge: 'Mais vendida', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Quique reduzido e design com logo em alto relevo.',
-          features: ['Dureza aferida com medidor', 'Alto nível de acabamento'],
-          avista: 'A partir de R$ 135', prazo: '10x a partir de R$ 145', nota: 'Disponível de 5 a 25 kg' },
-        { nome: 'Bumper Collor 2.0', emoji: '🔴', badge: 'Cores', badgeCls: 'bg-orange-500 text-white',
-          desc: 'Diferencie seu box com cores vibrantes de impacto.',
-          features: ['Borracha premium · centro em inox', 'Garantia de 2 anos contra quebra'],
-          avista: 'A partir de R$ 219', prazo: '10x a partir de R$ 249', nota: 'Disponível de 5 a 25 kg' },
-        { nome: 'Competition Oficial', emoji: '🏅', badge: 'Competição', badgeCls: 'bg-blue-600 text-white',
-          desc: 'Performance elevada ao extremo, no pantone olímpico.',
-          features: ['Em pleno acordo com a IWF', 'Shore Rate equilibrado (75-85)', 'Garantia de 3 anos'],
-          avista: 'A partir de R$ 809,60', prazo: '10x a partir de R$ 920', nota: 'Disponível de 10 a 25 kg' },
-        { nome: 'Anilhas Hi-Temp Evolution', emoji: '⚫', badge: 'Custo-benefício', badgeCls: 'bg-purple-500 text-white',
-          desc: 'Custo-benefício aliado à durabilidade.',
-          features: ['Centro usinado em CNC revestido em zinco', 'Redução de ruído', '1 ano de garantia'],
-          avista: 'A partir de R$ 130', prazo: '10x a partir de R$ 140', nota: 'Disponível de 5 a 20 kg' },
-        { nome: 'Anilhas Fracionadas', emoji: '🟢', badge: 'Ajuste fino', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Injetadas e olímpicas para o ajuste fino da barra.',
-          features: ['Alto nível de calibragem', 'Cores olímpicas'],
-          avista: 'A partir de R$ 25', prazo: '10x a partir de R$ 30', nota: 'Modelos 1 · 2 · 2,5 kg' },
-      ],
-    },
-    {
-      nome: 'Fundições · Kettlebells & Dumbbells', emoji: '🔩', tagline: 'FUNDIÇÃO PRÓPRIA · O melhor custo-benefício',
-      produtos: [
-        { nome: 'Kettlebell Iron', emoji: '🔔', badge: 'Fundição própria', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Produto ecológico da nossa própria fundição.',
-          features: ['Produzido a partir de ferro de sucata', 'Fundição própria à sua disposição'],
-          avista: 'R$ 14 / kg', prazo: '10x R$ 16 / kg', nota: 'Disponível de 4 a 40 kg' },
-        { nome: 'Kettlebell Evo Brave', emoji: '🔔', badge: 'Importado', badgeCls: 'bg-blue-600 text-white',
-          desc: 'O mais alto nível em acabamento e ergonomia.',
-          features: ['Produto importado', 'Corpo único em coldbox'],
-          avista: 'R$ 27 / kg', prazo: '10x R$ 30 / kg', nota: 'Disponível de 6 a 32 kg' },
-        { nome: 'Dumbbell Iron', emoji: '🏋️', badge: 'Fundição própria', badgeCls: 'bg-neon text-dark-950',
-          desc: 'A ferramenta de treino mais fundamental do seu box.',
-          features: ['Produto ecológico de fundição própria', 'Ótimo custo-benefício'],
-          avista: 'R$ 14 / kg', prazo: '10x R$ 16 / kg', nota: 'Disponível de 1 a 32 kg' },
-        { nome: 'Dumbbell Evo Vulcanizado', emoji: '🏋️', badge: 'Premium', badgeCls: 'bg-purple-500 text-white',
-          desc: 'Resistência e design em corpo único revestido.',
-          features: ['Importado · borracha virgem', 'Alto nível em acabamento e ergonomia'],
-          avista: 'R$ 24 / kg', prazo: '10x R$ 26 / kg', nota: 'Disponível de 5 a 45 kg' },
-      ],
-    },
-    {
-      nome: 'Racks & Rigs', emoji: '🏗️', tagline: 'ESTRUTURAS PROJETADAS PARA O SEU ESPAÇO',
-      produtos: [
-        { nome: 'Squat Stand', emoji: '🟩', badge: 'Essencial', badgeCls: 'bg-neon text-dark-950',
-          desc: 'O suporte que não pode faltar no seu espaço.',
-          features: ['Estrutura robusta e estável', 'Base com apoio em madeira'],
-          avista: 'R$ 1.750', prazo: '10x R$ 1.899' },
-        { nome: 'Wall Racks', emoji: '🧱', badge: '5 tamanhos', badgeCls: 'bg-blue-600 text-white',
-          desc: 'Estrutura fixada à parede, altura padrão de 2,75m.',
-          features: ['Metalon 60x60 de 2,65mm', 'Pintura eletrostática epóxi', 'Pares de Jhooks para agachamento'],
-          avista: 'A partir de R$ 1.799', nota: 'De 1,10m a 11,95m de comprimento' },
-        { nome: 'Elite Racks', emoji: '🏗️', badge: 'Customizável', badgeCls: 'bg-orange-500 text-white',
-          desc: 'Colunas de 3 a 4,5m com acessórios variados.',
-          features: ['Braços para argolas e cordas', 'Maior distância da parede', 'Customize conforme a necessidade'],
-          avista: 'A partir de R$ 2.990', nota: 'De 1,10m a 11,95m de comprimento' },
-        { nome: 'Rigs Brave', emoji: '⛓️', badge: 'Sob medida', badgeCls: 'bg-purple-500 text-white',
-          desc: 'Estruturas de competição, sem furar paredes.',
-          features: ['Projeto minucioso resistente ao pêndulo', 'Metalon 60x60 de 2,65mm', 'Cotação personalizada'],
-          avista: 'Valores sob consulta', avista_tag: '', nota: 'Projeto desenvolvido para o seu box' },
-      ],
-    },
-    {
-      nome: 'Organizadores', emoji: '📦', tagline: 'UM BOX ORGANIZADO GERA MAIS CREDIBILIDADE',
-      produtos: [
-        { nome: 'Estante para Halteres / KB', emoji: '🗄️', badge: 'Até 350kg', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Acomoda halteres, kettlebells e dumbbells com segurança.',
-          features: ['Prateleiras com chapas de madeira', 'Evita ruídos e riscos ao guardar'],
-          avista: 'R$ 2.100', prazo: '10x R$ 2.399' },
-        { nome: 'Estante para Medicine Balls', emoji: '🗄️', badge: 'Até 20 un', badgeCls: 'bg-blue-600 text-white',
-          desc: '4 prateleiras com travessa dupla para med balls.',
-          features: ['Comporta até 20 unidades', 'Estrutura reforçada'],
-          avista: 'R$ 1.799', prazo: '10x R$ 1.999' },
-        { nome: 'Expositores de Anilhas', emoji: '📍', badge: 'Vertical / Torre', badgeCls: 'bg-orange-500 text-white',
-          desc: 'Vertical Fixo e Torre T Fixo para as anilhas.',
-          avista: 'A partir de R$ 549', nota: 'Vertical Fixo · Torre T Fixo' },
-        { nome: 'Suportes de Barras', emoji: '📎', badge: 'Vários modelos', badgeCls: 'bg-purple-500 text-white',
-          desc: 'Vertical, horizontal e fogueteiro (parede).',
-          avista: 'A partir de R$ 169', nota: 'De 5 a 12 barras · Speed ropes / bands' },
-      ],
-    },
-    {
-      nome: 'Acessórios', emoji: '🎯', tagline: 'TUDO PARA DEIXAR SEU BOX AINDA MAIS COMPLETO',
-      produtos: [
-        { nome: 'Caixa de Salto (Jump Box)', emoji: '📦', badge: 'Oficial', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Madeira de compensado, medidas oficiais 75x60x50cm.',
-          features: ['Versão oficial e iniciante', 'Custo-benefício e fácil transporte'],
-          avista: 'R$ 429', prazo: '10x R$ 479', nota: 'Oficial e iniciante' },
-        { nome: 'Argolas Olímpicas de Madeira', emoji: '⭕', badge: 'Par + fitas', badgeCls: 'bg-orange-500 text-white',
-          desc: 'Superfície lisa e resistente ao peso de qualquer atleta.',
-          features: ['Kit com par de fitas de 30mm (5m)', 'Alto nível de acabamento'],
-          avista: 'R$ 349', prazo: '10x R$ 399' },
-        { nome: 'Medicine Balls', emoji: '🏐', badge: '8 a 30 lb', badgeCls: 'bg-blue-600 text-white',
-          desc: 'Couro sintético com enchimento de tecnologia expansiva.',
-          features: ['Dimensão compacta ~36x36cm', 'Versões collor e infantil'],
-          avista: 'R$ 349', prazo: '10x R$ 399', nota: 'Também produzimos por quilo' },
-        { nome: 'Piso de Borracha', emoji: '⬛', badge: 'Alta absorção', badgeCls: 'bg-neon text-dark-950',
-          desc: '100x100 · 15mm, com absorção máxima de impacto.',
-          features: ['Alto nível de aglomerante', 'Acabamento fino e controle de qualidade'],
-          avista: 'R$ 99,90', prazo: '10x R$ 105', nota: 'Preço por placa · outras cores/espessuras sob consulta' },
-        { nome: 'Sled Push and Pull', emoji: '🛷', badge: '2 em 1', badgeCls: 'bg-orange-500 text-white',
-          desc: 'Trenó para empurrar e puxar, base 34mm.',
-          avista: 'R$ 1.249', prazo: '10x R$ 1.499' },
-        { nome: 'Jerk Blocks', emoji: '🟫', badge: 'LPO', badgeCls: 'bg-purple-500 text-white',
-          desc: 'Blocos de madeira para o levantamento olímpico.',
-          avista: 'R$ 3.190', prazo: '10x R$ 3.490' },
-        { nome: 'GHD Fixo', emoji: '🪑', badge: 'Competição', badgeCls: 'bg-blue-600 text-white',
-          desc: 'Essencial para o treino de alta performance.',
-          features: ['Presente até em competições', 'Também disponível na versão modular'],
-          avista: 'R$ 2.499', prazo: '10x R$ 2.799' },
-        { nome: 'Sacos de Treino', emoji: '🎒', badge: 'Functional', badgeCls: 'bg-orange-500 text-white',
-          desc: 'Power Bag, Strong Bag e Bulgarian Bag (treino HYROX).',
-          features: ['Vários pesos disponíveis', 'Resistentes e com ótimo custo-benefício'],
-          avista: 'A partir de R$ 269', nota: 'Power · Strong · Bulgarian' },
-        { nome: 'Cordas de Treino', emoji: '🪢', badge: 'Escalada / Naval', badgeCls: 'bg-neon text-dark-950',
-          desc: 'Corda de sisal para escalada e corda naval.',
-          avista: 'A partir de R$ 349', nota: 'Sisal 38mm · Naval 34mm' },
-      ],
-      rodape: 'E ainda: paralletes, pegboard, bancos (reto e inclinável), abmat, colchonetes, speed ropes, super bands, presilhas Lock Pro e mais.',
-    },
-  ],
-};
+const DEFAULT_CONFIG = LP_CROSSFIT_DEFAULT;
+
+// preço à vista: usa o texto livre (preco_avista_txt) OU o valor numérico (preco_avista).
+const avistaDe = (p) => p.preco_avista_txt?.trim() || fmtBRL(p.preco_avista);
+const prazoDe  = (p) => p.preco_prazo_txt?.trim()
+  || (p.parcelas_num > 0 && fmtBRL(p.parcelas_valor) ? `${p.parcelas_num}x ${fmtBRL(p.parcelas_valor)}` : null);
 
 export default function LpCrossfit() {
   const [cfg, setCfg]         = useState(DEFAULT_CONFIG);
@@ -192,6 +53,7 @@ export default function LpCrossfit() {
           wa_msg_geral: data.config?.wa_msg_geral || DEFAULT_CONFIG.wa_msg_geral,
           hero:         { ...DEFAULT_CONFIG.hero, ...(data.config?.hero || {}) },
           categorias:   data.config?.categorias?.length ? data.config.categorias : DEFAULT_CONFIG.categorias,
+          produtos:     data.config?.produtos?.length   ? data.config.produtos   : DEFAULT_CONFIG.produtos,
         });
       })
       .finally(() => setLoading(false));
@@ -204,6 +66,23 @@ export default function LpCrossfit() {
       <Loader2 className="w-8 h-8 text-neon animate-spin" />
     </div>
   );
+
+  // ordena as categorias: primeiro as definidas em `categorias`, depois qualquer
+  // categoria nova que apareça só nos produtos. Rascunho sem nome não aparece.
+  const metaCat = Object.fromEntries((cfg.categorias || []).map(c => [c.nome, c]));
+  const ordem = (cfg.categorias || []).map(c => c.nome);
+  (cfg.produtos || []).forEach(p => {
+    if (p.categoria && !ordem.includes(p.categoria)) ordem.push(p.categoria);
+  });
+  const semCategoria = (cfg.produtos || []).some(p => !p.categoria && (p.nome || '').trim());
+  if (semCategoria && !ordem.includes('')) ordem.push('');
+
+  const secoes = ordem
+    .map((nome) => ({
+      meta: metaCat[nome] || { nome: nome || 'Outros', emoji: '🏷️' },
+      produtos: (cfg.produtos || []).filter(p => (p.categoria || '') === nome && (p.nome || '').trim()),
+    }))
+    .filter(s => s.produtos.length > 0);
 
   return (
     <div className="min-h-screen bg-dark-950 text-white antialiased">
@@ -255,78 +134,82 @@ export default function LpCrossfit() {
       </section>
 
       {/* ── CATEGORIAS ──────────────────────────────────────── */}
-      {cfg.categorias.map((cat, ci) => (
-        <section key={ci} className={`py-12 md:py-16 px-5 border-b border-dark-700 ${ci % 2 === 1 ? 'bg-dark-900/40' : ''}`}>
+      {secoes.map((sec, ci) => (
+        <section key={sec.meta.nome || ci} className={`py-12 md:py-16 px-5 border-b border-dark-700 ${ci % 2 === 1 ? 'bg-dark-900/40' : ''}`}>
           <div className="max-w-6xl mx-auto">
             <div className="mb-8 md:mb-10 flex items-end justify-between gap-4 flex-wrap">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-3xl">{cat.emoji}</span>
-                  <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tight">{cat.nome}</h2>
+                  <span className="text-3xl">{sec.meta.emoji || '🏷️'}</span>
+                  <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tight">{sec.meta.nome}</h2>
                 </div>
-                {cat.tagline && (
-                  <p className="text-neon text-[11px] md:text-xs font-bold tracking-[0.15em] uppercase">{cat.tagline}</p>
+                {sec.meta.tagline && (
+                  <p className="text-neon text-[11px] md:text-xs font-bold tracking-[0.15em] uppercase">{sec.meta.tagline}</p>
                 )}
               </div>
               <span className="text-zinc-700 text-xs font-black">{String(ci + 1).padStart(2, '0')}</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-              {cat.produtos.map((p, pi) => (
-                <div key={pi} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden flex flex-col hover:border-neon/30 transition-all">
-                  <div className="relative h-44 md:h-48 bg-dark-900 overflow-hidden flex items-center justify-center">
-                    {p.badge && (
-                      <span className={`absolute top-3 left-3 z-10 text-[11px] font-black px-3 py-1 rounded-full ${p.badgeCls || 'bg-neon text-dark-950'}`}>
-                        {p.badge}
-                      </span>
-                    )}
-                    {p.img_url ? (
-                      <img src={convertImgUrl(p.img_url)} alt={p.nome} className="w-full h-full object-contain p-3" />
-                    ) : (
-                      <span className="text-6xl opacity-20">{p.emoji || '🏋️'}</span>
-                    )}
-                  </div>
-                  <div className="p-5 flex flex-col flex-1">
-                    <h3 className="font-black text-lg text-white mb-1 leading-tight">{p.nome}</h3>
-                    {p.desc && <p className="text-neon text-sm font-semibold mb-3 leading-snug">{p.desc}</p>}
-                    {p.features?.length > 0 && (
-                      <ul className="space-y-1.5 mb-4">
-                        {p.features.map((f, fi) => (
-                          <li key={fi} className="flex items-start gap-2 text-[13px] text-zinc-400">
-                            <Check className="w-3.5 h-3.5 text-neon mt-0.5 shrink-0" />
-                            {f}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+              {sec.produtos.map((p, pi) => {
+                const avista = avistaDe(p);
+                const prazo  = prazoDe(p);
+                return (
+                  <div key={pi} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden flex flex-col hover:border-neon/30 transition-all">
+                    <div className="relative h-44 md:h-48 bg-dark-900 overflow-hidden flex items-center justify-center">
+                      {p.badge && (
+                        <span className={`absolute top-3 left-3 z-10 text-[11px] font-black px-3 py-1 rounded-full ${p.badgeCls || 'bg-neon text-dark-950'}`}>
+                          {p.badge}
+                        </span>
+                      )}
+                      {p.img_url ? (
+                        <img src={convertImgUrl(p.img_url)} alt={p.nome} className="w-full h-full object-contain p-3" />
+                      ) : (
+                        <span className="text-6xl opacity-20">{p.emoji || '🏋️'}</span>
+                      )}
+                    </div>
+                    <div className="p-5 flex flex-col flex-1">
+                      <h3 className="font-black text-lg text-white mb-1 leading-tight">{p.nome}</h3>
+                      {p.tagline && <p className="text-neon text-sm font-semibold mb-3 leading-snug">{p.tagline}</p>}
+                      {p.features?.length > 0 && (
+                        <ul className="space-y-1.5 mb-4">
+                          {p.features.map((f, fi) => (
+                            <li key={fi} className="flex items-start gap-2 text-[13px] text-zinc-400">
+                              <Check className="w-3.5 h-3.5 text-neon mt-0.5 shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
 
-                    {(p.avista || p.prazo || p.nota) && (
-                      <div className="mt-auto pt-4 border-t border-dark-700">
-                        {p.avista && (
-                          <div className="flex items-end gap-2 flex-wrap">
-                            <span className="text-neon text-2xl md:text-[26px] font-black leading-none tracking-tight">{p.avista}</span>
-                            {p.avista_tag !== '' && (
-                              <span className="text-[10px] font-black uppercase tracking-widest bg-neon text-dark-950 px-2 py-0.5 rounded-full mb-0.5">
-                                {p.avista_tag || 'à vista'}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {p.prazo && (
-                          <p className="text-zinc-400 text-sm mt-2">
-                            ou <span className="text-white font-black">{p.prazo}</span> <span className="text-zinc-600">sem juros</span>
-                          </p>
-                        )}
-                        {p.nota && <p className="text-zinc-600 text-[11px] mt-1.5">{p.nota}</p>}
-                      </div>
-                    )}
+                      {(avista || prazo || p.preco_nota) && (
+                        <div className="mt-auto pt-4 border-t border-dark-700">
+                          {avista && (
+                            <div className="flex items-end gap-2 flex-wrap">
+                              <span className="text-neon text-2xl md:text-[26px] font-black leading-none tracking-tight">{avista}</span>
+                              {p.avista_tag !== '' && (
+                                <span className="text-[10px] font-black uppercase tracking-widest bg-neon text-dark-950 px-2 py-0.5 rounded-full mb-0.5">
+                                  {p.avista_tag || 'à vista'}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {prazo && (
+                            <p className="text-zinc-400 text-sm mt-2">
+                              ou <span className="text-white font-black">{prazo}</span> <span className="text-zinc-600">sem juros</span>
+                            </p>
+                          )}
+                          {p.preco_nota && <p className="text-zinc-600 text-[11px] mt-1.5">{p.preco_nota}</p>}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {cat.rodape && (
-              <p className="text-zinc-500 text-sm mt-6 border-l-2 border-neon/40 pl-4">{cat.rodape}</p>
+            {sec.meta.rodape && (
+              <p className="text-zinc-500 text-sm mt-6 border-l-2 border-neon/40 pl-4">{sec.meta.rodape}</p>
             )}
           </div>
         </section>

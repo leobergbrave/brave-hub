@@ -2,6 +2,16 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] LP CrossFit configurável no admin + cache OG (WhatsApp)
+
+### O que foi feito:
+- **Item 1 (prévias das outras LPs no WhatsApp):** produção estava correta (todas as 4 og:image retornam 200/PNG e o casco certo). O problema era **cache do WhatsApp** — `/lp/ergometros` e `/lp/box-hibrido` foram coladas antes do deploy da prévia. Solução p/ o usuário: Facebook Sharing Debugger → Scrape Again (ou sufixo `?v=2` no link). Sem mudança de código.
+- **Item 2 (LP CrossFit totalmente configurável):**
+  - Config extraída para `src/data/lpCrossfitConfig.js` no **modelo plano** (`produtos[]` com campo `categoria` + `preco_avista_txt`/`preco_prazo_txt`/`preco_nota`), importada pela página e pelo seeder.
+  - `LpCrossfit.jsx` refatorada: agrupa produtos por `categoria` (ordem/estilo em `config.categorias`), esconde rascunho sem nome, preço por texto **ou** numérico.
+  - `LandingPagesTab.jsx`: formulário de produto ganhou campo **Categoria** (com datalist) e bloco **Preço em texto** (à vista/parcelado/nota) — opcionais, ignorados pelas outras LPs.
+  - Registro **`crossfit-box`** criado em `landing_pages_config` via `tools/seed-crossfit-lp.mjs` (RLS permite insert com anon key, HTTP 201). Agora a LP aparece na lista do admin e é editável (Geral/Hero/Produtos/Avançado).
+
 ## [2026-07-08] Nova Landing Page — Box de CrossFit
 
 ### O que foi feito:
