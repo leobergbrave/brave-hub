@@ -6,6 +6,7 @@
     { "src": "/pp/(?<slug>[^/]+)", "dest": "/api/render?tipo=pp&slug=$slug" },
     { "src": "/fiscal/(?<token>[^/]+)", "dest": "/api/fiscal?token=$token" },
     { "src": "/cadastro", "dest": "/api/cadastro" },
+    { "src": "/lp/(?<slug>ergometros|box-hibrido|hyrox)/?", "dest": "/lp/$slug/index.html" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ],

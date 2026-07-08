@@ -158,6 +158,7 @@ Este documento atua como a constituição do projeto, contendo os schemas de dad
 - `modelo_id`: UUID (→ orcamentos_modelo) · `criado_em`: TIMESTAMPTZ
 
 ## Maintenance Log (Registro de Manutenção)
+- **2026-07-08**: **Prévia de Link (Open Graph) das Landing Pages**. Cards premium 1200×630 gerados por `tools/gen-og-cards.mjs` (satori→vetor + sharp→PNG, identidade dark+neon) em `public/og/{ergometros,box-hibrido,hyrox,brave}.png`. Postbuild `tools/gen-lp-shells.mjs` cria `dist/lp/<slug>/index.html` com tags OG próprias (mesmo bundle React) — **zero funções serverless**. `vercel.json` roteia `/lp/{slug}`→casco; `index.html` com og:image padrão. Bloco informativo + miniaturas na aba Landing Pages. Regenerar arte: `npm run og:cards`. Fontes Inter em `tools/fonts/`.
 - **2026-06-17**: Inicialização e estruturação do protocolo B.L.A.S.T. e da arquitetura de 3 camadas A.N.T. Adicionada a documentação das tabelas e payloads reais do Brave Hub.
 - **2026-06-17**: Adicionados os schemas de dados para a nova funcionalidade de Potenciais Clientes (`potenciais_clientes` e `prospeccao_config`).
 - **2026-06-17**: Correção do bug de prospecção com a consolidação das APIs serverless para respeitar o limite Hobby de 12 funções da Vercel (deletados importadores individuais e lead-respondeu) e mapeamento do alias do domínio `brave-hub-two.vercel.app`.

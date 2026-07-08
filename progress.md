@@ -2,6 +2,17 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] Prévia de Link (Open Graph) das Landing Pages
+
+### O que foi feito:
+- **Problema:** ao colar links das LPs (`/lp/ergometros`, `/lp/box-hibrido`, `/lp/hyrox`) no WhatsApp, aparecia só o logo pequeno — o robô do WhatsApp/Instagram/Telegram **não roda JavaScript**, então lê apenas as tags genéricas do `index.html` do SPA.
+- **Cards premium (1200×630):** `tools/gen-og-cards.mjs` gera os PNGs com **satori** (texto→vetor, nítido) + **sharp** (SVG→PNG), 100% na identidade (dark `#050507` + neon `#39ff14` + logo + selo + gatilho de preço). Saída commitada em `public/og/` (não depende do build da Vercel nem de créditos de IA). Fontes Inter em `tools/fonts/`. 4 cards: ergometros, box-hibrido, hyrox e `brave` (genérico p/ raiz).
+- **Entrega sem custo de função:** `tools/gen-lp-shells.mjs` roda no **postbuild** (`npm run build`) e cria `dist/lp/<slug>/index.html` — "casco" com as tags Open Graph próprias (og:image/title/description/twitter) + o mesmo bundle React (página segue funcionando p/ humanos). **Zero funções serverless** (continua 11/12 na Hobby).
+- **Roteamento:** `vercel.json` mapeia `/lp/{slug}` → casco estático antes do fallback do SPA. `index.html` ganhou og:image padrão (`/og/brave.png`) + twitter card.
+- **UI:** bloco informativo (objetivo/como funciona/como testar) + miniaturas das 3 prévias com copiar-link na aba **Landing Pages** (`src/admin/LandingPagesTab.jsx`).
+- **Validação:** `npm run build` OK; cascos inspecionados (tags corretas, sem duplicatas, bundle referenciado).
+- **Como testar:** colar o link no WhatsApp; se cachear a prévia antiga, forçar em developers.facebook.com/tools/debug (Scrape Again).
+
 ## [2026-07-05] Modelos de Orçamento a partir do Bling
 
 ### O que foi feito:

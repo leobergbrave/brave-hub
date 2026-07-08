@@ -2,8 +2,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Globe, Edit2, ExternalLink, Plus, Trash2, ChevronDown, ChevronRight,
-  Save, Loader2, RefreshCw, Check, X, Phone, FileText, Layout, Package, Code2
+  Save, Loader2, RefreshCw, Check, X, Phone, FileText, Layout, Package, Code2,
+  Share2, Image as ImageIcon, Copy
 } from 'lucide-react';
+
+const OG_CARDS = [
+  { slug: 'ergometros',  titulo: 'Ergômetros',   url: '/lp/ergometros'  },
+  { slug: 'box-hibrido', titulo: 'Box Híbrido',  url: '/lp/box-hibrido' },
+  { slug: 'hyrox',       titulo: 'HYROX',        url: '/lp/hyrox'       },
+];
 
 function convertImgUrl(url) {
   if (!url) return url;
@@ -195,6 +202,68 @@ export default function LandingPagesTab() {
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
+
+      {/* ── Bloco informativo: Prévia de Link (Open Graph) ── */}
+      {!editando && (
+        <div className="bg-gradient-to-br from-neon/5 to-dark-800/60 border border-neon/20 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-neon/10 flex items-center justify-center shrink-0">
+              <Share2 className="w-5 h-5 text-neon" />
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-sm">Prévia de Link no WhatsApp (Open Graph)</h3>
+              <p className="text-zinc-500 text-xs">Cada landing page agora abre com uma imagem premium ao ser colada em conversas.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 text-xs text-zinc-400 leading-relaxed">
+            <p>
+              <span className="text-neon font-bold">Objetivo:</span> quando você envia o link de uma LP no WhatsApp,
+              Instagram ou Telegram, aparece um card grande com o equipamento, a headline e o gatilho de preço — estimulando o clique
+              (antes só aparecia o logo pequeno).
+            </p>
+            <p>
+              <span className="text-neon font-bold">Como funciona:</span> os apps de mensagem não leem o site em React (JavaScript).
+              Por isso o sistema gera automaticamente, a cada publicação, uma versão especial de cada LP com as tags de prévia
+              e a imagem correspondente. Nada a configurar aqui — já está no ar.
+            </p>
+          </div>
+
+          {/* Miniaturas das prévias */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {OG_CARDS.map(c => (
+              <div key={c.slug} className="rounded-xl overflow-hidden border border-dark-700 bg-dark-900">
+                <img src={`/og/${c.slug}.png`} alt={`Prévia ${c.titulo}`} className="w-full aspect-[1200/630] object-cover" />
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-[11px] font-bold text-white">{c.titulo}</span>
+                  <div className="flex items-center gap-2">
+                    <a href={`/og/${c.slug}.png`} target="_blank" rel="noopener noreferrer"
+                       className="text-zinc-500 hover:text-neon transition-colors" title="Abrir imagem">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                    </a>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(`https://brave-hub-two.vercel.app${c.url}`); showToast('🔗 Link copiado!'); }}
+                      className="text-zinc-500 hover:text-neon transition-colors" title="Copiar link da LP">
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-dark-900/60 border border-dark-700 rounded-xl px-4 py-3">
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              <span className="text-neon font-bold">Como testar:</span> copie o link de uma LP (ícone <Copy className="w-3 h-3 inline -mt-0.5" />) e cole numa conversa do WhatsApp —
+              o card deve aparecer em 1-2s. Se o WhatsApp já tiver o link em cache com a prévia antiga, valide/atualize em{' '}
+              <a href="https://developers.facebook.com/tools/debug/" target="_blank" rel="noopener noreferrer" className="text-neon underline">
+                developers.facebook.com/tools/debug
+              </a>{' '}
+              (cole o link e clique em <em>Scrape Again</em>). Para trocar a arte, edite <span className="font-mono text-zinc-300">tools/gen-og-cards.mjs</span> e rode <span className="font-mono text-zinc-300">npm run og:cards</span>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Lista de páginas */}
       {!editando && (
