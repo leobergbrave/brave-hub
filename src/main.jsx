@@ -11,6 +11,7 @@ import CadastroClientePage from './pages/CadastroClientePage.jsx'
 import LpErgometros from './pages/LpErgometros.jsx'
 import LpBoxHibrido from './pages/LpBoxHibrido.jsx'
 import LpHyrox from './pages/LpHyrox.jsx'
+import LpCrossfit from './pages/LpCrossfit.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -29,6 +30,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/lp/ergometros"   element={<LpErgometros />} />
         <Route path="/lp/box-hibrido" element={<LpBoxHibrido />} />
         <Route path="/lp/hyrox"      element={<LpHyrox />} />
+        <Route path="/lp/crossfit"   element={<LpCrossfit />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

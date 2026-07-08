@@ -33,6 +33,11 @@ const LPS = [
     title: 'Torne seu Box Referência HYROX | BRAVE',
     desc: 'Equipamentos no padrão das competições HYROX oficiais. Seja pioneiro na sua cidade com as 8 estações da modalidade.',
   },
+  {
+    slug: 'crossfit',
+    title: 'Equipe seu Box de CrossFit | BRAVE',
+    desc: 'Barras olímpicas, anilhas, racks, rigs, fundições e acessórios. Fabricante com fundição própria — monte seu box de CrossFit completo com qualidade de competição.',
+  },
 ];
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

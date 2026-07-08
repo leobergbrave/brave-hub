@@ -2,6 +2,15 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] Nova Landing Page — Box de CrossFit
+
+### O que foi feito:
+- **Pedido:** nova LP focada em box de CrossFit, baseada no catálogo Brave 2026 (PDF de 59 páginas). Decisões do usuário: formato **catálogo completo por categoria, sem Ergômetros** (já tem LP própria) e **com preços**.
+- **Página `src/pages/LpCrossfit.jsx`** (rota `/lp/crossfit`): hero + 4 pilares (fundição própria, linha completa, projetos sob medida, padrão competição) + 6 categorias com produtos e preços extraídos do catálogo: **Barras Olímpicas** (EvoBlack/EvoChrome), **Anilhas** (Bumper Black/Collor, Competition, Hi-Temp, Fracionadas), **Fundições** (Kettlebell/Dumbbell Iron e Evo), **Racks & Rigs** (Squat Stand, Wall/Elite Racks, Rigs sob consulta), **Organizadores** (estantes, expositores, suportes) e **Acessórios** (caixa de salto, argolas, med balls, piso, sled, jerk blocks, GHD, bags, cordas). Bloco de condições (pagamento 10x/à vista, entrega própria, consultoria) + CTA WhatsApp. Padrão dark+neon.
+- **Config flexível:** `DEFAULT_CONFIG.categorias[]` com preços como strings ("A partir de R$ 999", "R$ 14 / kg", "Valores sob consulta"). Carrega override do Supabase se existir `landing_pages_config` id `crossfit-box` (editável pelo JSON avançado do admin). WhatsApp default do catálogo: (14) 98145-1119.
+- **Prévia (Open Graph):** card `public/og/crossfit.png` gerado; casco `dist/lp/crossfit/index.html`; rota no `vercel.json`; miniatura na aba Landing Pages.
+- **Validação:** `npm run build` OK; casco e og:image conferidos; ícones lucide validados. Requer deploy.
+
 ## [2026-07-08] Produtos das LPs: cadastro livre + rascunho oculto
 
 ### O que foi feito:

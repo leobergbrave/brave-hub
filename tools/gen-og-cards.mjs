@@ -66,6 +66,15 @@ const CARDS = [
     sub: 'As 8 estações no padrão das provas oficiais',
   },
   {
+    slug: 'crossfit',
+    badge: 'LINHA COMPLETA',
+    eyebrow: 'FABRICANTE · FUNDIÇÃO PRÓPRIA',
+    h1: 'EQUIPE SEU BOX',
+    h2: 'DE CROSSFIT',
+    trigger: 'Barras · Anilhas · Racks · Rigs',
+    sub: 'Padrão de competição e o melhor custo-benefício',
+  },
+  {
     slug: 'brave',
     badge: 'ALTA PERFORMANCE',
     eyebrow: 'EQUIPAMENTOS PARA BOX E STUDIOS',

@@ -10,6 +10,7 @@ const OG_CARDS = [
   { slug: 'ergometros',  titulo: 'Ergômetros',   url: '/lp/ergometros'  },
   { slug: 'box-hibrido', titulo: 'Box Híbrido',  url: '/lp/box-hibrido' },
   { slug: 'hyrox',       titulo: 'HYROX',        url: '/lp/hyrox'       },
+  { slug: 'crossfit',    titulo: 'Box CrossFit', url: '/lp/crossfit'    },
 ];
 
 function convertImgUrl(url) {
