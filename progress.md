@@ -2,6 +2,15 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] Produtos das LPs: cadastro livre + rascunho oculto
+
+### O que foi feito:
+- **Pedido:** poder inserir mais produtos na LP Hyrox cadastrando cada um manualmente, com campos livres, sem que um cadastro vazio apareça na página.
+- **LP esconde produto vazio:** `LpHyrox.jsx` e `LpErgometros.jsx` agora filtram produtos sem `nome` (`filter(p => (p?.nome||'').trim())`) — dá pra adicionar quantos quiser; só aparecem quando preenchidos.
+- **Admin (`LandingPagesTab.jsx`):** botão **Adicionar Produto** agora cria o slot **em branco** (antes vinha "Novo Produto") e já **abre** para edição. Cabeçalho do card mostra selo âmbar **"Rascunho · oculto na página"** quando sem nome. Aviso no topo da seção Produtos explicando a regra.
+- **Fonte da verdade:** a LP Hyrox lê produtos do Supabase (`landing_pages_config` / `hyrox-oficial`, 6 produtos hoje) — o cadastro é feito pela aba Landing Pages e salvo no banco.
+- **Validação:** `npm run build` OK. Requer deploy para valer em produção.
+
 ## [2026-07-08] Prévia de Link (Open Graph) das Landing Pages
 
 ### O que foi feito:

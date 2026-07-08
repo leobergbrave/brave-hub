@@ -263,7 +263,7 @@ export default function LpHyrox() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-            {cfg.produtos.map((produto, i) => (
+            {cfg.produtos.filter(p => (p?.nome || '').trim()).map((produto, i) => (
               <div key={i} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden flex flex-col hover:border-neon/30 transition-all group">
                 <div className="relative h-56 md:h-64 bg-dark-900 overflow-hidden flex items-center justify-center">
                   <span className={`absolute top-3 left-3 z-10 text-[11px] font-black px-3 py-1 rounded-full ${produto.badgeCls || 'bg-blue-600 text-white'}`}>

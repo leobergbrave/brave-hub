@@ -134,7 +134,7 @@ export default function LpErgometros() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-            {cfg.produtos.map((produto, i) => {
+            {cfg.produtos.filter(p => (p?.nome || '').trim()).map((produto, i) => {
               const msgProduto = `Olá! Tenho interesse no ${produto.nome} da Brave. Pode me enviar uma cotação?`;
               return (
                 <div key={i} className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden flex flex-col hover:border-neon/30 transition-all group">

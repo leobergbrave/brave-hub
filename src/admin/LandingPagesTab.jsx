@@ -149,18 +149,16 @@ export default function LandingPagesTab() {
     });
 
   const addProduto = () =>
-    setForm(f => ({
-      ...f,
-      config: {
-        ...f.config,
-        produtos: [...(f.config.produtos || []), {
-          nome: 'Novo Produto', badge: 'Novidade', badgeCls: 'bg-orange-500',
-          tagline: '', emoji: '🏋️', alias: '', img_url: '',
-          preco_normal: 0, preco_avista: 0, parcelas_num: 0, parcelas_valor: 0,
-          features: [''],
-        }],
-      },
-    }));
+    setForm(f => {
+      const produtos = [...(f.config.produtos || []), {
+        nome: '', badge: '', badgeCls: 'bg-neon text-dark-950',
+        tagline: '', emoji: '', alias: '', img_url: '',
+        preco_normal: 0, preco_avista: 0, parcelas_num: 0, parcelas_valor: 0,
+        features: [''],
+      }];
+      setProdAberto(produtos.length - 1); // abre o novo slot em branco
+      return { ...f, config: { ...f.config, produtos } };
+    });
 
   const removeProduto = (idx) => {
     setForm(f => {
@@ -447,6 +445,14 @@ export default function LandingPagesTab() {
           {/* ── SEÇÃO PRODUTOS ── */}
           {secao === 'produtos' && (
             <div className="space-y-4">
+              <div className="bg-dark-800/60 border border-dark-700 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                <Package className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Clique em <span className="text-white font-bold">Adicionar Produto</span> e preencha os campos livremente.
+                  Produto <span className="text-amber-400 font-bold">sem nome fica oculto</span> na página — ele só aparece
+                  para os visitantes depois que você dá um nome e clica em <span className="text-white font-bold">Salvar</span>.
+                </p>
+              </div>
               {(form.config.produtos || []).map((prod, pIdx) => (
                 <div key={pIdx} className="bg-dark-800/60 border border-dark-700 rounded-2xl overflow-hidden">
                   {/* Cabeçalho do produto */}
@@ -457,10 +463,18 @@ export default function LandingPagesTab() {
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{prod.emoji || '🏋️'}</span>
                       <div className="text-left">
-                        <p className="text-white font-bold text-sm">{prod.nome}</p>
-                        <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${prod.badgeCls || 'bg-orange-500'}`}>
-                          {prod.badge}
-                        </span>
+                        <p className="text-white font-bold text-sm">{(prod.nome || '').trim() || 'Novo produto'}</p>
+                        {(prod.nome || '').trim() ? (
+                          prod.badge && (
+                            <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${prod.badgeCls || 'bg-orange-500'}`}>
+                              {prod.badge}
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                            Rascunho · oculto na página
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
