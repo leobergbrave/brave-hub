@@ -2,6 +2,16 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] Ergômetros: editor completo + 4 fotos + vídeo (upload)
+
+### O que foi feito:
+- **Pedido:** editar todos os detalhes de cada ergômetro pelo painel, com até 4 fotos (clique → tela cheia) e 1 vídeo (abrível). Decisões: **só ergômetros** + **upload de arquivos**.
+- **Catálogo editável:** os 6 ergômetros deixam de ser só código — override no banco (`landing_pages_config` id `ergo-catalog`, `config.produtos`), mesclado sobre o base (`mergeCatalog` em `src/data/ergoCatalog.js`, aliases fixos). API lê via `api/_ergo-fetch.js` (`loadCatalog`, service role, fallback ao base).
+- **Admin:** nova aba **Comercial → Produtos Ergômetros** (`ProdutosErgoTab.jsx`): edita nome/subtítulo/specs/preços + **upload de 4 fotos** (com compressão via browser-image-compression) **e 1 vídeo** para o bucket Supabase Storage `ergo-media` (público). Salva no row `ergo-catalog`.
+- **Página do combo (`_render-combo.js`):** galeria com foto-capa + thumbs, **lightbox** (clique → tela cheia) e **modal de vídeo** (detecta YouTube/Vimeo/Drive/MP4) — JS/CSS inline. OG (`_og-combo.js`) passa a ler nomes do catálogo do banco.
+- **Storage:** migration `supabase/migrations/20260708_ergo_media_bucket.sql` (bucket `ergo-media` público + policies de escrita anon) — **rodar manual no Supabase antes de usar o upload**.
+- **Validação:** e2e (insert row com foto/vídeo → render mostra gal-main/thumbs/vid-btn; sem foto → placeholder) OK; `npm run build` OK. `ergo-catalog`/`ergo-combos` filtrados da lista de LPs.
+
 ## [2026-07-08] Combos de Ergômetros (páginas dinâmicas por conjunto de produtos)
 
 ### O que foi feito:

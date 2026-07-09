@@ -90,10 +90,25 @@ export const ERGO_BY_ALIAS = Object.fromEntries(ERGO_CATALOG.map(p => [p.alias, 
 // ordem canônica dos aliases (para gerar slugs estáveis)
 export const ERGO_ORDER = ERGO_CATALOG.map(p => p.alias);
 
+// merge dos detalhes salvos no banco por cima do catálogo base (aliases fixos).
+// Mantém ordem/aliases; sobrescreve nome/subtitle/specs/preços/fotos/vídeo.
+export function mergeCatalog(overrides) {
+  const byAlias = Object.fromEntries((overrides || []).map(p => [p.alias, p]));
+  return ERGO_CATALOG.map(base => {
+    const o = byAlias[base.alias] || {};
+    return {
+      ...base, ...o,
+      specs: Array.isArray(o.specs) && o.specs.length ? o.specs : base.specs,
+      fotos: Array.isArray(o.fotos) ? o.fotos.filter(Boolean) : [],
+      video: o.video || '',
+    };
+  });
+}
+
 // "remo-skierg-storm" (qualquer ordem) -> lista de produtos na ordem canônica
-export function parseComboSlug(slug) {
+export function parseComboSlug(slug, catalog = ERGO_CATALOG) {
   const pedidos = new Set(String(slug || '').toLowerCase().split('-').filter(Boolean));
-  return ERGO_CATALOG.filter(p => pedidos.has(p.alias));
+  return catalog.filter(p => pedidos.has(p.alias));
 }
 
 // lista de produtos -> slug canônico "esteira-remo-storm"

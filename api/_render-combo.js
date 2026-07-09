@@ -2,6 +2,7 @@
 // Rota pública: /lp/ergo/{slug}?d={desconto}  (slug = aliases separados por "-")
 // Server-side para o WhatsApp ler o OG certo de qualquer combinação.
 import { parseComboSlug, comboSlug, comboTotais } from '../src/data/ergoCatalog.js';
+import { loadCatalog } from './_ergo-fetch.js';
 
 const BASE = 'https://brave-hub-two.vercel.app';
 const WA_DEFAULT = '5514981451119';
@@ -9,13 +10,22 @@ const WA_DEFAULT = '5514981451119';
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const fmtBRL = (v) => Number(v) > 0 ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Consultar';
 
+// Google Drive -> URL de imagem direta (tamanho configurável). Outras URLs passam direto.
+function imgUrl(url, sz = 'w1200') {
+  if (!url) return '';
+  const m = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/) || url.match(/drive\.google\.com\/open\?id=([^&]+)/) || url.match(/[?&]id=([^&]+)/);
+  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=${sz}`;
+  return url;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const slug = req.query.slug || '';
   const desconto = Math.max(0, Number(req.query.d) || 0);
-  const produtos = parseComboSlug(slug);
+  const catalog = await loadCatalog();
+  const produtos = parseComboSlug(slug, catalog);
 
   if (!produtos.length) {
     return res.status(404).send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Combo não encontrado</title>
@@ -33,12 +43,26 @@ export default async function handler(req, res) {
   const waMsg = encodeURIComponent(`Olá! Tenho interesse no combo de ergômetros: ${nomes.join(', ')}. Podem me enviar as condições?`);
   const waHref = `https://wa.me/${WA_DEFAULT}?text=${waMsg}`;
 
-  const cardsHTML = produtos.map((p, i) => `
+  const cardsHTML = produtos.map((p, i) => {
+    const fotos = (p.fotos || []).filter(Boolean).slice(0, 4);
+    const capa = fotos[0];
+    const galeriaHTML = capa ? `
+      <div class="gal">
+        <img class="gal-main" src="${imgUrl(capa, 'w1200')}" data-full="${imgUrl(capa, 'w2000')}" alt="${esc(p.nome)}" loading="lazy" />
+        ${p.video ? `<button class="vid-btn" data-video="${esc(p.video)}" aria-label="Ver vídeo">▶ Vídeo</button>` : ''}
+        ${fotos.length > 1 ? `<div class="gal-thumbs">${fotos.map(f => `<img class="gal-thumb" src="${imgUrl(f, 'w300')}" data-full="${imgUrl(f, 'w2000')}" alt="" loading="lazy" />`).join('')}</div>` : ''}
+      </div>` : `
+      <div class="gal gal-empty">
+        <span class="card-emoji">${p.emoji || '🏋️'}</span>
+        ${p.video ? `<button class="vid-btn" data-video="${esc(p.video)}" aria-label="Ver vídeo">▶ Vídeo</button>` : ''}
+      </div>`;
+    return `
     <div class="card">
       <div class="card-top">
         <span class="card-num">${String(i + 1).padStart(2, '0')}</span>
-        <span class="card-emoji">${p.emoji || ''}</span>
+        <span class="card-emoji-sm">${p.emoji || ''}</span>
       </div>
+      ${galeriaHTML}
       <div class="card-body">
         <h2 class="card-nome">${esc(p.nome)}</h2>
         <p class="card-sub">${esc(p.subtitle || '')}</p>
@@ -51,7 +75,8 @@ export default async function handler(req, res) {
             : `<span class="price-avista" style="font-size:22px">Sob consulta</span>`}
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -96,6 +121,23 @@ export default async function handler(req, res) {
   .card-num{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:2px}
   .card-emoji{font-size:26px}
   .card-body{padding:22px;display:flex;flex-direction:column;flex:1}
+  .card-emoji-sm{font-size:20px}
+  .gal{position:relative;background:#0a0a0a;display:flex;align-items:center;justify-content:center}
+  .gal-main{width:100%;height:240px;object-fit:contain;padding:14px;cursor:zoom-in;display:block}
+  .gal-empty{height:150px}
+  .gal-empty .card-emoji{font-size:56px;opacity:.18}
+  .vid-btn{position:absolute;right:12px;bottom:12px;background:rgba(5,5,7,.75);color:#fff;border:1px solid rgba(57,255,20,.5);border-radius:99px;font-size:13px;font-weight:800;padding:8px 14px;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;gap:6px}
+  .vid-btn:hover{background:var(--neon);color:var(--dark);border-color:var(--neon)}
+  .gal-thumbs{position:absolute;left:12px;bottom:12px;display:flex;gap:6px}
+  .gal-thumb{width:46px;height:46px;object-fit:cover;border-radius:8px;border:1px solid var(--d600);cursor:pointer;background:#000}
+  .gal-thumb:hover{border-color:var(--neon)}
+  /* lightbox + video modal */
+  .ov{position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;padding:24px}
+  .ov.on{display:flex}
+  .ov img,.ov video{max-width:96vw;max-height:92vh;border-radius:10px}
+  .ov .box{width:min(900px,96vw);aspect-ratio:16/9}
+  .ov .box iframe,.ov .box video{width:100%;height:100%;border:0;border-radius:10px;background:#000}
+  .ov-close{position:absolute;top:18px;right:22px;color:#fff;font-size:34px;font-weight:300;cursor:pointer;line-height:1}
   .card-nome{font-size:21px;font-weight:900;color:#fff;letter-spacing:-.5px;margin-bottom:5px}
   .card-sub{font-size:13px;color:var(--neon);font-weight:600;margin-bottom:16px}
   .specs{list-style:none;margin-bottom:20px}
@@ -183,6 +225,40 @@ export default async function handler(req, res) {
   <footer class="footer">
     <p><strong style="color:#aaa">BRAVE</strong> · Equipamentos Fitness Profissionais · CNPJ 33.167.844/0001-80</p>
   </footer>
+
+  <!-- Lightbox de foto -->
+  <div class="ov" id="lb"><span class="ov-close">&times;</span><img id="lbimg" src="" alt=""></div>
+  <!-- Modal de vídeo -->
+  <div class="ov" id="vm"><span class="ov-close">&times;</span><div class="box" id="vmbox"></div></div>
+
+  <script>
+    (function(){
+      var lb=document.getElementById('lb'), lbimg=document.getElementById('lbimg');
+      var vm=document.getElementById('vm'), vmbox=document.getElementById('vmbox');
+      function openLb(src){ lbimg.src=src; lb.classList.add('on'); }
+      function closeLb(){ lb.classList.remove('on'); lbimg.src=''; }
+      function embed(u){
+        var m;
+        if((m=u.match(/(?:youtu\\.be\\/|youtube\\.com\\/(?:watch\\?v=|embed\\/))([\\w-]{11})/)))
+          return '<iframe src="https://www.youtube.com/embed/'+m[1]+'?autoplay=1" allow="autoplay;encrypted-media" allowfullscreen></iframe>';
+        if((m=u.match(/vimeo\\.com\\/(\\d+)/)))
+          return '<iframe src="https://player.vimeo.com/video/'+m[1]+'?autoplay=1" allow="autoplay;fullscreen" allowfullscreen></iframe>';
+        if((m=u.match(/drive\\.google\\.com\\/file\\/d\\/([^/?]+)/)))
+          return '<iframe src="https://drive.google.com/file/d/'+m[1]+'/preview" allow="autoplay" allowfullscreen></iframe>';
+        return '<video src="'+u+'" controls autoplay playsinline></video>';
+      }
+      function openVm(u){ vmbox.innerHTML=embed(u); vm.classList.add('on'); }
+      function closeVm(){ vm.classList.remove('on'); vmbox.innerHTML=''; }
+      document.addEventListener('click', function(e){
+        var t=e.target;
+        if(t.classList.contains('gal-main')||t.classList.contains('gal-thumb')){ openLb(t.getAttribute('data-full')||t.src); }
+        else if(t.classList.contains('vid-btn')){ openVm(t.getAttribute('data-video')); }
+        else if(t===lb||t.parentNode===lb&&t.classList.contains('ov-close')){ closeLb(); }
+        else if(t===vm||t.parentNode===vm&&t.classList.contains('ov-close')){ closeVm(); }
+      });
+      document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ closeLb(); closeVm(); } });
+    })();
+  </script>
 </body>
 </html>`;
 

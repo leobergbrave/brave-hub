@@ -2,6 +2,7 @@
 // Renderiza com @vercel/og (satori) mostrando os produtos escolhidos + total.
 import { ImageResponse } from '@vercel/og';
 import { parseComboSlug, comboTotais } from '../src/data/ergoCatalog.js';
+import { loadCatalog } from './_ergo-fetch.js';
 import { INTER_BLACK_B64, INTER_SEMIBOLD_B64, LOGO_DATA_URI, fontBuffer } from './_og-assets.js';
 
 const DARK = '#050507';
@@ -17,7 +18,8 @@ const h = (type, props = {}, ...children) => {
 };
 
 export async function comboImageBuffer(slug, desconto) {
-  const produtos = parseComboSlug(slug);
+  const catalog = await loadCatalog();
+  const produtos = parseComboSlug(slug, catalog);
   const t = comboTotais(produtos, desconto);
   const nomes = produtos.map(p => p.nome);
   const totalTxt = t.avistaFinal > 0
