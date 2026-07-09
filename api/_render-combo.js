@@ -193,7 +193,7 @@ export default async function handler(req, res) {
 
   <section class="hero">
     <div class="hero-tag">Combo de Ergômetros</div>
-    <h1>Monte seu <span>Box de Cardio</span></h1>
+    <h1>Ergômetros <span>Brave</span></h1>
     <p class="hero-sub">Seleção de ergômetros de alta performance BRAVE. Padrão profissional, pronta entrega e condições exclusivas para o combo.</p>
   </section>
 
