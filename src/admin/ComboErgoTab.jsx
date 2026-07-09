@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Files, Copy, ExternalLink, Trash2, Save, Loader2, Check, DollarSign, MessageCircle } from 'lucide-react';
-import { ERGO_CATALOG, comboSlug, comboTotais } from '../data/ergoCatalog';
+import { ERGO_CATALOG, mergeCatalog, comboSlug, comboTotais } from '../data/ergoCatalog';
 
 const BASE = 'https://brave-hub-two.vercel.app';
 const ROW_ID = 'ergo-combos';
@@ -12,6 +12,7 @@ export default function ComboErgoTab() {
   const [desconto, setDesconto] = useState('');
   const [nome, setNome]         = useState('');
   const [salvos, setSalvos]     = useState([]);
+  const [catalog, setCatalog]   = useState(ERGO_CATALOG);
   const [loading, setLoading]   = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [toast, setToast]       = useState('');
@@ -19,14 +20,19 @@ export default function ComboErgoTab() {
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2500); };
 
   useEffect(() => {
-    supabase.from('landing_pages_config').select('config').eq('id', ROW_ID).maybeSingle()
-      .then(({ data }) => setSalvos(data?.config?.combos_salvos || []))
-      .finally(() => setLoading(false));
+    // combos salvos + catálogo editado (Produtos Ergômetros)
+    Promise.all([
+      supabase.from('landing_pages_config').select('config').eq('id', ROW_ID).maybeSingle(),
+      supabase.from('landing_pages_config').select('config').eq('id', 'ergo-catalog').maybeSingle(),
+    ]).then(([combos, cat]) => {
+      setSalvos(combos.data?.config?.combos_salvos || []);
+      setCatalog(mergeCatalog(cat.data?.config?.produtos));
+    }).finally(() => setLoading(false));
   }, []);
 
   const toggle = (alias) => setSel(s => s.includes(alias) ? s.filter(a => a !== alias) : [...s, alias]);
 
-  const produtos = ERGO_CATALOG.filter(p => sel.includes(p.alias));
+  const produtos = catalog.filter(p => sel.includes(p.alias));
   const d = Math.max(0, Number(desconto) || 0);
   const t = comboTotais(produtos, d);
   const slug = comboSlug(produtos);
@@ -99,7 +105,7 @@ export default function ComboErgoTab() {
       <div className="bg-dark-800/60 border border-dark-700 rounded-2xl p-6 space-y-4">
         <h3 className="text-white font-bold text-sm">1. Escolha os produtos do combo</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {ERGO_CATALOG.map(p => {
+          {catalog.map(p => {
             const on = sel.includes(p.alias);
             return (
               <button key={p.alias} onClick={() => toggle(p.alias)}
