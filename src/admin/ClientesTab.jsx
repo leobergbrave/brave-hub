@@ -405,12 +405,13 @@ export default function ClientesTab({ onNavigate }) {
 
   const filtrados = useMemo(() => {
     return clientes.filter(c => {
-      const q = busca.toLowerCase();
+      const q = busca.trim().toLowerCase();
+      const qDigits = q.replace(/\D/g, '');
       const matchBusca = !q
         || (c.nome || '').toLowerCase().includes(q)
-        || (c.telefone || '').includes(q)
         || (c.email || '').toLowerCase().includes(q)
-        || (c.cpf_cnpj || '').includes(q.replace(/\D/g, ''));
+        || (!!qDigits && (c.telefone || '').replace(/\D/g, '').includes(qDigits))
+        || (!!qDigits && (c.cpf_cnpj || '').replace(/\D/g, '').includes(qDigits));
       const matchTipo = filtroTipo === 'todos' || c.tipo_negocio === filtroTipo;
       const matchOrigem = filtroOrigem === 'todos' || c.origem === filtroOrigem;
       return matchBusca && matchTipo && matchOrigem;
