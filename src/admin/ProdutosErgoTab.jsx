@@ -176,7 +176,7 @@ function MediaSlot({ kind, url, preview, alias, name, onDone, onRemove, onError 
       }
       const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
       const path = `${alias}/${name}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from(BUCKET).upload(path, f, { upsert: true, contentType: f.type || undefined });
+      const { error } = await supabase.storage.from(BUCKET).upload(path, f, { upsert: false, contentType: f.type || undefined });
       if (error) throw error;
       onDone(supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl);
     } catch (err) {
