@@ -159,7 +159,11 @@ function Field({ label, value, onChange, type = 'text' }) {
 
 function MediaSlot({ kind, url, preview, alias, name, onDone, onRemove, onError }) {
   const [up, setUp] = useState(false);
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkVal, setLinkVal] = useState('');
   const inp = useRef(null);
+
+  const confirmLink = () => { const u = linkVal.trim(); if (u) { onDone(u); setLinkVal(''); setLinkMode(false); } };
 
   const handle = async (e) => {
     const file = e.target.files?.[0];
@@ -191,12 +195,27 @@ function MediaSlot({ kind, url, preview, alias, name, onDone, onRemove, onError 
       </div>
     );
   }
+  if (linkMode) {
+    return (
+      <div className="aspect-square rounded-xl border border-dashed border-neon/40 bg-dark-900 flex flex-col justify-center gap-1.5 p-2">
+        <input autoFocus value={linkVal} onChange={e => setLinkVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && confirmLink()}
+          placeholder={kind === 'image' ? 'Link da imagem' : 'YouTube / Drive / MP4'}
+          className="w-full bg-dark-950 border border-dark-700 text-white text-[11px] rounded px-2 py-1.5 focus:outline-none focus:border-neon/50" />
+        <div className="flex gap-1">
+          <button onClick={confirmLink} className="flex-1 text-[10px] font-bold bg-neon text-dark-950 rounded py-1">OK</button>
+          <button onClick={() => { setLinkMode(false); setLinkVal(''); }} className="text-[10px] text-zinc-500 px-2">cancelar</button>
+        </div>
+      </div>
+    );
+  }
   return (
-    <button onClick={() => inp.current?.click()} disabled={up}
-      className="aspect-square rounded-xl border border-dashed border-dark-600 hover:border-neon/40 bg-dark-900 flex flex-col items-center justify-center gap-1.5 text-zinc-600 hover:text-neon transition-all">
-      {up ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImageIcon className="w-5 h-5" />}
-      <span className="text-[10px] font-medium">{up ? 'Enviando…' : (kind === 'image' ? 'Enviar foto' : 'Enviar vídeo')}</span>
+    <div className="aspect-square rounded-xl border border-dashed border-dark-600 hover:border-neon/40 bg-dark-900 flex flex-col items-center justify-center gap-1 text-zinc-600 transition-all p-2">
+      <button onClick={() => inp.current?.click()} disabled={up} className="flex flex-col items-center gap-1 hover:text-neon transition-colors">
+        {up ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImageIcon className="w-5 h-5" />}
+        <span className="text-[10px] font-medium">{up ? 'Enviando…' : (kind === 'image' ? 'Enviar foto' : 'Enviar vídeo')}</span>
+      </button>
+      <button onClick={() => setLinkMode(true)} className="text-[10px] text-zinc-600 hover:text-neon underline">ou colar link</button>
       <input ref={inp} type="file" accept={kind === 'image' ? 'image/*' : 'video/*'} onChange={handle} className="hidden" />
-    </button>
+    </div>
   );
 }
