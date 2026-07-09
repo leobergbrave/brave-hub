@@ -2,6 +2,17 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] Combos de Ergômetros (páginas dinâmicas por conjunto de produtos)
+
+### O que foi feito:
+- **Pedido:** páginas com conjuntos dos ergômetros mais pedidos (Esteira, Escada, Remo, SkiErg, Bike Erg, Storm) para enviar de forma profissional. Decisões: **híbrido** (gerador + salvar), **total do combo + por item + desconto**, **card de prévia dinâmico por combo**.
+- **Arquitetura sem função nova:** tudo pendurado na `api/render.js` (já contada). `?tipo=combo` → página HTML server-side (`_render-combo.js`); `?tipo=combo-og` → imagem OG dinâmica (`_og-combo.js` via `@vercel/og`, testado em runtime local). Fontes/logo em base64 (`api/_og-assets.js`).
+- **URL:** `/lp/ergo/{aliases}` (ex: `/lp/ergo/remo-skierg-storm`) + `?d={desconto}` (R$ off no à vista). Imagem: `/lp/ergo/og/{slug}.png`. Rotas no `vercel.json` (antes do fallback). Slug canônico pela ordem do catálogo.
+- **Catálogo único** `src/data/ergoCatalog.js` (6 produtos, preços do catálogo 2026; Escada = sob consulta) — usado pela página, pela imagem e pelo admin.
+- **Admin:** nova aba **Comercial → Combos Ergômetros** (`ComboErgoTab.jsx`): checkboxes dos 6, desconto, totais ao vivo (à vista/10x/economia), link com copiar/abrir/WhatsApp, e **salvar combos nomeados** (linha `ergo-combos` em `landing_pages_config`, upsert anon; filtrada da lista de Landing Pages).
+- **Validação:** página (HTTP 200, OG certo, total/economia corretos, slug inválido→404), imagens OG (3 e 6 itens, com/sem desconto, com Escada) geradas OK; `npm run build` OK. Requer deploy.
+- **Preços:** editar `src/data/ergoCatalog.js` (a Escada está sob consulta até o usuário informar).
+
 ## [2026-07-08] LP CrossFit configurável no admin + cache OG (WhatsApp)
 
 ### O que foi feito:

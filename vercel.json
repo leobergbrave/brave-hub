@@ -2,6 +2,8 @@
   "routes": [
     { "src": "/api/lead-respondeu", "dest": "/api/disparo-resposta?type=lead-respondeu" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/lp/ergo/og/(?<slug>[^/]+)\\.png", "dest": "/api/render?tipo=combo-og&slug=$slug" },
+    { "src": "/lp/ergo/(?<slug>[^/]+)", "dest": "/api/render?tipo=combo&slug=$slug" },
     { "src": "/proposta/(?<slug>[^/]+)", "dest": "/api/render?tipo=share&slug=$slug" },
     { "src": "/pp/(?<slug>[^/]+)", "dest": "/api/render?tipo=pp&slug=$slug" },
     { "src": "/fiscal/(?<token>[^/]+)", "dest": "/api/fiscal?token=$token" },

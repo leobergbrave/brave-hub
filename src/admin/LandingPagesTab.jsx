@@ -77,7 +77,7 @@ export default function LandingPagesTab() {
   const fetchPaginas = async () => {
     setLoading(true);
     const { data } = await supabase.from('landing_pages_config').select('*').order('titulo');
-    setPaginas(data || []);
+    setPaginas((data || []).filter(p => p.id !== 'ergo-combos'));
     setLoading(false);
   };
 

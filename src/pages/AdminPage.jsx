@@ -18,6 +18,7 @@ import ClientesTab from '../admin/ClientesTab';
 import ProspeccaoTab from '../admin/ProspeccaoTab';
 import LandingPagesTab from '../admin/LandingPagesTab';
 import ModelosTab from '../admin/ModelosTab';
+import ComboErgoTab from '../admin/ComboErgoTab';
 
 
 const NAV_SECTIONS = [
@@ -41,6 +42,7 @@ const NAV_SECTIONS = [
       { id: 'posvendas', label: 'Follow Up CLIENTES',   icon: Heart },
       { id: 'emails',        label: 'Emails',               icon: Mail },
       { id: 'landingpages',  label: 'Landing Pages',        icon: Globe },
+      { id: 'combosergo',    label: 'Combos Ergômetros',    icon: Files },
     ],
   },
   {
@@ -99,6 +101,7 @@ export default function AdminPage() {
       case 'marketing':  return <MarketingTab onBadgeUpdate={setFollowUpBadge} />;
       case 'emails':        return <EmailsTab />;
       case 'landingpages':  return <LandingPagesTab />;
+      case 'combosergo':    return <ComboErgoTab />;
       default: return null;
     }
   };
