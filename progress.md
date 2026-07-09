@@ -2,6 +2,15 @@
 
 Este documento acompanha o progresso diário, testes realizados, erros encontrados e soluções aplicadas.
 
+## [2026-07-08] Combo: cálculo de frete por CEP + oferta "frete grátis hoje"
+
+### O que foi feito:
+- **Pedido:** na página do combo, campo de CEP → loading → "seu frete seria R$ X (real), MAS temos entrega para sua região e incluímos com frete grátis para fechamento hoje". Decisões: **reusar a tabela de frete (peso)** + **grátis hoje com urgência**.
+- **Frete real reaproveitado:** endpoint `api/_combo-frete.js` (via `render.js ?tipo=frete`, sem função nova) — CEP→estado/zona (ViaCEP, mesma lógica dos orçamentos) + tabela `regras_frete` + `calcularFrete(peso, regra)`. Peso somado do catálogo.
+- **Peso:** adicionado `peso_kg` aos 6 ergômetros (`ergoCatalog.js`, defaults: esteira 130, escada 100, remo 35, skierg 40, bikeerg 30, storm 55) + campo **Peso (kg)** no editor Produtos Ergômetros (ajustar os reais). `mergeCatalog` preserva o do banco.
+- **Página do combo:** seção de frete (input CEP + máscara), loading, e resultado: frete real **riscado** → "✅ FRETE GRÁTIS para fechamento hoje" + texto de urgência (carga saindo p/ região · vagas limitadas) + **contador regressivo** até 23:59 + CTA WhatsApp pré-preenchido com o CEP e o combo.
+- **Validação:** endpoint retornou frete real R$ 222 (SP capital, 185kg) lendo `regras_frete`; página com a seção/JS OK; `npm run build` OK.
+
 ## [2026-07-08] Ergômetros: editor completo + 4 fotos + vídeo (upload)
 
 ### O que foi feito:

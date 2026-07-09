@@ -8,7 +8,7 @@ export const ERGO_CATALOG = [
   {
     alias: 'esteira', nome: 'Esteira Curva Pro', emoji: '🏃',
     subtitle: 'Leve mais potência e precisão para seus alunos.',
-    preco: 17990, preco_avista: 15990,
+    preco: 17990, preco_avista: 15990, peso_kg: 130,
     specs: [
       'Sem manivela de ajuste — corrida fluida',
       'Tração sem motor, dispensa energia elétrica',
@@ -21,7 +21,7 @@ export const ERGO_CATALOG = [
   {
     alias: 'escada', nome: 'Escada Ergométrica Brave', emoji: '🪜',
     subtitle: 'Lançamento exclusivo, equipamento silencioso.',
-    preco: 0, preco_avista: 0,
+    preco: 0, preco_avista: 0, peso_kg: 100,
     specs: [
       'Lançamento exclusivo promocional',
       'Painel multifuncional resistente',
@@ -34,7 +34,7 @@ export const ERGO_CATALOG = [
   {
     alias: 'remo', nome: 'Remo Indoor Brave', emoji: '🚣',
     subtitle: 'O equipamento que vai transformar suas aulas de endurance.',
-    preco: 7499, preco_avista: 6499,
+    preco: 7499, preco_avista: 6499, peso_kg: 35,
     specs: [
       'Remo seco com sistema de corrente',
       'Projeto desenvolvido para o Cross Training',
@@ -47,7 +47,7 @@ export const ERGO_CATALOG = [
   {
     alias: 'skierg', nome: 'Air Ski Indoor', emoji: '⛷️',
     subtitle: 'O simulador de esqui mais resistente e inovador do mercado.',
-    preco: 8299, preco_avista: 7299,
+    preco: 8299, preco_avista: 7299, peso_kg: 40,
     specs: [
       'Simulador de esqui com sistema de correia',
       'Projeto desenvolvido para o Cross Training',
@@ -60,7 +60,7 @@ export const ERGO_CATALOG = [
   {
     alias: 'bikeerg', nome: 'Bike Erg Brave', emoji: '🚴',
     subtitle: 'Performance e endurance no padrão Concept.',
-    preco: 7899, preco_avista: 6899,
+    preco: 7899, preco_avista: 6899, peso_kg: 30,
     specs: [
       'Controle de tensão avançado',
       'Design ergonômico',
@@ -73,7 +73,7 @@ export const ERGO_CATALOG = [
   {
     alias: 'storm', nome: 'Storm Bike Brave', emoji: '🌀',
     subtitle: 'Tecnologia americana para o seu treino.',
-    preco: 9290, preco_avista: 8200,
+    preco: 9290, preco_avista: 8200, peso_kg: 55,
     specs: [
       'Sistema de correia resistida',
       'Painel de tecnologia americana',

@@ -81,7 +81,7 @@ export default function ProdutosErgoTab() {
               <span className="text-2xl">{p.emoji}</span>
               <div className="text-left">
                 <p className="text-white font-bold text-sm">{p.nome}</p>
-                <p className="text-zinc-600 text-[11px]">{p.preco_avista > 0 ? `${fmt(p.preco_avista)} à vista` : 'Sob consulta'} · {(p.fotos || []).filter(Boolean).length}/4 fotos{p.video ? ' · vídeo ✓' : ''}</p>
+                <p className="text-zinc-600 text-[11px]">{p.preco_avista > 0 ? `${fmt(p.preco_avista)} à vista` : 'Sob consulta'} · {p.peso_kg || 0}kg · {(p.fotos || []).filter(Boolean).length}/4 fotos{p.video ? ' · vídeo ✓' : ''}</p>
               </div>
             </div>
             {aberto === i ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronRight className="w-4 h-4 text-zinc-500" />}
@@ -94,9 +94,10 @@ export default function ProdutosErgoTab() {
                 <Field label="Emoji" value={p.emoji} onChange={v => set(i, 'emoji', v)} />
               </div>
               <Field label="Subtítulo (frase de destaque)" value={p.subtitle} onChange={v => set(i, 'subtitle', v)} />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <Field label="Preço prazo/normal (R$)" type="number" value={p.preco} onChange={v => set(i, 'preco', parseFloat(v) || 0)} />
                 <Field label="Preço à vista (R$)" type="number" value={p.preco_avista} onChange={v => set(i, 'preco_avista', parseFloat(v) || 0)} />
+                <Field label="Peso (kg) — p/ frete" type="number" value={p.peso_kg} onChange={v => set(i, 'peso_kg', parseFloat(v) || 0)} />
               </div>
 
               {/* Specs */}

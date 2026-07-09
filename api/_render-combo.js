@@ -162,6 +162,22 @@ export default async function handler(req, res) {
   .resumo-prazo{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 22px}
   .resumo-prazo-value{font-size:clamp(18px,5vw,22px);font-weight:800;color:var(--text);letter-spacing:-.5px}
   .nota{font-size:12px;color:#666;padding:0 22px 16px}
+  .frete-card{background:var(--d800);border:1px solid var(--d700);border-radius:20px;padding:22px}
+  .frete-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:14px}
+  .frete-row{display:flex;gap:10px;flex-wrap:wrap}
+  .frete-row input{flex:1;min-width:160px;background:var(--d900);border:1px solid var(--d700);color:#fff;font-size:15px;border-radius:12px;padding:14px 16px}
+  .frete-row input:focus{outline:none;border-color:var(--neon)}
+  .frete-row button{background:var(--neon);color:var(--dark);font-weight:800;font-size:15px;border:0;border-radius:12px;padding:14px 22px;cursor:pointer}
+  .frete-err{color:#ff6a6a;font-size:12px;margin-top:8px;min-height:14px}
+  .frete-loading{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px;padding:8px 0}
+  .spin{width:22px;height:22px;border:3px solid var(--d600);border-top-color:var(--neon);border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fr-real{font-size:14px;color:var(--muted)}
+  .fr-real s{color:#fff}
+  .fr-free{font-size:clamp(22px,6vw,30px);font-weight:900;color:var(--neon);letter-spacing:-.5px;margin:6px 0 10px}
+  .fr-msg{font-size:14px;color:#cbd5cb;line-height:1.6;background:linear-gradient(135deg,#0d1a08,#111);border:1px solid rgba(57,255,20,.15);border-radius:14px;padding:14px 16px}
+  .fr-timer{font-size:13px;color:#ffc107;margin:12px 0 16px;text-align:center}
+  .fr-timer b{font-variant-numeric:tabular-nums}
   .cta-wrap{padding:40px 20px 64px;max-width:820px;margin:0 auto}
   .cta-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;text-decoration:none;border-radius:18px;background:#25D366;color:#fff;font-size:clamp(15px,4vw,18px);font-weight:800;padding:20px 24px;box-shadow:0 12px 40px rgba(37,211,102,.22)}
   .cta-btn svg{width:26px;height:26px;fill:#fff;flex-shrink:0}
@@ -214,6 +230,26 @@ export default async function handler(req, res) {
     </div>
   </div>
 
+  <div class="wrap">
+    <div class="section">
+      <div class="section-label">Frete para a sua região</div>
+      <div class="frete-card">
+        <div class="frete-form" id="frete-form">
+          <p class="frete-title">📦 Calcule o frete do seu combo</p>
+          <div class="frete-row">
+            <input id="cepin" inputmode="numeric" maxlength="9" placeholder="Seu CEP (00000-000)" />
+            <button id="cepbtn" onclick="calcFrete()">Calcular</button>
+          </div>
+          <p class="frete-err" id="frete-err"></p>
+        </div>
+        <div class="frete-loading" id="frete-loading" style="display:none">
+          <div class="spin"></div><span>Consultando o transporte para a sua região…</span>
+        </div>
+        <div class="frete-result" id="frete-result" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="cta-wrap">
     <a href="${waHref}" class="cta-btn" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
@@ -232,6 +268,44 @@ export default async function handler(req, res) {
   <div class="ov" id="vm"><span class="ov-close">&times;</span><div class="box" id="vmbox"></div></div>
 
   <script>
+    var FSLUG='${canon}', FWA='${WA_DEFAULT}', FNOMES=${JSON.stringify(nomes.join(', '))};
+    var cdTimer=null;
+    function brl(v){return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+    function maskCep(){var el=document.getElementById('cepin');var v=el.value.replace(/\\D/g,'').slice(0,8);if(v.length>5)v=v.slice(0,5)+'-'+v.slice(5);el.value=v;}
+    function startCd(){
+      function t(){var now=new Date(),end=new Date();end.setHours(23,59,59,999);var s=Math.max(0,Math.floor((end-now)/1000));var h=String(Math.floor(s/3600)).padStart(2,'0'),m=String(Math.floor(s%3600/60)).padStart(2,'0'),ss=String(s%60).padStart(2,'0');var el=document.getElementById('cd');if(el)el.textContent=h+':'+m+':'+ss;}
+      t(); if(cdTimer)clearInterval(cdTimer); cdTimer=setInterval(t,1000);
+    }
+    function calcFrete(){
+      var cep=(document.getElementById('cepin').value||'').replace(/\\D/g,'');
+      var err=document.getElementById('frete-err'); err.textContent='';
+      if(cep.length!==8){err.textContent='Digite um CEP válido (8 dígitos).';return;}
+      document.getElementById('frete-form').style.display='none';
+      document.getElementById('frete-result').style.display='none';
+      document.getElementById('frete-loading').style.display='flex';
+      fetch('/api/render?tipo=frete&slug='+FSLUG+'&cep='+cep).then(function(r){return r.json();}).then(function(d){
+        document.getElementById('frete-loading').style.display='none';
+        if(!d.ok){document.getElementById('frete-form').style.display='block';err.textContent=(d.error||'Não foi possível calcular')+'. Tente outro CEP.';return;}
+        var local=(d.cidade?d.cidade+'/':'')+d.estado;
+        var wa='https://wa.me/'+FWA+'?text='+encodeURIComponent('Olá! Quero fechar HOJE o combo ('+FNOMES+') com o frete grátis para o meu CEP '+document.getElementById('cepin').value+'.');
+        var real=d.frete>0?'<div class="fr-real">Seu frete para '+local+' seria <s>'+brl(d.frete)+'</s></div>':'<div class="fr-real">Entrega para '+local+'</div>';
+        document.getElementById('frete-result').innerHTML=
+          real+
+          '<div class="fr-free">✅ FRETE GRÁTIS para fechamento hoje!</div>'+
+          '<p class="fr-msg">Temos uma carga saindo para a <b>sua região</b> nos próximos dias e conseguimos incluir o seu pedido com <b>frete grátis</b> — mas as vagas são limitadas.</p>'+
+          '<div class="fr-timer">Oferta expira em <b id="cd">--:--:--</b></div>'+
+          '<a class="cta-btn" href="'+wa+'" target="_blank" rel="noopener">Fechar agora com frete grátis</a>';
+        document.getElementById('frete-result').style.display='block';
+        startCd();
+      }).catch(function(){
+        document.getElementById('frete-loading').style.display='none';
+        document.getElementById('frete-form').style.display='block';
+        err.textContent='Erro ao calcular. Tente novamente.';
+      });
+    }
+    document.addEventListener('input',function(e){if(e.target&&e.target.id==='cepin')maskCep();});
+    document.addEventListener('keydown',function(e){if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='cepin')calcFrete();});
+
     (function(){
       var lb=document.getElementById('lb'), lbimg=document.getElementById('lbimg');
       var vm=document.getElementById('vm'), vmbox=document.getElementById('vmbox');

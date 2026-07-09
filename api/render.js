@@ -17,6 +17,10 @@ export default async function handler(req, res) {
   const tipo = req.query?.tipo;
   if (tipo === 'pp') return renderProposta(req, res);
   if (tipo === 'combo') return renderCombo(req, res);
+  if (tipo === 'frete') {
+    const m = await import('./_combo-frete.js');
+    return m.default(req, res);
+  }
   if (tipo === 'combo-og') {
     try {
       const { comboImageBuffer } = await import('./_og-combo.js');
