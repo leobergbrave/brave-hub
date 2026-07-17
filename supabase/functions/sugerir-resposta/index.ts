@@ -24,8 +24,46 @@ function fmtBRL(v: number | null | undefined): string {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function deburr(s: string): string {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// A tabela produtos e o Bling inteiro (900+ SKUs). Enfiar tudo no prompt estoura o
+// contexto e trunca a resposta. Entao busca so os relevantes: casa palavras da conversa
+// (>=3 letras) contra o nome do produto, pega os melhores. Sempre inclui os ergometros
+// nucleo (bike/remo/ski/storm/esteira/escada), que sao o foco do funil.
+const ERGO_KWS = ['bike erg', 'remo', 'ski', 'storm', 'esteira curva', 'escada'];
+const STOP = new Set(['para','com','uma','que','dos','das','tem','voce','voces','qual','quanto','custa','pra','por','preciso','quero','sobre','the','and']);
+
+function selecionarProdutos(produtos: any[], conversa: string, limite = 18): any[] {
+  if (!produtos?.length) return [];
+  const termos = [...new Set(deburr(conversa).split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !STOP.has(t)))];
+
+  const escolhidos = new Map<string, any>();
+  // 1) ergometros nucleo sempre presentes (preco/combo do carro-chefe)
+  for (const p of produtos) {
+    const nome = deburr(p.nome);
+    if (ERGO_KWS.some((kw) => nome.includes(deburr(kw)))) escolhidos.set(p.nome, p);
+  }
+  // 2) produtos que casam com o que o cliente falou, por numero de termos batidos
+  const marcados = produtos
+    .map((p) => {
+      const nome = deburr(p.nome);
+      const score = termos.reduce((acc, t) => acc + (nome.includes(t) ? 1 : 0), 0);
+      return { p, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  for (const { p } of marcados) {
+    if (escolhidos.size >= limite) break;
+    escolhidos.set(p.nome, p);
+  }
+  return [...escolhidos.values()].slice(0, limite);
+}
+
 function montarCatalogo(produtos: any[]): string {
-  if (!produtos?.length) return '(catalogo indisponivel)';
+  if (!produtos?.length) return '(nenhum produto relevante encontrado — trate como fora do catalogo)';
   return produtos.map((p) => {
     const avista = fmtBRL(p.preco_avista);
     const prazo = p.preco_prazo > 0 ? `${fmtBRL(p.preco_prazo)} em ate 10x` : 'sob consulta';
@@ -102,13 +140,17 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-    const { data: produtos } = await supabase
+    const { data: todosProdutos } = await supabase
       .from('produtos')
       .select('nome, preco_avista, preco_prazo, codigo_sku');
 
+    const conversaTexto = montarConversa(mensagens);
+    // So os produtos relevantes vao pro prompt (a tabela tem 900+ SKUs do Bling).
+    const relevantes = selecionarProdutos(todosProdutos || [], conversaTexto);
+
     const prompt = PROMPT({
-      catalogo: montarCatalogo(produtos || []),
-      conversa: montarConversa(mensagens),
+      catalogo: montarCatalogo(relevantes),
+      conversa: conversaTexto,
       nome: nomeCliente || '',
       tags: Array.isArray(tags) ? tags.join(', ') : (tags || ''),
     });
@@ -120,7 +162,7 @@ Deno.serve(async (req: Request) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 500, temperature: 0.7, responseMimeType: 'application/json' },
+          generationConfig: { maxOutputTokens: 1024, temperature: 0.7, responseMimeType: 'application/json' },
         }),
       }
     );
@@ -135,8 +177,10 @@ Deno.serve(async (req: Request) => {
     try {
       parsed = JSON.parse(bruto);
     } catch {
-      // Se o modelo escapou do JSON, devolve o texto cru como sugestao em vez de quebrar.
-      parsed = { sugestao: bruto, precisa_humano: true, motivo: 'resposta fora do formato', confianca: 0 };
+      // JSON truncado/malformado: tenta pescar o campo sugestao com regex antes de desistir.
+      const m = bruto.match(/"sugestao"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const texto = m ? m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : bruto;
+      parsed = { sugestao: texto, precisa_humano: true, motivo: 'resposta incompleta do modelo', confianca: 0 };
     }
 
     return json({
