@@ -23,6 +23,11 @@
  *
  * Quem decide o que fazer com o lead e o servidor (webhook-fss), nao este script:
  * ele so reporta o que viu. Toda a idempotencia vive la.
+ *
+ * Por que tem painel na pagina em vez de so console.log: o FSS injeta `debugger`
+ * em loop pra travar quem abre o DevTools (bundle-v3.js ofuscado). Acompanhar este
+ * script pelo console significa brigar com essa armadilha toda vez. O painel mostra
+ * o estado sem precisar de F12.
  */
 
 (function () {
@@ -45,6 +50,54 @@
 
   const CHAVE_CACHE = 'brave_fss_watcher_enviados';
   const corte = new Date(CONFIG.criadoDepoisDe).getTime();
+
+  // ── Painel na pagina ────────────────────────────────────────────────
+  // O SPA remonta o DOM ao trocar de rota, entao o painel e reinjetado a cada
+  // ciclo se tiver sumido (ver garantirPainel).
+  const ID_PAINEL = 'brave-fss-watcher';
+  let historico = [];
+
+  function garantirPainel() {
+    let el = document.getElementById(ID_PAINEL);
+    if (el) return el;
+
+    el = document.createElement('div');
+    el.id = ID_PAINEL;
+    el.style.cssText = [
+      'position:fixed', 'bottom:12px', 'right:12px', 'z-index:2147483647',
+      'font:12px/1.4 -apple-system,Segoe UI,sans-serif', 'color:#e4e4e7',
+      'background:#18181b', 'border:1px solid #3f3f46', 'border-radius:8px',
+      'box-shadow:0 4px 16px rgba(0,0,0,.4)', 'max-width:340px', 'overflow:hidden',
+    ].join(';');
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function pintarPainel(resumo) {
+    const el = garantirPainel();
+    const cor = CONFIG.dryRun ? '#facc15' : '#4ade80';
+    const rotulo = CONFIG.dryRun ? 'DRY-RUN (nao grava)' : 'ATIVO';
+
+    const linhas = historico.slice(-8).reverse().map((h) => {
+      const cores = { criar_e_disparar: '#4ade80', promover: '#4ade80', criar_novo: '#a1a1aa', erro: '#f87171' };
+      return `<div style="display:flex;gap:6px;padding:3px 0;border-top:1px solid #27272a">
+        <span style="color:${cores[h.acao] || '#a1a1aa'};white-space:nowrap">${h.acao}</span>
+        <span style="color:#e4e4e7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.nome}</span>
+        <span style="color:#71717a;margin-left:auto;white-space:nowrap">${h.detalhe}</span>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div style="padding:8px 10px;background:#09090b;display:flex;align-items:center;gap:6px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${cor};flex:none"></span>
+        <b style="color:#fff">fss-watcher</b>
+        <span style="color:${cor};font-size:10px;letter-spacing:.5px">${rotulo}</span>
+      </div>
+      <div style="padding:8px 10px;color:#a1a1aa">
+        ${resumo}
+        ${linhas ? `<div style="margin-top:6px">${linhas}</div>` : ''}
+      </div>`;
+  }
 
   // cache: assinatura (telefone|tags) -> true. A assinatura inclui as tags de
   // proposito: quando a IA promove o lead de atendimento_ia pra "bike erg", a
@@ -111,28 +164,31 @@
     return corpo;
   }
 
+  const hora = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
   async function ciclo() {
     const linhas = lerLinhas();
     if (!linhas.length) {
-      // Acontece: a lista e populada via Firebase e as vezes a aba fica em branco.
-      // Nao e erro fatal — o proximo ciclo tenta de novo.
-      console.warn('[fss-watcher] nenhuma linha na tela; pulando ciclo');
+      // Acontece: a lista e populada via Firebase e as vezes a tela fica em branco
+      // (FirebaseError: Missing or insufficient permissions). Nao e fatal — o
+      // proximo ciclo tenta de novo.
+      pintarPainel(`<b style="color:#f87171">lista vazia na tela</b><br>${hora()} · nada lido, tenta de novo em 5min`);
       return;
     }
 
     const cache = lerCache();
-    const resultados = [];
+    let enviados = 0, pulados = 0;
 
     for (const linha of linhas) {
       const quando = Date.parse(linha.criadoTexto);
       if (Number.isNaN(quando)) {
-        console.warn('[fss-watcher] data ilegivel, ignorando por seguranca:', linha.nome, linha.criadoTexto);
+        historico.push({ acao: 'erro', nome: linha.nome, detalhe: 'data ilegivel' });
         continue;
       }
-      if (quando < corte) continue; // historico: nunca tocar
+      if (quando < corte) { pulados++; continue; } // historico: nunca tocar
 
       const assinatura = `${linha.telefone}|${[...linha.tags].sort().join(',')}`;
-      if (cache[assinatura]) continue;
+      if (cache[assinatura]) { pulados++; continue; }
 
       try {
         const r = await enviar({
@@ -141,25 +197,27 @@
           email: linha.email,
           tags: linha.tags,
         });
-        resultados.push({ nome: linha.nome, tags: linha.tags.join(', '), ...r });
-        // No dry-run nao marca o cache, senao o teste so funcionaria uma vez.
+        enviados++;
+        historico.push({
+          acao: r.acao || 'erro',
+          nome: linha.nome,
+          detalhe: (r.produtos && r.produtos.length) ? r.produtos.join(',') : (r.motivo || 'sem produto'),
+        });
+        // No dry-run nao marca o cache, senao o teste so rodaria uma vez.
         if (!CONFIG.dryRun) { cache[assinatura] = true; gravarCache(cache); }
       } catch (err) {
-        console.error('[fss-watcher] falhou em', linha.nome, err);
+        historico.push({ acao: 'erro', nome: linha.nome, detalhe: String(err.message || err).slice(0, 40) });
       }
     }
 
-    if (resultados.length) {
-      console.log(`[fss-watcher] ${CONFIG.dryRun ? 'DRY-RUN — nada foi gravado' : 'enviados'}:`);
-      console.table(resultados);
-    } else {
-      console.log('[fss-watcher] nada novo');
-    }
+    historico = historico.slice(-30);
+    pintarPainel(
+      `${hora()} · ${linhas.length} na tela · <b style="color:#e4e4e7">${enviados}</b> enviado(s) · ${pulados} ignorado(s)` +
+      `<br><span style="color:#52525b">corte: ${CONFIG.criadoDepoisDe.slice(0, 10)}</span>`
+    );
   }
 
-  console.log(
-    `[fss-watcher] ativo | dryRun=${CONFIG.dryRun} | ignora contatos criados antes de ${CONFIG.criadoDepoisDe}`
-  );
+  pintarPainel('iniciando… primeira varredura em 8s');
   setTimeout(ciclo, 8000); // deixa o Tabulator terminar de montar
   setInterval(ciclo, CONFIG.intervaloMs);
 })();
