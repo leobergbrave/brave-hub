@@ -55,7 +55,12 @@
   // O SPA remonta o DOM ao trocar de rota, entao o painel e reinjetado a cada
   // ciclo se tiver sumido (ver garantirPainel).
   const ID_PAINEL = 'brave-fss-watcher';
-  let historico = [];
+
+  // Map em vez de array: em dry-run o cache nao e gravado (de proposito, pra o teste
+  // poder repetir), entao o mesmo lead e reenviado a cada ciclo. Com array o painel
+  // enchia de linhas iguais e escondia os outros leads. Chaveado por telefone, cada
+  // lead ocupa uma linha e a ultima leitura sobrescreve a anterior.
+  const historico = new Map();
 
   function garantirPainel() {
     let el = document.getElementById(ID_PAINEL);
@@ -78,8 +83,15 @@
     const cor = CONFIG.dryRun ? '#facc15' : '#4ade80';
     const rotulo = CONFIG.dryRun ? 'DRY-RUN (nao grava)' : 'ATIVO';
 
-    const linhas = historico.slice(-8).reverse().map((h) => {
-      const cores = { criar_e_disparar: '#4ade80', promover: '#4ade80', criar_novo: '#a1a1aa', erro: '#f87171' };
+    const linhas = [...historico.values()].slice(-8).reverse().map((h) => {
+      const cores = {
+        criar_e_disparar:   '#4ade80', // lead novo, cadastrado e disparado
+        disparar_existente: '#4ade80', // ja estava na base como 'novo', disparou agora
+        ignorado:           '#a1a1aa', // ja tinha sido processado antes
+        cadastrado_sem_disparo: '#facc15',
+        disparo_falhou:     '#f87171',
+        erro:               '#f87171',
+      };
       return `<div style="display:flex;gap:6px;padding:3px 0;border-top:1px solid #27272a">
         <span style="color:${cores[h.acao] || '#a1a1aa'};white-space:nowrap">${h.acao}</span>
         <span style="color:#e4e4e7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.nome}</span>
@@ -182,7 +194,7 @@
     for (const linha of linhas) {
       const quando = Date.parse(linha.criadoTexto);
       if (Number.isNaN(quando)) {
-        historico.push({ acao: 'erro', nome: linha.nome, detalhe: 'data ilegivel' });
+        historico.set(linha.telefone, { acao: 'erro', nome: linha.nome, detalhe: 'data ilegivel' });
         continue;
       }
       if (quando < corte) { pulados++; continue; } // historico: nunca tocar
@@ -198,19 +210,17 @@
           tags: linha.tags,
         });
         enviados++;
-        historico.push({
+        historico.set(linha.telefone, {
           acao: r.acao || 'erro',
           nome: linha.nome,
-          detalhe: (r.produtos && r.produtos.length) ? r.produtos.join(',') : (r.motivo || 'sem produto'),
+          detalhe: (r.produtos && r.produtos.length) ? r.produtos.join(',') : (r.motivo || 'sem equipamento'),
         });
         // No dry-run nao marca o cache, senao o teste so rodaria uma vez.
         if (!CONFIG.dryRun) { cache[assinatura] = true; gravarCache(cache); }
       } catch (err) {
-        historico.push({ acao: 'erro', nome: linha.nome, detalhe: String(err.message || err).slice(0, 40) });
+        historico.set(linha.telefone, { acao: 'erro', nome: linha.nome, detalhe: String(err.message || err).slice(0, 40) });
       }
     }
-
-    historico = historico.slice(-30);
     pintarPainel(
       `${hora()} · ${linhas.length} na tela · <b style="color:#e4e4e7">${enviados}</b> enviado(s) · ${pulados} ignorado(s)` +
       `<br><span style="color:#52525b">corte: ${CONFIG.criadoDepoisDe.slice(0, 10)}</span>`

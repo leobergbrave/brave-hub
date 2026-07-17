@@ -3,12 +3,16 @@
 // O FSS do plano atual nao tem Workflows nem API, entao quem chama esta funcao
 // e um userscript rodando na sessao logada do navegador (scripts/fss-watcher.user.js).
 //
-// Regra central: o lead do FSS chega CRU. A IA de atendimento conversa e so
-// depois aplica a tag de produto. Por isso:
-//   - sem tag de produto  -> cadastra com status 'novo', NAO dispara.
-//   - com tag de produto  -> preenche produtos_interesse, dispara BotConversa,
-//                            status 'fluxo_disparado'.
-// Um lead 'novo' que ganha tag depois e promovido no ciclo seguinte, sem duplicar.
+// Regra central: TODO lead dispara, com ou sem tag de equipamento, assim que e visto.
+// Esta funcao nao decide qual mensagem o cliente recebe — ela manda as tags CRUAS no
+// payload e o fluxo do BotConversa ramifica a partir delas. Assim a copy e a
+// segmentacao (academia / crossfit / hyrox / box_hibrido / tamanho de turma) mudam
+// no BotConversa, sem deploy aqui.
+//
+// Isso e seguro porque o BotConversa usa um canal de WhatsApp separado do numero em
+// que a IA do FSS atende — os dois nao se atropelam na mesma conversa.
+//
+// Idempotencia: um telefone dispara uma vez so. Lead que ja saiu de 'novo' e ignorado.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -35,6 +39,20 @@ const TAG_MAP: Record<string, string[]> = {
   // Quem vai montar um box do zero quer o pacote inteiro.
   'box completo':  ['estcv', 'escada', 'remo', 'skierg', 'bikeerg', 'storm'],
 };
+
+// alias -> nome legivel, pro payload do BotConversa (mesmo texto do cadastrar-lead)
+const EQUIPAMENTOS: Record<string, string> = {
+  bikeerg: 'Bike Erg',
+  remo:    'Remo Indoor',
+  skierg:  'Ski Erg',
+  storm:   'Storm Bike',
+  estcv:   'Esteira Curva',
+  escada:  'Escada',
+};
+
+// Tags de temperatura -> coluna momento_compra ('quente' | 'morno' | 'frio').
+// A IA do FSS marca quente/superquente durante a qualificacao.
+const TAGS_QUENTES = ['quente', 'superquente'];
 
 // alias da tabela leads -> alias do ergoCatalog.js (usado no slug do combo)
 const CATALOG_ALIAS: Record<string, string> = { estcv: 'esteira' };
@@ -94,8 +112,11 @@ Deno.serve(async (req) => {
     const tel = normalizarTelefone(telefone);
     if (tel.length < 12) return json({ error: `telefone invalido: ${telefone}`, telefone: tel }, 400);
 
-    const produtos = tagsParaAliases(tags);
-    const pronto = produtos.length > 0;
+    // Todo lead dispara, tendo tag de equipamento ou nao. A ramificacao de mensagem
+    // acontece dentro do BotConversa, com base nas tags cruas que vao no payload.
+    const tagsLimpas = (tags || []).map((t: string) => String(t).toLowerCase().trim()).filter(Boolean);
+    const produtos = tagsParaAliases(tagsLimpas);
+    const momento = tagsLimpas.some((t: string) => TAGS_QUENTES.includes(t)) ? 'quente' : 'morno';
 
     // A tabela ainda tem telefone duplicado de antes deste fluxo existir (33 grupos
     // em 17/07/2026, alguns com 4 linhas), entao maybeSingle() estouraria com
@@ -116,34 +137,39 @@ Deno.serve(async (req) => {
       return json({ acao: 'ignorado', motivo: 'lead ja processado', lead_id: existente.id, status: existente.status });
     }
 
+    const baseUrl = Deno.env.get('APP_BASE_URL') || 'https://brave-hub-two.vercel.app';
+
+    // Lead sem tag de equipamento vai pra LP geral. comboSlug([]) devolveria string
+    // vazia e o link sairia como /lp/ergo/ — pagina inexistente no WhatsApp do cliente.
+    const link = produtos.length
+      ? `${baseUrl}/lp/ergo/${comboSlug(produtos)}`
+      : `${baseUrl}/lp/ergometros`;
+
     const plano = {
-      acao: existente ? (pronto ? 'promover' : 'ignorado') : (pronto ? 'criar_e_disparar' : 'criar_novo'),
+      acao: existente ? 'disparar_existente' : 'criar_e_disparar',
       telefone: tel,
+      tags: tagsLimpas,
       produtos,
-      status_final: pronto ? 'fluxo_disparado' : 'novo',
+      momento,
+      link,
+      status_final: 'fluxo_disparado',
     };
 
     if (dryRun) return json({ dryRun: true, ...plano });
 
-    // Lead ja existe como 'novo' e continua sem tag de produto: nada a fazer.
-    if (existente && !pronto) {
-      return json({ acao: 'ignorado', motivo: 'ainda sem tag de produto', lead_id: existente.id });
-    }
-
     let leadId: string;
 
     if (existente) {
-      // Promocao: o lead cru ganhou tag de produto, agora vai.
       const { data, error } = await supabase
         .from('leads')
-        .update({ produtos_interesse: produtos, status: 'fluxo_disparado' })
+        .update({ produtos_interesse: produtos, momento_compra: momento, status: 'fluxo_disparado' })
         .eq('id', existente.id)
-        .eq('status', 'novo') // trava de corrida: so promove se ainda estiver cru
+        .eq('status', 'novo') // trava de corrida: so avanca se ainda estiver cru
         .select()
         .maybeSingle();
 
-      if (error) throw new Error('erro ao promover lead: ' + error.message);
-      if (!data) return json({ acao: 'ignorado', motivo: 'promovido em paralelo', lead_id: existente.id });
+      if (error) throw new Error('erro ao atualizar lead: ' + error.message);
+      if (!data) return json({ acao: 'ignorado', motivo: 'disparado em paralelo', lead_id: existente.id });
       leadId = data.id;
     } else {
       const { data, error } = await supabase
@@ -152,17 +178,17 @@ Deno.serve(async (req) => {
           nome,
           telefone: tel,
           email: email || null,
-          momento_compra: 'morno',
+          momento_compra: momento,
           produtos_interesse: produtos,
-          status: pronto ? 'fluxo_disparado' : 'novo',
+          status: 'fluxo_disparado',
           consultor: 'Léo Berg',
-          observacoes: `Origem: Full Sales System${fssContactId ? ` | Contato: ${fssContactId}` : ''} | Tags: ${(tags || []).join(', ') || 'nenhuma'}`,
+          observacoes: `Origem: Full Sales System${fssContactId ? ` | Contato: ${fssContactId}` : ''} | Tags: ${tagsLimpas.join(', ') || 'nenhuma'}`,
         })
         .select()
         .maybeSingle();
 
-      // O indice unico em leads.telefone transforma corrida em conflito, nao em duplicata.
       if (error) {
+        // Se um dia existir indice unico em leads.telefone, corrida vira conflito.
         if (error.code === '23505') {
           return json({ acao: 'ignorado', motivo: 'telefone ja cadastrado (corrida)', telefone: tel });
         }
@@ -171,32 +197,46 @@ Deno.serve(async (req) => {
       leadId = data!.id;
     }
 
-    if (!pronto) return json({ acao: 'criado_novo', lead_id: leadId, motivo: 'sem tag de produto, sem disparo' });
-
-    // Dispara BotConversa. Se falhar, volta o status pra 'novo' e o proximo
-    // ciclo tenta de novo — melhor repetir a tentativa do que perder o lead.
     const webhookUrl = Deno.env.get('BOTCONVERSA_WEBHOOK_NOVO_LEAD') || Deno.env.get('BOTCONVERSA_WEBHOOK');
     if (!webhookUrl) {
       return json({ acao: 'cadastrado_sem_disparo', lead_id: leadId, motivo: 'BOTCONVERSA_WEBHOOK_NOVO_LEAD nao configurado' });
     }
 
-    const baseUrl = Deno.env.get('APP_BASE_URL') || 'https://brave-hub-two.vercel.app';
-    const link = `${baseUrl}/lp/ergo/${comboSlug(produtos)}`;
+    // O payload leva as tags CRUAS de proposito: quem decide qual mensagem enviar e
+    // o fluxo do BotConversa, nao esta funcao. Assim o Leo muda a copy e a
+    // ramificacao por segmento (academia / crossfit / hyrox / box_hibrido / tamanho
+    // de turma) sem precisar de deploy aqui.
+    // Campos em string e array porque o BotConversa mapeia campo plano com mais
+    // facilidade do que array.
+    const payload = {
+      nome,
+      telefone: tel,
+      tags: tagsLimpas.join(', '),
+      tags_lista: tagsLimpas,
+      produtos: produtos.map((a) => EQUIPAMENTOS[a] || a).join(', '),
+      produtos_aliases: produtos,
+      tem_produto: produtos.length > 0,
+      momento,
+      link,
+      consultor: 'Léo Berg',
+    };
 
     try {
       const res = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, telefone: tel, produtos_interesse: (tags || []).join(', '), link, consultor: 'Léo Berg' }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     } catch (err) {
+      // Volta pra 'novo' pra o proximo ciclo tentar de novo. Melhor repetir a
+      // tentativa do que o lead sumir sem ninguem saber.
       await supabase.from('leads').update({ status: 'novo' }).eq('id', leadId);
       console.error('[webhook-fss] BotConversa falhou, lead volta pra novo:', err);
       return json({ acao: 'disparo_falhou', lead_id: leadId, erro: String(err) }, 502);
     }
 
-    return json({ acao: plano.acao, lead_id: leadId, produtos, link });
+    return json({ acao: plano.acao, lead_id: leadId, tags: tagsLimpas, produtos, momento, link });
 
   } catch (error: any) {
     console.error('[webhook-fss]', error);
