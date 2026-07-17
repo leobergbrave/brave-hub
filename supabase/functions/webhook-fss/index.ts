@@ -97,11 +97,19 @@ Deno.serve(async (req) => {
     const produtos = tagsParaAliases(tags);
     const pronto = produtos.length > 0;
 
-    const { data: existente } = await supabase
+    // A tabela ainda tem telefone duplicado de antes deste fluxo existir (33 grupos
+    // em 17/07/2026, alguns com 4 linhas), entao maybeSingle() estouraria com
+    // "multiple rows returned". Pega o mais recente — mesmo criterio que o trigger
+    // sync_lead_orcamento_gerado ja usa pra desempatar.
+    const { data: achados, error: erroBusca } = await supabase
       .from('leads')
       .select('id, status, produtos_interesse')
       .eq('telefone', tel)
-      .maybeSingle();
+      .order('criado_em', { ascending: false })
+      .limit(1);
+
+    if (erroBusca) throw new Error('erro ao buscar lead: ' + erroBusca.message);
+    const existente = achados?.[0] || null;
 
     // Ja disparou uma vez: nao dispara de novo, aconteca o que acontecer com as tags.
     if (existente && existente.status !== 'novo') {
