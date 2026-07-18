@@ -44,6 +44,51 @@
 
   const CHAVE = 'brave_fss_vigia_alertados'; // { telefone: timestampUltimoAlerta }
 
+  // ── Interpretacao de tags -> interesse ───────────────────────────────
+  // Mapa determinístico (fonte: catalogo Brave / webhook-fss). Traduz as tags do
+  // lead no que ele quer comprar. O alerta leva a leitura + as tags cruas.
+  const EQUIP = {
+    'bike erg': 'Bike Erg', 'bikeerg': 'Bike Erg',
+    'remo': 'Remo Indoor',
+    'ski': 'Ski Erg', 'ski erg': 'Ski Erg', 'skierg': 'Ski Erg',
+    'storm bike': 'Storm Bike', 'storm': 'Storm Bike',
+    'esteira curva': 'Esteira Curva', 'esteira': 'Esteira Curva',
+    'escada': 'Escada',
+  };
+  const COMBO = ['box completo', 'combo ergometros', 'combo ergômetros'];
+  const PROJETO = {
+    'academia': 'montar/complementar academia',
+    'academia / crossfit': 'academia + CrossFit',
+    'crossfit': 'box de CrossFit', 'cross': 'box de CrossFit',
+    'crossfit / academia': 'CrossFit + academia',
+    'hyrox': 'treino Hyrox', 'crossfit hyrox': 'CrossFit + Hyrox', 'crossfit/hyrox': 'CrossFit + Hyrox',
+    'box_hibrido': 'box híbrido', 'home box': 'home box (casa)',
+    'studio funcional': 'estúdio funcional', 'uso pessoal': 'uso pessoal',
+  };
+  const QUENTES = ['quente', 'superquente'];
+
+  function interpretarTags(tagsStr) {
+    const tags = String(tagsStr || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const equip = new Set(), proj = new Set();
+    let combo = false, quente = false, turma = '';
+    for (const t of tags) {
+      if (EQUIP[t]) equip.add(EQUIP[t]);
+      if (COMBO.includes(t)) combo = true;
+      if (PROJETO[t]) proj.add(PROJETO[t]);
+      if (QUENTES.includes(t)) quente = true;
+      const m = t.match(/(\d+)_alunos/); // boxcross_20_alunos / hibrido_25_alunos
+      if (m) turma = `~${m[1]} alunos`;
+    }
+    const partes = [];
+    if (combo) partes.push('Box completo (todos os ergômetros)');
+    else if (equip.size) partes.push([...equip].join(', '));
+    if (proj.size) partes.push([...proj].join(' / '));
+    if (turma) partes.push('porte ' + turma);
+    let txt = partes.join(' · ') || 'a definir (ainda em qualificação)';
+    if (quente) txt = '🔥 ' + txt;
+    return txt;
+  }
+
   const lerMapa = () => { try { return JSON.parse(localStorage.getItem(CHAVE) || '{}'); } catch { return {}; } };
   const gravarMapa = (m) => localStorage.setItem(CHAVE, JSON.stringify(m));
   const hora = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -169,7 +214,11 @@
   }
 
   async function dispararAlerta(novos) {
-    const linhas = novos.map((p, i) => `${i + 1}) ${p.nome} - ${p.tempo}${p.tags ? ' - ' + p.tags : ''}`).join('\n');
+    const linhas = novos.map((p, i) =>
+      `${i + 1}) ${p.nome} — ${p.tempo}\n` +
+      `   💡 ${interpretarTags(p.tags)}` +
+      (p.tags ? `\n   🏷️ ${p.tags}` : '')
+    ).join('\n\n');
     const texto = `🔔 ${novos.length} atendimento(s) esperando resposta:\n\n${linhas}\n\nResponda pelo app do FSS (Pergunte à IA).`;
     try {
       const res = await fetch(CONFIG.webhook, {
@@ -198,7 +247,7 @@
       document.body.appendChild(el);
     }
     const cor = CONFIG.dryRun ? '#facc15' : '#4ade80';
-    const lista = (pendentes || []).slice(0, 6).map((p) => `<div style="padding:2px 0;border-top:1px solid #27272a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nome} · <span style="color:#71717a">${p.tempo}</span></div>`).join('');
+    const lista = (pendentes || []).slice(0, 6).map((p) => `<div style="padding:3px 0;border-top:1px solid #27272a;overflow:hidden"><div style="white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${p.nome} · <span style="color:#71717a">${p.tempo}</span></div><div style="color:#a1a1aa;font-size:11px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">💡 ${interpretarTags(p.tags)}</div></div>`).join('');
     el.innerHTML =
       `<div style="padding:8px 10px;background:#09090b;display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:${cor};flex:none"></span><b style="color:#fff">vigia de leads</b><span style="color:${cor};font-size:10px">${CONFIG.dryRun ? 'DRY-RUN' : 'ATIVO'}</span></div>` +
       `<div style="padding:8px 10px;color:#a1a1aa">${hora()} · ${status}${lista ? `<div style="margin-top:4px">${lista}</div>` : ''}</div>`;
