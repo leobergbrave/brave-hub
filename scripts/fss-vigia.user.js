@@ -138,7 +138,8 @@
   const PERGUNTA =
     'Liste os atendimentos que estao esperando NOSSA resposta agora (o cliente ' +
     'enviou mensagem e ainda nao respondemos). Uma linha por atendimento, no formato ' +
-    'EXATO: NOME | TELEFONE | HA QUANTO TEMPO | TAGS. ' +
+    'EXATO: NOME | TELEFONE | HA QUANTO TEMPO | ULTIMA MENSAGEM DO CLIENTE | TAGS. ' +
+    'Na ULTIMA MENSAGEM, coloque o texto que o cliente mandou (resuma se for muito longo). ' +
     'Se nao houver nenhum, responda exatamente: NENHUM. ' + MARCADOR;
 
   // Relatorio 24h (follow-up do pessoal): quem recebeu a 1a msg e sumiu. Query pesada.
@@ -207,6 +208,8 @@
   // A IA responde "Nome | Telefone | Tempo | Tags" (as vezes sem o ###). Parseia
   // qualquer linha que tenha pipe + um telefone de verdade. Ignora a linha da
   // propria pergunta (onde partes[1] e a palavra "TELEFONE", sem digitos).
+  // Aceita 4 campos (NOME|TEL|TEMPO|TAGS, usado no relatorio 24h) ou 5 (com a ULTIMA
+  // MENSAGEM no meio, usado no vigia). Detecta pelo numero de partes.
   function parsePendentes(bruto) {
     const pend = [];
     for (const raw of bruto.split('\n')) {
@@ -216,7 +219,10 @@
       if (partes.length < 2) continue;
       const telefone = (partes[1] || '').replace(/\D/g, '');
       if (telefone.length < 10) continue; // sem telefone valido -> nao e um lead
-      pend.push({ nome: partes[0] || '?', telefone, tempo: partes[2] || '', tags: partes[3] || '' });
+      let ultimaMsg = '', tags = '';
+      if (partes.length >= 5) { ultimaMsg = partes[3]; tags = partes[4]; }
+      else { tags = partes[3] || ''; }
+      pend.push({ nome: partes[0] || '?', telefone, tempo: partes[2] || '', ultimaMsg, tags });
     }
     if (pend.length) return pend;
     if (/\bNENHUM\b|nao ha atendimento|sem pendent|nenhum atendimento/i.test(bruto)) return [];
@@ -235,10 +241,15 @@
     const pendentes = parsePendentes(bruto);
     if (pendentes === null) { pintar('resposta em formato inesperado (ver console)', []); console.warn('[vigia] bruto:', bruto.slice(-800)); return; }
 
+    // Dedup por telefone -> { msg: ultima msg avisada, ts: quando }. Avisa quando:
+    //  - o telefone e novo, OU
+    //  - a ultima mensagem MUDOU (mensagem nova do cliente), OU
+    //  - ja faz mais de 3h que avisei (lembrete de quem segue esperando).
     const mapa = lerMapa();
+    const chave = (p) => normMsg(p.ultimaMsg);
     const novos = pendentes.filter((p) => {
-      const ultimo = mapa[p.telefone];
-      return !ultimo || (agora() - ultimo) > CONFIG.reavisarAposMs;
+      const reg = mapa[p.telefone];
+      return !reg || reg.msg !== chave(p) || (agora() - reg.ts) > CONFIG.reavisarAposMs;
     });
 
     pintar(`${pendentes.length} pendente(s) · ${novos.length} pra avisar`, pendentes);
@@ -252,15 +263,20 @@
     for (const tel of Object.keys(mapa)) if (!telsAtuais.has(tel)) delete mapa[tel];
 
     const ok = await dispararAlerta(novos);
-    if (ok) { for (const p of novos) mapa[p.telefone] = agora(); gravarMapa(mapa); }
+    if (ok) { for (const p of novos) mapa[p.telefone] = { msg: chave(p), ts: agora() }; gravarMapa(mapa); }
   }
+
+  // normaliza a ultima mensagem pra comparacao estavel (a IA pode variar espacos/caixa)
+  const normMsg = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 60);
 
   async function dispararAlerta(novos) {
     const ord = ordenarPorPrioridade(novos);
     const linhas = ord.map((p, i) => {
       const tagsUteis = filtrarTags(p.tags);
-      return `${i + 1}) ${ehQuente(p.tags) ? '🔥 ' : ''}${p.nome} — ${p.tempo}\n` +
-        `   💡 ${interpretarTags(p.tags)}` +
+      const msg = String(p.ultimaMsg || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+      return `${i + 1}) ${ehQuente(p.tags) ? '🔥 ' : ''}${p.nome} — ${p.tempo}` +
+        (msg ? `\n   💬 "${msg}"` : '') +
+        `\n   💡 ${interpretarTags(p.tags)}` +
         (tagsUteis ? `\n   🏷️ ${tagsUteis}` : '');
     }).join('\n\n');
     const texto = `🔔 ${novos.length} atendimento(s) esperando resposta:\n\n${linhas}\n\nResponda pelo app do FSS (Pergunte à IA).`;
