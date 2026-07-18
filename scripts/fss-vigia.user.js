@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Brave HUB — Vigia de Leads (FSS)
 // @namespace    bravefitness.com.br
-// @version      0.1.0
+// @version      0.2.0
 // @description  Pergunta à IA nativa do FSS quais atendimentos estão esperando resposta e avisa no WhatsApp pessoal via BotConversa.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      new-backend.botconversa.com.br
 // ==/UserScript==
 
 /*
@@ -200,6 +201,24 @@
 
   const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // POST pro BotConversa via GM_xmlhttpRequest (privilegiado): fetch normal seria
+  // bloqueado por CORS, porque o script roda no dominio do FSS e envia pra outro.
+  function postWebhook(payload) {
+    return new Promise((resolve) => {
+      try {
+        GM_xmlhttpRequest({
+          method: 'POST',
+          url: CONFIG.webhook,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          data: JSON.stringify(payload),
+          onload: (r) => resolve(r.status >= 200 && r.status < 300),
+          onerror: (e) => { console.error('[vigia] erro no envio:', e); resolve(false); },
+          ontimeout: () => { console.error('[vigia] envio expirou'); resolve(false); },
+        });
+      } catch (e) { console.error('[vigia] GM_xmlhttpRequest indisponivel:', e); resolve(false); }
+    });
+  }
+
   async function perguntar(texto, maxSeg = 60) {
     // abre o painel (pode precisar de 2 tentativas)
     let ta = abrirAskAI();
@@ -308,20 +327,13 @@
         `\n   👉 Responder: ${linkCentral(p)}`;
     }).join('\n\n');
     const texto = `🔔 ${novos.length} atendimento(s) esperando resposta:\n\n${linhas}\n\nResponda pelo app do FSS (Pergunte à IA).`;
-    try {
-      const res = await fetch(CONFIG.webhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({
-          telefone: CONFIG.telefoneAlerta,
-          nome: 'Leo Berg',
-          titulo: 'Leads aguardando resposta',
-          qtd_pendentes: String(novos.length),
-          alerta: texto,
-        }),
-      });
-      return res.ok;
-    } catch (e) { console.error('[vigia] falha ao disparar:', e); return false; }
+    return await postWebhook({
+      telefone: CONFIG.telefoneAlerta,
+      nome: 'Leo Berg',
+      titulo: 'Leads aguardando resposta',
+      qtd_pendentes: String(novos.length),
+      alerta: texto,
+    });
   }
 
   // ── Painel ───────────────────────────────────────────────────────────
@@ -360,10 +372,7 @@
         ? ord.map((p, i) => `${i + 1}) ${p.nome} — ${p.tempo}\n   💡 ${interpretarTags(p.tags)}` + (filtrarTags(p.tags) ? `\n   🏷️ ${filtrarTags(p.tags)}` : '')).join('\n\n')
         : 'Ninguém sem resposta há +24h agora. 👍';
       const texto = `📋 FOLLOW-UP (24h sem resposta) — pro time contatar:\n\n${corpo}`;
-      await fetch(CONFIG.webhook, {
-        method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({ telefone: CONFIG.telefoneAlerta, nome: 'Leo Berg', titulo: 'Follow-up 24h', qtd_pendentes: String(lista.length), alerta: texto }),
-      }).catch((e) => console.error('[vigia] envio relatorio falhou:', e));
+      await postWebhook({ telefone: CONFIG.telefoneAlerta, nome: 'Leo Berg', titulo: 'Follow-up 24h', qtd_pendentes: String(lista.length), alerta: texto });
     } else {
       console.log(`[vigia] DRY-RUN relatorio 24h: ${lista.length} contato(s)`, lista);
     }
