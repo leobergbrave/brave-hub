@@ -154,21 +154,18 @@
       return !ultimo || (agora() - ultimo) > CONFIG.reavisarAposMs;
     });
 
-    // limpa do mapa quem nao esta mais pendente
+    pintar(`${pendentes.length} pendente(s) · ${novos.length} pra avisar`, pendentes);
+
+    // Dry-run: so mostra no painel, nao grava nem envia. Assim, ao virar pra live, os
+    // pendentes atuais ainda geram alerta (o mapa comeca limpo).
+    if (CONFIG.dryRun || !novos.length) return;
+
+    // limpa do mapa quem nao esta mais pendente (evita crescer pra sempre)
     const telsAtuais = new Set(pendentes.map((p) => p.telefone));
     for (const tel of Object.keys(mapa)) if (!telsAtuais.has(tel)) delete mapa[tel];
 
-    pintar(`${pendentes.length} pendente(s) · ${novos.length} pra avisar`, pendentes);
-
-    if (!novos.length) return;
-
-    if (!CONFIG.dryRun) {
-      const ok = await dispararAlerta(novos);
-      if (ok) { for (const p of novos) mapa[p.telefone] = agora(); gravarMapa(mapa); }
-    } else {
-      for (const p of novos) mapa[p.telefone] = agora(); // no dry-run marca localmente pra nao repetir
-      gravarMapa(mapa);
-    }
+    const ok = await dispararAlerta(novos);
+    if (ok) { for (const p of novos) mapa[p.telefone] = agora(); gravarMapa(mapa); }
   }
 
   async function dispararAlerta(novos) {
