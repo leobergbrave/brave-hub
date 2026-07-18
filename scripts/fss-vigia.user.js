@@ -32,7 +32,7 @@
   'use strict';
 
   const CONFIG = {
-    webhook: 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/192554/CktY3Mq5Wxo8/',
+    webhook: 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/',
     telefoneAlerta: '5548996459791',      // WhatsApp pessoal do Leo (fixo)
     intervaloMs: 15 * 60 * 1000,          // 15 min
     reavisarAposMs: 3 * 60 * 60 * 1000,   // re-lembra um pendente que continua parado apos 3h
