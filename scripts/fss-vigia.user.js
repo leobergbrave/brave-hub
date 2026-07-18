@@ -38,6 +38,7 @@
     reavisarAposMs: 3 * 60 * 60 * 1000,   // re-lembra um pendente que continua parado apos 3h
     horaInicio: 8,                         // so roda em horario comercial (8h-20h)
     horaFim: 20,
+    horasRelatorio: [8, 14],               // relatorio 24h (follow-up) roda nessas horas
     // MODO DE TESTE: nao dispara pro BotConversa, so mostra no painel o que faria.
     dryRun: true,
   };
@@ -89,6 +90,40 @@
     return txt;
   }
 
+  // ── Filtro de ruido nas tags ─────────────────────────────────────────
+  // Esconde tags de origem/campanha/sistema; deixa so o que ajuda a decidir.
+  const RUIDO = [
+    /^rd-station$/, /^base[_ ]/, /^lead$/, /^consentimento$/, /^interesse-publico$/,
+    /^d1$/, /black/, /^lp /, /202\d/, /^disparo/, /^oferta/, /^ofertaesteira/,
+    /resposta/, /^respondeu/, /^naorespondeu/, /^nao_respondeu/, /socialselling/,
+    /^externo[_ ]/, /^tag-trigger$/, /^prevendas$/, /^recusado$/, /^agendamento$/,
+    /garantia/, /^suporte/, /^d\d+$/,
+  ];
+  const ehRuido = (t) => RUIDO.some((re) => re.test(t));
+  function filtrarTags(tagsStr) {
+    const uteis = String(tagsStr || '').split(',').map((t) => t.trim()).filter(Boolean)
+      .filter((t) => !ehRuido(t.toLowerCase()));
+    return uteis.join(', ');
+  }
+
+  // ── Prioridade: quente primeiro, depois quem espera ha mais tempo ─────
+  function parseTempo(str) {
+    const s = String(str || '').toLowerCase();
+    let min = 0;
+    const dias = s.match(/(\d+)\s*d(ia)?/); if (dias) min += (+dias[1]) * 1440;
+    const h = s.match(/(\d+)\s*h/); if (h) min += (+h[1]) * 60;
+    const m = s.match(/(\d+)\s*min/); if (m) min += (+m[1]);
+    return min;
+  }
+  const ehQuente = (tags) => QUENTES.some((q) => String(tags || '').toLowerCase().includes(q));
+  function ordenarPorPrioridade(pend) {
+    return pend.slice().sort((a, b) => {
+      const qa = ehQuente(a.tags) ? 1 : 0, qb = ehQuente(b.tags) ? 1 : 0;
+      if (qa !== qb) return qb - qa;                 // quente primeiro
+      return parseTempo(b.tempo) - parseTempo(a.tempo); // depois: espera mais longa
+    });
+  }
+
   const lerMapa = () => { try { return JSON.parse(localStorage.getItem(CHAVE) || '{}'); } catch { return {}; } };
   const gravarMapa = (m) => localStorage.setItem(CHAVE, JSON.stringify(m));
   const hora = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -104,6 +139,13 @@
     'Liste os atendimentos que estao esperando NOSSA resposta agora (o cliente ' +
     'enviou mensagem e ainda nao respondemos). Uma linha por atendimento, no formato ' +
     'EXATO: NOME | TELEFONE | HA QUANTO TEMPO | TAGS. ' +
+    'Se nao houver nenhum, responda exatamente: NENHUM. ' + MARCADOR;
+
+  // Relatorio 24h (follow-up do pessoal): quem recebeu a 1a msg e sumiu. Query pesada.
+  const PERGUNTA_24H =
+    'Liste os contatos que receberam a NOSSA primeira mensagem ha mais de 24 horas e ' +
+    'ainda NAO responderam nada depois disso. Uma linha por contato, no formato EXATO: ' +
+    'NOME | TELEFONE | HA QUANTO TEMPO FOI ENVIADA | TAGS. ' +
     'Se nao houver nenhum, responda exatamente: NENHUM. ' + MARCADOR;
 
   // ── Driver da "Pergunte à IA" ────────────────────────────────────────
@@ -130,7 +172,7 @@
 
   const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  async function perguntar(texto) {
+  async function perguntar(texto, maxSeg = 60) {
     // abre o painel (pode precisar de 2 tentativas)
     let ta = abrirAskAI();
     for (let i = 0; !ta && i < 6; i++) { await espera(700); ta = acharTextarea(); }
@@ -144,10 +186,10 @@
     for (const t of ['keydown', 'keypress', 'keyup'])
       ta.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
 
-    // espera comecar a gerar (ate 8s) e depois terminar (ate 60s), com texto estavel
+    // espera comecar a gerar e depois terminar (ate maxSeg), com texto estavel
     await espera(1500);
     let estavel = 0, ultimoTam = -1;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < maxSeg; i++) {
       const tam = lerRespostaBruta().length;
       if (!estaGerando() && tam === ultimoTam) { if (++estavel >= 2) break; }
       else estavel = 0;
@@ -214,11 +256,13 @@
   }
 
   async function dispararAlerta(novos) {
-    const linhas = novos.map((p, i) =>
-      `${i + 1}) ${p.nome} — ${p.tempo}\n` +
-      `   💡 ${interpretarTags(p.tags)}` +
-      (p.tags ? `\n   🏷️ ${p.tags}` : '')
-    ).join('\n\n');
+    const ord = ordenarPorPrioridade(novos);
+    const linhas = ord.map((p, i) => {
+      const tagsUteis = filtrarTags(p.tags);
+      return `${i + 1}) ${ehQuente(p.tags) ? '🔥 ' : ''}${p.nome} — ${p.tempo}\n` +
+        `   💡 ${interpretarTags(p.tags)}` +
+        (tagsUteis ? `\n   🏷️ ${tagsUteis}` : '');
+    }).join('\n\n');
     const texto = `🔔 ${novos.length} atendimento(s) esperando resposta:\n\n${linhas}\n\nResponda pelo app do FSS (Pergunte à IA).`;
     try {
       const res = await fetch(CONFIG.webhook, {
@@ -247,13 +291,58 @@
       document.body.appendChild(el);
     }
     const cor = CONFIG.dryRun ? '#facc15' : '#4ade80';
-    const lista = (pendentes || []).slice(0, 6).map((p) => `<div style="padding:3px 0;border-top:1px solid #27272a;overflow:hidden"><div style="white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${p.nome} · <span style="color:#71717a">${p.tempo}</span></div><div style="color:#a1a1aa;font-size:11px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">💡 ${interpretarTags(p.tags)}</div></div>`).join('');
+    const lista = ordenarPorPrioridade(pendentes || []).slice(0, 6).map((p) => `<div style="padding:3px 0;border-top:1px solid #27272a;overflow:hidden"><div style="white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${ehQuente(p.tags) ? '🔥 ' : ''}${p.nome} · <span style="color:#71717a">${p.tempo}</span></div><div style="color:#a1a1aa;font-size:11px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">💡 ${interpretarTags(p.tags)}</div></div>`).join('');
     el.innerHTML =
       `<div style="padding:8px 10px;background:#09090b;display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:${cor};flex:none"></span><b style="color:#fff">vigia de leads</b><span style="color:${cor};font-size:10px">${CONFIG.dryRun ? 'DRY-RUN' : 'ATIVO'}</span></div>` +
       `<div style="padding:8px 10px;color:#a1a1aa">${hora()} · ${status}${lista ? `<div style="margin-top:4px">${lista}</div>` : ''}</div>`;
   }
 
+  // ── Relatorio 24h (follow-up pro pessoal) ────────────────────────────
+  // Query pesada (varre conversa por conversa), roda so 1-2x/dia. Reusa a Ask AI e
+  // o mesmo webhook, mas com titulo diferente pra o Leo saber que e o follow-up.
+  const CHAVE_REL = 'brave_fss_vigia_relatorio'; // "YYYY-MM-DD-H" do ultimo envio
+  const slotHoje = (h) => `${new Date().toISOString().slice(0, 10)}-${h}`;
+
+  async function relatorio24h() {
+    let bruto;
+    try { bruto = await perguntar(PERGUNTA_24H, 180); } // ate 3 min: e lenta
+    catch (e) { console.warn('[vigia] relatorio 24h falhou:', e.message); return; }
+    const lista = parsePendentes(bruto);
+    if (lista === null) { console.warn('[vigia] relatorio 24h: formato inesperado'); return; }
+
+    if (!CONFIG.dryRun) {
+      const ord = ordenarPorPrioridade(lista);
+      const corpo = lista.length
+        ? ord.map((p, i) => `${i + 1}) ${p.nome} — ${p.tempo}\n   💡 ${interpretarTags(p.tags)}` + (filtrarTags(p.tags) ? `\n   🏷️ ${filtrarTags(p.tags)}` : '')).join('\n\n')
+        : 'Ninguém sem resposta há +24h agora. 👍';
+      const texto = `📋 FOLLOW-UP (24h sem resposta) — pro time contatar:\n\n${corpo}`;
+      await fetch(CONFIG.webhook, {
+        method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ telefone: CONFIG.telefoneAlerta, nome: 'Leo Berg', titulo: 'Follow-up 24h', qtd_pendentes: String(lista.length), alerta: texto }),
+      }).catch((e) => console.error('[vigia] envio relatorio falhou:', e));
+    } else {
+      console.log(`[vigia] DRY-RUN relatorio 24h: ${lista.length} contato(s)`, lista);
+    }
+  }
+
+  // ── Agendador unico com trava (vigia e relatorio nao colidem na Ask AI) ─
+  let ocupado = false;
+  async function tick() {
+    if (ocupado) return; // uma pergunta por vez
+    ocupado = true;
+    try {
+      const h = new Date().getHours();
+      // relatorio 24h: nas horas configuradas, uma vez por slot
+      if (CONFIG.horasRelatorio.includes(h)) {
+        const rel = lerRel();
+        if (rel !== slotHoje(h)) { await relatorio24h(); localStorage.setItem(CHAVE_REL, slotHoje(h)); }
+      }
+      await ciclo();
+    } finally { ocupado = false; }
+  }
+  const lerRel = () => localStorage.getItem(CHAVE_REL) || '';
+
   pintar('iniciando… primeira checagem em 10s', []);
-  setTimeout(ciclo, 10000);
-  setInterval(ciclo, CONFIG.intervaloMs);
+  setTimeout(tick, 10000);
+  setInterval(tick, CONFIG.intervaloMs);
 })();
