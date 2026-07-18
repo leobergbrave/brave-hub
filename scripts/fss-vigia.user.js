@@ -49,12 +49,17 @@
   const hora = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const agora = () => Date.now();
 
-  // ── Pergunta fixa: pede formato ### pra parsing confiavel ────────────
+  // ── Pergunta fixa ────────────────────────────────────────────────────
+  // Nota: a IA obedece o formato de pipes mas costuma ignorar o prefixo ###,
+  // entao o parser NAO depende dele (parseia qualquer linha com telefone valido).
+  // MARCADOR e a ultima frase da pergunta — usado pra isolar so a resposta nova,
+  // porque o painel da Ask AI acumula todo o historico da conversa.
+  const MARCADOR = 'Nao escreva mais nada.';
   const PERGUNTA =
     'Liste os atendimentos que estao esperando NOSSA resposta agora (o cliente ' +
     'enviou mensagem e ainda nao respondemos). Uma linha por atendimento, no formato ' +
-    'EXATO, comecando com ###: ### NOME | TELEFONE | HA QUANTO TEMPO | TAGS. ' +
-    'Se nao houver nenhum, responda exatamente: ### NENHUM. Nao escreva mais nada.';
+    'EXATO: NOME | TELEFONE | HA QUANTO TEMPO | TAGS. ' +
+    'Se nao houver nenhum, responda exatamente: NENHUM. ' + MARCADOR;
 
   // ── Driver da "Pergunte à IA" ────────────────────────────────────────
   function abrirAskAI() {
@@ -104,19 +109,31 @@
       ultimoTam = tam;
       await espera(1000);
     }
-    return lerRespostaBruta();
+    // Isola so a resposta mais recente: o painel acumula historico, e a pergunta
+    // e ecoada; corta tudo ate o fim da ultima ocorrencia do MARCADOR.
+    const bruto = lerRespostaBruta();
+    const i = bruto.lastIndexOf(MARCADOR);
+    return i >= 0 ? bruto.slice(i + MARCADOR.length) : bruto;
   }
 
-  // ── Parsing das linhas ### ───────────────────────────────────────────
+  // ── Parsing ──────────────────────────────────────────────────────────
+  // A IA responde "Nome | Telefone | Tempo | Tags" (as vezes sem o ###). Parseia
+  // qualquer linha que tenha pipe + um telefone de verdade. Ignora a linha da
+  // propria pergunta (onde partes[1] e a palavra "TELEFONE", sem digitos).
   function parsePendentes(bruto) {
-    const linhas = bruto.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('###'));
-    if (!linhas.length) return null; // formato inesperado — trata como incerto
-    if (linhas.some((l) => /###\s*NENHUM/i.test(l))) return [];
-    return linhas.map((l) => {
-      const partes = l.replace(/^###\s*/, '').split('|').map((p) => p.trim());
+    const pend = [];
+    for (const raw of bruto.split('\n')) {
+      const l = raw.replace(/^[#\-*\s]+/, '').trim();
+      if (!l.includes('|')) continue;
+      const partes = l.split('|').map((p) => p.trim());
+      if (partes.length < 2) continue;
       const telefone = (partes[1] || '').replace(/\D/g, '');
-      return { nome: partes[0] || '?', telefone, tempo: partes[2] || '', tags: partes[3] || '' };
-    }).filter((p) => p.telefone);
+      if (telefone.length < 10) continue; // sem telefone valido -> nao e um lead
+      pend.push({ nome: partes[0] || '?', telefone, tempo: partes[2] || '', tags: partes[3] || '' });
+    }
+    if (pend.length) return pend;
+    if (/\bNENHUM\b|nao ha atendimento|sem pendent|nenhum atendimento/i.test(bruto)) return [];
+    return null; // incerto — nao dispara, so loga
   }
 
   // ── Ciclo ────────────────────────────────────────────────────────────
