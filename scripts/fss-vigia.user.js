@@ -39,6 +39,7 @@
     horaInicio: 8,                         // so roda em horario comercial (8h-20h)
     horaFim: 20,
     horasRelatorio: [8, 14],               // relatorio 24h (follow-up) roda nessas horas
+    centralBase: 'https://brave-hub-two.vercel.app/central', // Central de Respostas
     // MODO DE TESTE: nao dispara pro BotConversa, so mostra no painel o que faria.
     dryRun: true,
   };
@@ -67,6 +68,32 @@
     'studio funcional': 'estúdio funcional', 'uso pessoal': 'uso pessoal',
   };
   const QUENTES = ['quente', 'superquente'];
+
+  // tag -> alias(es) de produto, pro link da Central de Respostas (?p=bikeerg,remo)
+  const TAG_ALIAS = {
+    'bike erg': 'bikeerg', 'bikeerg': 'bikeerg',
+    'remo': 'remo',
+    'ski': 'skierg', 'ski erg': 'skierg', 'skierg': 'skierg',
+    'storm bike': 'storm', 'storm': 'storm',
+    'esteira curva': 'estcv', 'esteira': 'estcv',
+    'escada': 'escada',
+    'box completo': 'estcv,escada,remo,skierg,bikeerg,storm',
+    'combo ergometros': 'estcv,escada,remo,skierg,bikeerg,storm',
+    'combo ergômetros': 'estcv,escada,remo,skierg,bikeerg,storm',
+  };
+  function aliasesDeTags(tagsStr) {
+    const set = new Set();
+    for (const t of String(tagsStr || '').split(',').map((x) => x.trim().toLowerCase())) {
+      const a = TAG_ALIAS[t];
+      if (a) a.split(',').forEach((x) => set.add(x));
+    }
+    return [...set];
+  }
+  function linkCentral(p) {
+    const aliases = aliasesDeTags(p.tags);
+    const q = `nome=${encodeURIComponent(p.nome)}` + (aliases.length ? `&p=${aliases.join(',')}` : '');
+    return `${CONFIG.centralBase}?${q}`;
+  }
 
   function interpretarTags(tagsStr) {
     const tags = String(tagsStr || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
@@ -277,7 +304,8 @@
       return `${i + 1}) ${ehQuente(p.tags) ? '🔥 ' : ''}${p.nome} — ${p.tempo}` +
         (msg ? `\n   💬 "${msg}"` : '') +
         `\n   💡 ${interpretarTags(p.tags)}` +
-        (tagsUteis ? `\n   🏷️ ${tagsUteis}` : '');
+        (tagsUteis ? `\n   🏷️ ${tagsUteis}` : '') +
+        `\n   👉 Responder: ${linkCentral(p)}`;
     }).join('\n\n');
     const texto = `🔔 ${novos.length} atendimento(s) esperando resposta:\n\n${linhas}\n\nResponda pelo app do FSS (Pergunte à IA).`;
     try {
