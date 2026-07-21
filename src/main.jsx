@@ -13,6 +13,7 @@ import LpBoxHibrido from './pages/LpBoxHibrido.jsx'
 import LpHyrox from './pages/LpHyrox.jsx'
 import LpCrossfit from './pages/LpCrossfit.jsx'
 import CentralRespostasPage from './pages/CentralRespostasPage.jsx'
+import ComparacaoPage from './pages/ComparacaoPage.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -33,6 +34,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/lp/hyrox"      element={<LpHyrox />} />
         <Route path="/lp/crossfit"   element={<LpCrossfit />} />
         <Route path="/central"       element={<CentralRespostasPage />} />
+        <Route path="/compara/:slug" element={<ComparacaoPage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
