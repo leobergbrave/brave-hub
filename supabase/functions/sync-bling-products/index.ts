@@ -165,41 +165,61 @@ Deno.serve(async (req) => {
 
     let updated = 0, inserted = 0, skipped = 0;
 
+    // Monta os lotes primeiro. Antes isso fazia ate 100 chamadas sequenciais ao banco
+    // por pagina (uma por produto), o que estourava o tempo da edge function e fazia o
+    // runtime abortar com um erro em texto puro ("An error o...") em vez de JSON.
+    // Agora sao 2 chamadas por pagina.
+    const paraAtualizar: any[] = [];
+    const paraInserir: any[] = [];
+
     for (const bp of blingProducts) {
       const blingId = bp.id;
       const sku = (bp.codigo || '').trim();
-      const nome = bp.nome || '';
-      const preco = Number(bp.preco) || 0;
-
-      let localId = blingIdMap.get(blingId) || (sku ? skuMap.get(sku.toUpperCase()) : null);
+      const localId = blingIdMap.get(blingId) || (sku ? skuMap.get(sku.toUpperCase()) : null);
 
       if (localId) {
-        const { error } = await supabase.from('produtos').update({
-          bling_id: blingId,
-          codigo_sku: sku || undefined,
-        }).eq('id', localId);
-        if (!error) updated++; else skipped++;
+        paraAtualizar.push({ id: localId, bling_id: blingId, ...(sku ? { codigo_sku: sku } : {}) });
       } else {
-        const { error } = await supabase.from('produtos').insert({
+        paraInserir.push({
           bling_id: blingId,
           codigo_sku: sku,
-          nome: nome,
-          preco: preco,
+          nome: bp.nome || '',
+          preco: Number(bp.preco) || 0,
         });
-        if (!error) inserted++; else skipped++;
       }
+    }
+
+    if (paraAtualizar.length) {
+      const { error } = await supabase.from('produtos').upsert(paraAtualizar, { onConflict: 'id' });
+      if (error) { console.error('Erro no update em lote:', error); skipped += paraAtualizar.length; }
+      else updated = paraAtualizar.length;
+    }
+
+    if (paraInserir.length) {
+      const { error } = await supabase.from('produtos').insert(paraInserir);
+      if (error) { console.error('Erro no insert em lote:', error); skipped += paraInserir.length; }
+      else inserted = paraInserir.length;
     }
 
     const temMais = blingProducts.length >= limit;
 
     // Se tem mais páginas, chama a si mesmo automaticamente para a próxima
     if (temMais) {
+      // Faltava o Authorization (a auto-chamada tomava 401) e o waitUntil — sem ele o
+      // runtime mata o isolate ao devolver a resposta e a chamada nem sai. Resultado:
+      // a sincronizacao parava na pagina 1 sem avisar.
       const selfUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/sync-bling-products`;
-      fetch(selfUrl, {
+      const proxima = fetch(selfUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        },
         body: JSON.stringify({ modo: 'sync', pagina: pagina + 1 })
       }).catch(err => console.error('Erro ao chamar próxima página:', err));
+
+      // @ts-ignore EdgeRuntime existe no runtime do Supabase
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(proxima);
     }
 
     return new Response(JSON.stringify({
