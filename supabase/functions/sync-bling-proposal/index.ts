@@ -100,23 +100,42 @@ Deno.serve(async (req) => {
     const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
     // 1. Buscar Vendedor
-    let idVendedor = undefined;
-    const resVend = await fetchWithBlingAuth('https://api.bling.com.br/v3/vendedores', { method: 'GET' }, supabaseClient);
-    if (resVend.ok) {
-      const vendData = await resVend.json();
-      if (vendData && vendData.data) {
-        let vendedor = vendData.data.find((v: any) => normalize(v.contato.nome) === normalize(nomeConsultor));
-        
-        // Se correspondência exata falhar, tenta correspondência parcial (ex: "Laís" -> "Laís Carlos")
-        if (!vendedor) {
-          const normConsultor = normalize(nomeConsultor);
-          vendedor = vendData.data.find((v: any) => {
-            const normVend = normalize(v.contato.nome);
-            return normVend.includes(normConsultor) || normConsultor.includes(normVend);
+    //
+    // Cuidado: a versao antiga casava com `normConsultor.includes(normVend)`, o que
+    // dava match em QUALQUER vendedor de nome vazio/curto ("leo berg".includes("") e
+    // true) — e o .find() pegava o primeiro da lista. Quando nada casava, nenhum
+    // vendedor era enviado e o Bling atribuia o padrao da conta. Nos dois casos a
+    // proposta saia no nome errado.
+    //
+    // Agora: BLING_VENDEDOR_ID (se definido) manda, sem adivinhacao. Senao, match
+    // exato pelo nome; e so entao um parcial seguro (ambos com >= 3 letras e
+    // resultado unico).
+    let idVendedor: any = undefined;
+    let vendedorNome: string | null = null;
+
+    const idFixo = Deno.env.get('BLING_VENDEDOR_ID');
+    if (idFixo) {
+      idVendedor = isNaN(Number(idFixo)) ? idFixo : Number(idFixo);
+      vendedorNome = `(fixo por BLING_VENDEDOR_ID=${idFixo})`;
+    } else {
+      const resVend = await fetchWithBlingAuth('https://api.bling.com.br/v3/vendedores', { method: 'GET' }, supabaseClient);
+      if (resVend.ok) {
+        const vendData = await resVend.json();
+        const lista = (vendData?.data || []).filter((v: any) => (v?.contato?.nome || '').trim());
+        const alvo = normalize(nomeConsultor);
+
+        let vendedor = lista.find((v: any) => normalize(v.contato.nome) === alvo);
+
+        if (!vendedor && alvo.length >= 3) {
+          const parciais = lista.filter((v: any) => {
+            const n = normalize(v.contato.nome);
+            return n.length >= 3 && (n.includes(alvo) || alvo.includes(n));
           });
+          if (parciais.length === 1) vendedor = parciais[0]; // so aceita se for inequivoco
         }
-        
-        if (vendedor) idVendedor = vendedor.id;
+
+        if (vendedor) { idVendedor = vendedor.id; vendedorNome = vendedor.contato.nome; }
+        else console.warn(`[sync-bling-proposal] vendedor "${nomeConsultor}" nao encontrado no Bling — a proposta sairia com o vendedor padrao da conta.`);
       }
     }
     
@@ -258,7 +277,11 @@ Deno.serve(async (req) => {
     }
     const dataPrazo = await blingResPrazo.json();
 
-    return new Response(JSON.stringify({ success: true, dataAvista, dataPrazo }), {
+    return new Response(JSON.stringify({
+      success: true,
+      vendedor: { id: idVendedor ?? null, nome: vendedorNome, solicitado: nomeConsultor },
+      dataAvista, dataPrazo,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
   } catch (error: any) {
