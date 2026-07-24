@@ -3,7 +3,7 @@ import {
   Users, Search, Phone, Mail, MapPin, CreditCard, Building2, User,
   ChevronDown, ChevronUp, RefreshCw, Loader2, ExternalLink, Edit3,
   CheckCircle2, ShoppingBag, X, Check, MessageSquare, Download, AlertCircle, Heart,
-  Send, FileCheck, UserPlus,
+  Send, FileCheck, UserPlus, FileDown,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../data';
@@ -390,6 +390,84 @@ export default function ClientesTab({ onNavigate }) {
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
+  // ── Exportar CSV pronto pro Meta (Custom Audience / lista de clientes) ──
+  // O Meta casa clientes por multiplos campos (quanto mais, melhor a taxa). Este
+  // export normaliza cada campo como o Meta recomenda (minusculas, so digitos no
+  // telefone/cep, pais 'br') e junta o que temos: colunas diretas + dados_fiscais.
+  const [exportandoMeta, setExportandoMeta] = useState(false);
+
+  const handleExportarMeta = useCallback(async () => {
+    setExportandoMeta(true);
+    try {
+      // busca a base inteira (o .select padrao para em 1000)
+      const { data, error } = await supabase
+        .from('clientes').select('*').range(0, 49999);
+      if (error) throw error;
+
+      const soDigitos = (s) => String(s || '').replace(/\D/g, '');
+      const norm = (s) => String(s || '').trim().toLowerCase();
+
+      const fone = (t) => {
+        let d = soDigitos(t);
+        if (!d) return '';
+        if (d.length <= 11) d = '55' + d;          // sem DDI -> adiciona 55
+        return d;
+      };
+      const dob = (v) => {
+        if (!v) return '';
+        const s = String(v).trim();
+        let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);       // YYYY-MM-DD
+        if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+        m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);         // DD/MM/YYYY
+        if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+        return '';
+      };
+
+      const linhas = [];
+      for (const c of (data || [])) {
+        const df = c.dados_fiscais || {};
+        const partes = String(c.nome || '').trim().split(/\s+/);
+        const fn = partes.shift() || '';
+        const ln = partes.join(' ');
+        const email = norm(c.email);
+        const phone = fone(c.telefone);
+        if (!email && !phone) continue;              // Meta exige ao menos 1 identificador
+        linhas.push({
+          email,
+          phone,
+          fn: norm(fn),
+          ln: norm(ln),
+          ct: norm(df.cidade),
+          st: norm(df.estado),
+          zip: soDigitos(df.cep),
+          country: 'br',
+          dob: dob(df.dataNascimento),
+        });
+      }
+
+      const cols = ['email', 'phone', 'fn', 'ln', 'ct', 'st', 'zip', 'country', 'dob'];
+      const esc = (v) => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [cols.join(',')]
+        .concat(linhas.map((l) => cols.map((k) => esc(l[k])).join(',')))
+        .join('\r\n');
+
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clientes-meta-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Erro ao exportar: ' + (e.message || e));
+    } finally {
+      setExportandoMeta(false);
+    }
+  }, []);
+
   const fetchOrcamentosCliente = async (clienteId, telefone, cpfCnpj) => {
     if (orcamentosCliente[clienteId]) return;
     const queries = [];
@@ -518,6 +596,12 @@ export default function ClientesTab({ onNavigate }) {
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition-colors cursor-pointer">
             <Download className="w-3.5 h-3.5" />
             Importar do Bling
+          </button>
+          <button onClick={handleExportarMeta} disabled={exportandoMeta}
+            title="Baixa um CSV pronto pra subir no Meta (Custom Audience)"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors cursor-pointer disabled:opacity-50">
+            {exportandoMeta ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+            Exportar Meta
           </button>
           <button onClick={fetchClientes} disabled={loading}
             className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-dark-800 transition-colors cursor-pointer">
