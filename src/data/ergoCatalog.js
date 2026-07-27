@@ -112,9 +112,13 @@ export function parseComboSlug(slug, catalog = ERGO_CATALOG) {
 }
 
 // lista de produtos -> slug canônico "esteira-remo-storm"
+// Os 6 ergometros nucleo saem na ordem canonica (ERGO_ORDER); produtos curados
+// extras (combo_produtos) vem depois, na ordem em que aparecem no catalogo.
 export function comboSlug(produtos) {
-  const set = new Set(produtos.map(p => p.alias));
-  return ERGO_ORDER.filter(a => set.has(a)).join('-');
+  const aliases = produtos.map(p => p.alias);
+  const nucleo = ERGO_ORDER.filter(a => aliases.includes(a));
+  const extras = aliases.filter(a => !ERGO_ORDER.includes(a));
+  return [...nucleo, ...extras].join('-');
 }
 
 // totais do combo (desconto = R$ off no à vista)
