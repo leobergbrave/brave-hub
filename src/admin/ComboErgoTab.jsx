@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import imageCompression from 'browser-image-compression';
 import { supabase } from '../lib/supabase';
-import { Files, Copy, ExternalLink, Trash2, Save, Loader2, Check, DollarSign, MessageCircle, Plus, Search, X, Package } from 'lucide-react';
+import { Files, Copy, ExternalLink, Trash2, Save, Loader2, Check, DollarSign, MessageCircle, Plus, Search, X, Package, Edit3, Upload } from 'lucide-react';
 import { ERGO_CATALOG, mergeCatalog, comboSlug, comboTotais } from '../data/ergoCatalog';
 
 const BASE = 'https://brave-hub-two.vercel.app';
 const ROW_ID = 'ergo-combos';
+const BUCKET = 'ergo-media'; // mesmo bucket dos ergometros
 const fmtBRL = (v) => Number(v) > 0 ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—';
 const deburr = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -35,8 +37,10 @@ export default function ComboErgoTab() {
   const [busca, setBusca]       = useState('');
   const [resultados, setResultados] = useState([]);
   const [buscando, setBuscando] = useState(false);
-  const [form, setForm]         = useState(null); // { alias, sku, nome, subtitle, emoji, preco, preco_avista, peso_kg, imagem, specsTexto }
+  const [form, setForm]         = useState(null); // { editandoId?, alias, sku, nome, subtitle, emoji, preco, preco_avista, peso_kg, imagem, specsTexto }
   const [salvandoProd, setSalvandoProd] = useState(false);
+  const [enviandoImg, setEnviandoImg] = useState(false);
+  const fileRef = useRef(null);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2500); };
 
@@ -86,6 +90,7 @@ export default function ComboErgoTab() {
 
   const escolherProduto = (p) => {
     setForm({
+      editandoId: null,
       alias: gerarAlias(p.codigo_sku, p.nome),
       sku: p.codigo_sku || '',
       nome: p.nome || '',
@@ -102,12 +107,45 @@ export default function ComboErgoTab() {
     setBusca('');
   };
 
+  // Abre o form pra editar um produto ja existente (trocar foto quebrada, etc.)
+  const editarExtra = (row) => {
+    setAddOpen(true);
+    setForm({
+      editandoId: row.id,
+      alias: row.alias, sku: row.sku || '', nome: row.nome, subtitle: row.subtitle || '', emoji: row.emoji || '📦',
+      preco: row.preco ?? '', preco_avista: row.preco_avista ?? '', peso_kg: row.peso_kg ?? '',
+      imagem: Array.isArray(row.fotos) && row.fotos[0] ? row.fotos[0] : '',
+      specsTexto: Array.isArray(row.specs) ? row.specs.join('\n') : '',
+    });
+    setResultados([]); setBusca('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Upload de imagem pro Supabase (bucket ergo-media) -> URL permanente, nao quebra
+  const enviarImagem = async (file) => {
+    if (!file || !form) return;
+    setEnviandoImg(true);
+    try {
+      let f = file;
+      if (file.type.startsWith('image/')) f = await imageCompression(file, { maxSizeMB: 0.9, maxWidthOrHeight: 1920, useWebWorker: true });
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `combo/${(form.alias || 'produto')}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from(BUCKET).upload(path, f, { upsert: false, contentType: f.type || undefined });
+      if (error) throw error;
+      const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+      setForm(prev => ({ ...prev, imagem: url }));
+      showToast('✅ Imagem enviada!');
+    } catch (e) {
+      showToast('❌ Upload falhou: ' + (e.message || e) + ' — a migration do bucket rodou?');
+    } finally { setEnviandoImg(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+
   const salvarProduto = async () => {
     if (!form.nome.trim() || !form.alias.trim()) return showToast('⚠️ Nome e código são obrigatórios.');
     setSalvandoProd(true);
     try {
       const specs = form.specsTexto.split('\n').map(s => s.trim()).filter(Boolean);
-      const { error } = await supabase.from('combo_produtos').insert({
+      const payload = {
         alias: form.alias.trim().toLowerCase(),
         sku: form.sku || null,
         nome: form.nome.trim(),
@@ -119,15 +157,20 @@ export default function ComboErgoTab() {
         specs,
         fotos: form.imagem ? [form.imagem] : [],
         ativo: true,
-        ordem: 100 + extras.length,
-      });
+      };
+      let error;
+      if (form.editandoId) {
+        ({ error } = await supabase.from('combo_produtos').update(payload).eq('id', form.editandoId));
+      } else {
+        ({ error } = await supabase.from('combo_produtos').insert({ ...payload, ordem: 100 + extras.length }));
+      }
       if (error) throw error;
       await fetchTudo();
       setForm(null);
       setAddOpen(false);
-      showToast('✅ Produto adicionado aos combos!');
+      showToast(form.editandoId ? '✅ Produto atualizado!' : '✅ Produto adicionado aos combos!');
     } catch (e) {
-      showToast('❌ ' + (e.message.includes('duplicate') ? 'Esse código já existe.' : e.message));
+      showToast('❌ ' + (String(e.message).includes('duplicate') ? 'Esse código já existe.' : e.message));
     } finally { setSalvandoProd(false); }
   };
 
@@ -245,8 +288,23 @@ export default function ComboErgoTab() {
               <Campo label="Preço à vista (R$)"><input type="number" value={form.preco_avista} onChange={e => setForm({ ...form, preco_avista: e.target.value })} className={inp} /></Campo>
               <Campo label="Preço prazo / 10x (R$)"><input type="number" value={form.preco} onChange={e => setForm({ ...form, preco: e.target.value })} className={inp} /></Campo>
               <Campo label="Peso (kg)"><input type="number" value={form.peso_kg} onChange={e => setForm({ ...form, peso_kg: e.target.value })} className={inp} /></Campo>
-              <Campo label="Imagem (URL)"><input value={form.imagem} onChange={e => setForm({ ...form, imagem: e.target.value })} className={inp} /></Campo>
             </div>
+            {/* Imagem — URL ou upload pro Supabase (não quebra) */}
+            <Campo label="Imagem do produto">
+              <div className="flex gap-2 items-start">
+                {form.imagem
+                  ? <img src={form.imagem} alt="" className="w-16 h-16 rounded-lg object-cover border border-dark-700 bg-dark-800 shrink-0" onError={e => { e.target.style.opacity = .3; }} />
+                  : <div className="w-16 h-16 rounded-lg border border-dashed border-dark-600 flex items-center justify-center text-zinc-600 text-2xl shrink-0">{form.emoji}</div>}
+                <div className="flex-1 space-y-2">
+                  <input value={form.imagem} onChange={e => setForm({ ...form, imagem: e.target.value })} placeholder="Cole uma URL ou envie um arquivo →" className={inp} />
+                  <button type="button" onClick={() => fileRef.current?.click()} disabled={enviandoImg}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-neon/10 text-neon border border-neon/20 hover:bg-neon/20 disabled:opacity-50">
+                    {enviandoImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {enviandoImg ? 'Enviando…' : 'Enviar imagem'}
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => enviarImagem(e.target.files?.[0])} />
+                </div>
+              </div>
+            </Campo>
             <Campo label="Specs (uma por linha)">
               <textarea rows={4} value={form.specsTexto} onChange={e => setForm({ ...form, specsTexto: e.target.value })}
                 placeholder={'Altura: 16 mm\nMedidas oficiais de prova\nGarantia de 1 ano'} className={inp + ' resize-y'} />
@@ -290,8 +348,12 @@ export default function ComboErgoTab() {
                   </div>
                 </button>
                 {ehExtra && (
-                  <button onClick={() => removerExtra(extraRow.id, p.alias)} title="Remover dos combos"
-                    className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => editarExtra(extraRow)} title="Editar / trocar imagem"
+                      className="p-1.5 text-zinc-600 hover:text-neon hover:bg-neon/10 rounded-lg"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => removerExtra(extraRow.id, p.alias)} title="Remover dos combos"
+                      className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
                 )}
               </div>
             );
