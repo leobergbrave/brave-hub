@@ -55,5 +55,9 @@ export default async function handler(req, res) {
 
   const frete = calcularFrete(pesoTotal, regra);
   res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=3600');
-  return res.status(200).json({ ok: true, frete, estado, zona, cidade, pesoTotal });
+  // regra vai junto pra o cliente calcular o frete de cada produto sozinho
+  return res.status(200).json({
+    ok: true, frete, estado, zona, cidade, pesoTotal,
+    regra: regra ? { multiplicador: Number(regra.multiplicador) || 0, valor_minimo: Number(regra.valor_minimo) || 0 } : null,
+  });
 }

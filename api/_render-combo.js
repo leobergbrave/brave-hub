@@ -40,8 +40,25 @@ export default async function handler(req, res) {
   const ogImg = `${BASE}/lp/ergo/og/${canon}.png${qs}`;
   const titulo = `Combo de Ergômetros — ${nomes.join(' + ')} | BRAVE`;
   const descricao = `${nomes.join(', ')} — equipamentos de alta performance BRAVE${t.avistaFinal > 0 ? `, a partir de ${fmtBRL(t.avistaFinal)} à vista` : ''}. 10x sem juros.`;
-  const waMsg = encodeURIComponent(`Olá! Tenho interesse no combo de ergômetros: ${nomes.join(', ')}. Podem me enviar as condições?`);
+  const waMsg = encodeURIComponent(`Olá! Tenho interesse nos produtos: ${nomes.join(', ')}. Podem me enviar as condições?`);
   const waHref = `https://wa.me/${WA_DEFAULT}?text=${waMsg}`;
+
+  // Título automático a partir dos produtos (nomes curtos)
+  const shortName = (n) => {
+    const s = String(n || '').split(/\s*[-–]\s*|\s+\d+\s*mm|\s+\d+[.,]?\d*\s*m\b/i)[0].trim();
+    const w = s.split(/\s+/);
+    return (w.length > 4 ? w.slice(0, 4).join(' ') : s) || n;
+  };
+  const curtos = produtos.map(p => shortName(p.nome));
+  const heroTitle = curtos.length <= 3 ? curtos.join(' × ') : `${curtos.length} produtos BRAVE`;
+
+  // Dados dos produtos pro JS do cliente (seleção + frete por produto)
+  const produtosJS = produtos.map(p => ({
+    alias: p.alias, nome: p.nome,
+    avista: p.preco_avista > 0 ? Number(p.preco_avista) : 0,
+    prazo: p.preco > 0 ? Number(p.preco) : 0,
+    peso: Number(p.peso_kg) || 0,
+  }));
 
   const cardsHTML = produtos.map((p, i) => {
     const fotos = (p.fotos || []).filter(Boolean).slice(0, 4);
@@ -57,9 +74,9 @@ export default async function handler(req, res) {
         ${p.video ? `<button class="vid-btn" data-video="${esc(p.video)}" aria-label="Ver vídeo">▶ Vídeo</button>` : ''}
       </div>`;
     return `
-    <div class="card">
+    <div class="card" data-alias="${p.alias}">
       <div class="card-top">
-        <span class="card-num">${String(i + 1).padStart(2, '0')}</span>
+        <label class="chk"><input type="checkbox" data-chk="${p.alias}" checked><span class="chk-box"></span> <span class="chk-txt">No orçamento</span></label>
         <span class="card-emoji-sm">${p.emoji || ''}</span>
       </div>
       ${galeriaHTML}
@@ -73,6 +90,7 @@ export default async function handler(req, res) {
                <span class="price-avista">${fmtBRL(p.preco_avista)} <small>à vista</small></span>
                <span class="price-parc">ou 10× de ${fmtBRL(p.preco / 10)} sem juros</span>`
             : `<span class="price-avista" style="font-size:22px">Sob consulta</span>`}
+          <div class="card-frete" data-frete="${p.alias}" style="display:none"></div>
         </div>
       </div>
     </div>`;
@@ -122,6 +140,15 @@ export default async function handler(req, res) {
   .card-emoji{font-size:26px}
   .card-body{padding:22px;display:flex;flex-direction:column;flex:1}
   .card-emoji-sm{font-size:20px}
+  .card{transition:opacity .2s}
+  .chk{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+  .chk input{position:absolute;opacity:0;width:0;height:0}
+  .chk-box{width:20px;height:20px;border-radius:6px;border:2px solid var(--d600);display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex:none}
+  .chk input:checked + .chk-box{background:var(--neon);border-color:var(--neon)}
+  .chk input:checked + .chk-box::after{content:'✓';color:var(--dark);font-size:13px;font-weight:900}
+  .chk input:checked ~ .chk-txt{color:var(--neon)}
+  .card-frete{margin-top:10px;font-size:13px;color:#cbd5cb;background:rgba(57,255,20,.06);border:1px solid rgba(57,255,20,.15);border-radius:10px;padding:8px 12px}
+  .card-frete b{color:var(--neon)}
   .gal{position:relative;background:#0a0a0a;display:flex;align-items:center;justify-content:center}
   .gal-main{width:100%;height:240px;object-fit:contain;padding:14px;cursor:zoom-in;display:block}
   .gal-empty{height:150px}
@@ -192,40 +219,41 @@ export default async function handler(req, res) {
   </header>
 
   <section class="hero">
-    <div class="hero-tag">Combo de Ergômetros</div>
-    <h1>Ergômetros <span>Brave</span></h1>
-    <p class="hero-sub">Seleção de ergômetros de alta performance BRAVE. Padrão profissional, pronta entrega e condições exclusivas para o combo.</p>
+    <div class="hero-tag">Monte seu orçamento</div>
+    <h1>${esc(heroTitle)}</h1>
+    <p class="hero-sub">Marque os produtos que você quer, veja o total ao vivo e calcule o frete da sua região para cada um.</p>
   </section>
 
   <div class="wrap">
     <div class="section">
-      <div class="section-label">Equipamentos do combo (${produtos.length})</div>
+      <div class="section-label">Produtos — marque os que você quer (<span id="r-count">${produtos.length}</span>)</div>
       <div class="grid">${cardsHTML}</div>
     </div>
 
     <div class="section">
-      <div class="section-label">Investimento do combo</div>
+      <div class="section-label">Total do seu orçamento</div>
       <div class="resumo">
-        ${produtos.filter(p => p.preco_avista > 0).map(p => `<div class="resumo-item"><span>${esc(p.nome)}</span><span>${fmtBRL(p.preco_avista)}</span></div>`).join('')}
+        ${produtos.filter(p => p.preco_avista > 0).map(p => `<div class="resumo-item" data-alias="${p.alias}"><span>${esc(p.nome)}</span><span>${fmtBRL(p.preco_avista)}</span></div>`).join('')}
         ${desconto > 0 ? `<div class="resumo-item"><span>Desconto do combo</span><span style="color:var(--neon)">− ${fmtBRL(desconto)}</span></div>` : ''}
+        <div class="resumo-item" id="r-frete-line" style="display:none"><span>Frete total (<span id="r-frete-local"></span>)</span><span id="r-frete-val"></span></div>
         <div class="resumo-total">
           <div>
-            <div class="resumo-total-label">Total à vista</div>
-            <div class="resumo-total-value">${fmtBRL(t.avistaFinal)}</div>
+            <div class="resumo-total-label"><span id="r-avista-label">Total à vista</span></div>
+            <div class="resumo-total-value" id="r-avista">${fmtBRL(t.avistaFinal)}</div>
           </div>
-          ${t.economia > 0 ? `<div class="eco"><div class="eco-pill">✓ Economia</div><div class="eco-val">${fmtBRL(t.economia)}</div></div>` : ''}
+          <div class="eco" id="r-eco-box" style="${t.economia > 0 ? '' : 'display:none'}"><div class="eco-pill">✓ Economia</div><div class="eco-val" id="r-eco">${fmtBRL(t.economia)}</div></div>
         </div>
         <div class="resumo-prazo">
           <div>
             <div class="resumo-total-label">ou a prazo no cartão</div>
-            <div class="resumo-prazo-value">10× de ${fmtBRL(t.parcela)}</div>
+            <div class="resumo-prazo-value" id="r-parcela">10× de ${fmtBRL(t.parcela)}</div>
           </div>
           <div style="text-align:right">
             <div class="resumo-total-label">Total a prazo</div>
-            <div style="font-size:15px;font-weight:700;color:#bbb">${fmtBRL(t.somaPrazo)}</div>
+            <div style="font-size:15px;font-weight:700;color:#bbb" id="r-prazo">${fmtBRL(t.somaPrazo)}</div>
           </div>
         </div>
-        ${t.temConsultar ? `<div class="nota">* Itens marcados como "sob consulta" não estão somados no total. Fale com o consultor para o valor completo.</div>` : ''}
+        <div class="nota" id="r-nota-consulta" style="${t.temConsultar ? '' : 'display:none'}">* Itens "sob consulta" não entram no total. Fale com o consultor para o valor completo.</div>
       </div>
     </div>
   </div>
@@ -235,7 +263,7 @@ export default async function handler(req, res) {
       <div class="section-label">Frete para a sua região</div>
       <div class="frete-card">
         <div class="frete-form" id="frete-form">
-          <p class="frete-title">📦 Calcule o frete do seu combo</p>
+          <p class="frete-title">📦 Calcule o frete para a sua região</p>
           <div class="frete-row">
             <input id="cepin" inputmode="numeric" maxlength="9" placeholder="Seu CEP (00000-000)" />
             <button id="cepbtn" onclick="calcFrete()">Calcular</button>
@@ -268,10 +296,38 @@ export default async function handler(req, res) {
   <div class="ov" id="vm"><span class="ov-close">&times;</span><div class="box" id="vmbox"></div></div>
 
   <script>
-    var FSLUG='${canon}', FWA='${WA_DEFAULT}', FNOMES=${JSON.stringify(nomes.join(', '))};
+    var FSLUG='${canon}', FWA='${WA_DEFAULT}';
+    var PRODUTOS=${JSON.stringify(produtosJS)};
+    var DESCONTO=${desconto};
+    var REGRA=null, LOCAL='';
     var cdTimer=null;
     function brl(v){return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
     function maskCep(){var el=document.getElementById('cepin');var v=el.value.replace(/\\D/g,'').slice(0,8);if(v.length>5)v=v.slice(0,5)+'-'+v.slice(5);el.value=v;}
+    function setTxt(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
+    function freteDe(peso){if(!REGRA)return 0;return Math.max(Math.floor(peso)*(REGRA.multiplicador||0),REGRA.valor_minimo||0);}
+    function marcados(){return PRODUTOS.filter(function(p){var c=document.querySelector('input[data-chk="'+p.alias+'"]');return c&&c.checked;});}
+    function nomesMarcados(){return marcados().map(function(p){return p.nome;}).join(', ');}
+    function recompute(){
+      var sel=marcados(), avista=0, prazo=0, freteTot=0;
+      sel.forEach(function(p){avista+=p.avista;prazo+=p.prazo;freteTot+=freteDe(p.peso);});
+      var avistaFinal=Math.max(0,avista-DESCONTO), economia=(prazo-avista)+DESCONTO;
+      setTxt('r-count',sel.length);
+      setTxt('r-avista',brl(avistaFinal));
+      setTxt('r-parcela','10× de '+brl(prazo/10));
+      setTxt('r-prazo',brl(prazo));
+      setTxt('r-eco',brl(economia));
+      var ecoBox=document.getElementById('r-eco-box'); if(ecoBox)ecoBox.style.display=economia>0?'':'none';
+      // por produto: frete no card + escurece desmarcado + mostra/esconde no resumo
+      PRODUTOS.forEach(function(p){
+        var c=document.querySelector('input[data-chk="'+p.alias+'"]'), on=c&&c.checked;
+        var card=document.querySelector('.card[data-alias="'+p.alias+'"]'); if(card)card.style.opacity=on?'1':'.4';
+        var it=document.querySelector('.resumo-item[data-alias="'+p.alias+'"]'); if(it)it.style.display=on?'flex':'none';
+        var fr=document.querySelector('[data-frete="'+p.alias+'"]');
+        if(fr){ if(REGRA){fr.style.display='block';fr.innerHTML='Frete p/ '+LOCAL+': <b>'+brl(freteDe(p.peso))+'</b> · total com frete '+brl(p.avista+freteDe(p.peso));} else fr.style.display='none'; }
+      });
+      var flLine=document.getElementById('r-frete-line');
+      if(flLine){ if(REGRA){flLine.style.display='flex';setTxt('r-frete-local',LOCAL);setTxt('r-frete-val',brl(freteTot));setTxt('r-avista-label','Total à vista + frete');setTxt('r-avista',brl(avistaFinal+freteTot));} else {flLine.style.display='none';setTxt('r-avista-label','Total à vista');} }
+    }
     function startCd(){
       function t(){var now=new Date(),end=new Date();end.setHours(23,59,59,999);var s=Math.max(0,Math.floor((end-now)/1000));var h=String(Math.floor(s/3600)).padStart(2,'0'),m=String(Math.floor(s%3600/60)).padStart(2,'0'),ss=String(s%60).padStart(2,'0');var el=document.getElementById('cd');if(el)el.textContent=h+':'+m+':'+ss;}
       t(); if(cdTimer)clearInterval(cdTimer); cdTimer=setInterval(t,1000);
@@ -285,18 +341,15 @@ export default async function handler(req, res) {
       document.getElementById('frete-loading').style.display='flex';
       fetch('/api/render?tipo=frete&slug='+FSLUG+'&cep='+cep).then(function(r){return r.json();}).then(function(d){
         document.getElementById('frete-loading').style.display='none';
-        if(!d.ok){document.getElementById('frete-form').style.display='block';err.textContent=(d.error||'Não foi possível calcular')+'. Tente outro CEP.';return;}
-        var local=(d.cidade?d.cidade+'/':'')+d.estado;
-        var wa='https://wa.me/'+FWA+'?text='+encodeURIComponent('Olá! Quero fechar HOJE o combo ('+FNOMES+') com o frete grátis para o meu CEP '+document.getElementById('cepin').value+'.');
-        var real=d.frete>0?'<div class="fr-real">Seu frete para '+local+' seria <s>'+brl(d.frete)+'</s></div>':'<div class="fr-real">Entrega para '+local+'</div>';
+        if(!d.ok||!d.regra){document.getElementById('frete-form').style.display='block';err.textContent=(d.error||'Não foi possível calcular')+'. Tente outro CEP.';return;}
+        REGRA=d.regra; LOCAL=(d.cidade?d.cidade+'/':'')+d.estado;
+        recompute();
+        var wa='https://wa.me/'+FWA+'?text='+encodeURIComponent('Olá! Quero um orçamento de: '+nomesMarcados()+' com entrega para o CEP '+document.getElementById('cepin').value+'.');
         document.getElementById('frete-result').innerHTML=
-          real+
-          '<div class="fr-free">✅ FRETE GRÁTIS para fechamento hoje!</div>'+
-          '<p class="fr-msg">Temos uma carga saindo para a <b>sua região</b> nos próximos dias e conseguimos incluir o seu pedido com <b>frete grátis</b> — mas as vagas são limitadas.</p>'+
-          '<div class="fr-timer">Oferta expira em <b id="cd">--:--:--</b></div>'+
-          '<a class="cta-btn" href="'+wa+'" target="_blank" rel="noopener">Fechar agora com frete grátis</a>';
+          '<div class="fr-real">✅ Frete calculado para <b style="color:#fff">'+LOCAL+'</b>.</div>'+
+          '<p class="fr-msg">O frete de <b>cada produto</b> aparece no card dele, e o <b>total com frete</b> está no resumo acima. Marque/desmarque os produtos para comparar.</p>'+
+          '<a class="cta-btn" style="margin-top:14px" href="'+wa+'" target="_blank" rel="noopener">Falar com um consultor</a>';
         document.getElementById('frete-result').style.display='block';
-        startCd();
       }).catch(function(){
         document.getElementById('frete-loading').style.display='none';
         document.getElementById('frete-form').style.display='block';
@@ -305,6 +358,8 @@ export default async function handler(req, res) {
     }
     document.addEventListener('input',function(e){if(e.target&&e.target.id==='cepin')maskCep();});
     document.addEventListener('keydown',function(e){if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='cepin')calcFrete();});
+    document.addEventListener('change',function(e){if(e.target&&e.target.matches&&e.target.matches('input[data-chk]'))recompute();});
+    recompute();
 
     (function(){
       var lb=document.getElementById('lb'), lbimg=document.getElementById('lbimg');
