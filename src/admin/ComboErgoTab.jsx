@@ -40,7 +40,9 @@ export default function ComboErgoTab() {
   const [form, setForm]         = useState(null); // { editandoId?, alias, sku, nome, subtitle, emoji, preco, preco_avista, peso_kg, imagem, specsTexto }
   const [salvandoProd, setSalvandoProd] = useState(false);
   const [enviandoImg, setEnviandoImg] = useState(false);
+  const [enviandoVid, setEnviandoVid] = useState(false);
   const fileRef = useRef(null);
+  const videoRef = useRef(null);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2500); };
 
@@ -101,6 +103,7 @@ export default function ComboErgoTab() {
       preco_avista: p.preco_avista != null ? p.preco_avista : (p.preco || ''),
       peso_kg: p.peso_kg || '',
       imagem: p.url_imagem || '',
+      video: '',
       specsTexto: '',
     });
     setResultados([]);
@@ -115,29 +118,35 @@ export default function ComboErgoTab() {
       alias: row.alias, sku: row.sku || '', nome: row.nome, subtitle: row.subtitle || '', emoji: row.emoji || '📦',
       preco: row.preco ?? '', preco_avista: row.preco_avista ?? '', peso_kg: row.peso_kg ?? '',
       imagem: Array.isArray(row.fotos) && row.fotos[0] ? row.fotos[0] : '',
+      video: row.video || '',
       specsTexto: Array.isArray(row.specs) ? row.specs.join('\n') : '',
     });
     setResultados([]); setBusca('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Upload de imagem pro Supabase (bucket ergo-media) -> URL permanente, nao quebra
-  const enviarImagem = async (file) => {
+  // Upload pro Supabase (bucket ergo-media) -> URL permanente, nao quebra.
+  // campo = 'imagem' | 'video'. Imagem e comprimida; video sobe como esta.
+  const enviarArquivo = async (file, campo) => {
     if (!file || !form) return;
-    setEnviandoImg(true);
+    const setBusy = campo === 'video' ? setEnviandoVid : setEnviandoImg;
+    const ref = campo === 'video' ? videoRef : fileRef;
+    setBusy(true);
     try {
       let f = file;
-      if (file.type.startsWith('image/')) f = await imageCompression(file, { maxSizeMB: 0.9, maxWidthOrHeight: 1920, useWebWorker: true });
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `combo/${(form.alias || 'produto')}-${Date.now()}.${ext}`;
+      if (campo === 'imagem' && file.type.startsWith('image/')) {
+        f = await imageCompression(file, { maxSizeMB: 0.9, maxWidthOrHeight: 1920, useWebWorker: true });
+      }
+      const ext = (file.name.split('.').pop() || (campo === 'video' ? 'mp4' : 'jpg')).toLowerCase();
+      const path = `combo/${(form.alias || 'produto')}-${campo}-${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from(BUCKET).upload(path, f, { upsert: false, contentType: f.type || undefined });
       if (error) throw error;
       const url = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-      setForm(prev => ({ ...prev, imagem: url }));
-      showToast('✅ Imagem enviada!');
+      setForm(prev => ({ ...prev, [campo]: url }));
+      showToast(campo === 'video' ? '✅ Vídeo enviado!' : '✅ Imagem enviada!');
     } catch (e) {
       showToast('❌ Upload falhou: ' + (e.message || e) + ' — a migration do bucket rodou?');
-    } finally { setEnviandoImg(false); if (fileRef.current) fileRef.current.value = ''; }
+    } finally { setBusy(false); if (ref.current) ref.current.value = ''; }
   };
 
   const salvarProduto = async () => {
@@ -156,6 +165,7 @@ export default function ComboErgoTab() {
         peso_kg: form.peso_kg !== '' ? Number(form.peso_kg) : null,
         specs,
         fotos: form.imagem ? [form.imagem] : [],
+        video: form.video?.trim() || null,
         ativo: true,
       };
       let error;
@@ -301,8 +311,21 @@ export default function ComboErgoTab() {
                     className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-neon/10 text-neon border border-neon/20 hover:bg-neon/20 disabled:opacity-50">
                     {enviandoImg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {enviandoImg ? 'Enviando…' : 'Enviar imagem'}
                   </button>
-                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => enviarImagem(e.target.files?.[0])} />
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => enviarArquivo(e.target.files?.[0], 'imagem')} />
                 </div>
+              </div>
+            </Campo>
+
+            {/* Vídeo — URL (YouTube/Vimeo/Drive) ou upload */}
+            <Campo label="Vídeo (opcional)">
+              <div className="flex gap-2 items-center flex-wrap">
+                <input value={form.video} onChange={e => setForm({ ...form, video: e.target.value })} placeholder="Link do YouTube/Vimeo/Drive, ou envie um arquivo →" className={inp} />
+                <button type="button" onClick={() => videoRef.current?.click()} disabled={enviandoVid}
+                  className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg bg-neon/10 text-neon border border-neon/20 hover:bg-neon/20 disabled:opacity-50 whitespace-nowrap">
+                  {enviandoVid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {enviandoVid ? 'Enviando…' : 'Enviar vídeo'}
+                </button>
+                <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={e => enviarArquivo(e.target.files?.[0], 'video')} />
+                {form.video && <a href={form.video} target="_blank" rel="noreferrer" className="text-[11px] text-neon underline">ver vídeo atual</a>}
               </div>
             </Campo>
             <Campo label="Specs (uma por linha)">
