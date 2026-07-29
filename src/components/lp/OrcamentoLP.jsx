@@ -94,7 +94,10 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           origem, titulo, nome, telefone: tel, cep: cep.replace(/\D/g, ''),
-          itens: lista.map(i => ({ alias: i.alias, sku: i.sku, nome: i.nome, quantidade: i.qtd })),
+          itens: lista.map(i => ({
+            alias: i.alias, sku: i.sku, nome: i.nome, quantidade: i.qtd,
+            preco: i.preco, peso: i.peso, img: i.img, variante: i.variante || null,
+          })),
         }),
       });
       const j = await r.json();

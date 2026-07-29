@@ -130,28 +130,43 @@ export default async function handler(req, res) {
       .select('id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem');
     if (!todos || !todos.length) return res.status(500).json({ ok: false, error: 'Catálogo indisponível' });
 
-    // 2) resolve cada item contra o catálogo (id real é obrigatório p/ a página de orçamento)
+    // 2) monta cada item.
+    // Preço/peso "congelados" vêm da LP quando enviados (o catálogo tem preço 0 e
+    // peso bagunçado nas variantes). O produto real, quando casa, dá só a identidade
+    // (id/nome/foto) — mas não é obrigatório: itens self-contained (variantes de peso)
+    // entram com id sintético e a vitrine sabe renderizar.
     const itensResolvidos = [];
     const naoResolvidos = [];
     for (const it of itens) {
       const prod = resolverProduto(it, todos);
       const qtd = Math.max(1, parseInt(it.quantidade) || 1);
-      if (prod) {
-        itensResolvidos.push({
-          id: prod.id,
-          nome: prod.nome,
-          codigo_sku: prod.codigo_sku || '',
-          url_imagem: prod.url_imagem || '',
-          quantidade: qtd,
-          q: qtd,
-          preco: Number(prod.preco) || 0,
-          preco_avista: prod.preco_avista != null ? Number(prod.preco_avista) : null,
-          preco_prazo: prod.preco_prazo != null ? Number(prod.preco_prazo) : null,
-          peso_kg: Number(prod.peso_kg) || 0,
-        });
-      } else {
-        naoResolvidos.push(it.nome || it.alias || it.sku);
-      }
+
+      const precoCli       = Number(it.preco) || 0;
+      const precoAvistaCli = Number(it.preco_avista) || 0;
+      const pesoCli        = Number(it.peso) || 0;
+
+      const nomeFinal = it.nome || prod?.nome;
+      if (!nomeFinal) { naoResolvidos.push(it.alias || it.sku || '?'); continue; }
+
+      const preco       = precoCli > 0 ? precoCli : (Number(prod?.preco) || 0);
+      const precoAvista = precoAvistaCli > 0 ? precoAvistaCli
+        : (prod?.preco_avista != null ? Number(prod.preco_avista) : null);
+      const peso        = pesoCli > 0 ? pesoCli : (Number(prod?.peso_kg) || 0);
+      const id = prod?.id || ('lp:' + norm(it.sku || it.alias || nomeFinal).replace(/[^a-z0-9]+/g, '-'));
+
+      itensResolvidos.push({
+        id,
+        nome: nomeFinal,
+        codigo_sku: it.sku || prod?.codigo_sku || '',
+        url_imagem: it.img || prod?.url_imagem || '',
+        quantidade: qtd,
+        q: qtd,
+        preco,
+        preco_avista: precoAvista,
+        preco_prazo: prod?.preco_prazo != null ? Number(prod.preco_prazo) : null,
+        peso_kg: peso,
+        variante: it.variante || null,
+      });
     }
     if (itensResolvidos.length === 0) {
       return res.status(400).json({ ok: false, error: 'Não consegui identificar os produtos', naoResolvidos });

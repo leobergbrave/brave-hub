@@ -149,29 +149,32 @@ export default function OrcamentoPage() {
 
       const itensCompletos = itensRaw.map(itemRaw => {
         const prod = produtosDb.find(p => p.id === itemRaw.id);
-        if (!prod) return null;
-        
-        const precoVenda = itemRaw.p !== undefined ? itemRaw.p : (itemRaw.preco !== undefined ? itemRaw.preco : prod.preco);
+        // Itens gerados nas Landing Pages (ex.: variantes de peso) não têm linha no
+        // catálogo — nesse caso usamos os dados que vieram no próprio item (preço/peso/foto).
+        // Orçamentos manuais sempre têm `prod`, então o comportamento antigo é preservado.
+        if (!prod && !itemRaw.nome) return null;
+
+        const precoVenda = itemRaw.p !== undefined ? itemRaw.p : (itemRaw.preco !== undefined ? itemRaw.preco : (prod?.preco ?? 0));
         const quantidade = itemRaw.q !== undefined ? itemRaw.q : itemRaw.quantidade;
-        const precoOriginal = prod.preco;
+        const precoOriginal = prod?.preco ?? precoVenda;
         const descontoUnitario = precoOriginal > precoVenda ? precoOriginal - precoVenda : 0;
-        
+
         // Fixed prices: from payload first, then from product DB
-        const precoAvista = itemRaw.preco_avista || prod.preco_avista || null;
-        const precoPrazo = itemRaw.preco_prazo || prod.preco_prazo || null;
-        
+        const precoAvista = itemRaw.preco_avista || prod?.preco_avista || null;
+        const precoPrazo = itemRaw.preco_prazo || prod?.preco_prazo || null;
+
         return {
-          id: prod.id,
-          nome: prod.nome,
-          codigo_sku: itemRaw.codigo_sku || prod.codigo_sku || '',
-          url_imagem: prod.url_imagem,
+          id: itemRaw.id,
+          nome: prod?.nome || itemRaw.nome,
+          codigo_sku: itemRaw.codigo_sku || prod?.codigo_sku || '',
+          url_imagem: prod?.url_imagem || itemRaw.url_imagem || itemRaw.img || '',
           quantidade: quantidade,
           precoOriginal: precoOriginal,
           preco: precoVenda,
           preco_avista: precoAvista,
           preco_prazo: precoPrazo,
           descontoUnitario: descontoUnitario,
-          peso: prod.peso_kg || 0
+          peso: prod?.peso_kg ?? itemRaw.peso_kg ?? itemRaw.peso ?? 0
         };
       }).filter(Boolean);
 
