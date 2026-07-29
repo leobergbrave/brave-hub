@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, MessageCircle, Mail, Loader2, Zap, Bell, DollarSign } from 'lucide-react';
+import { OrcamentoProvider, AddButton } from '../components/lp/OrcamentoLP';
 
 const fmtBRL = (v) => Number(v) > 0
   ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -83,7 +84,8 @@ export default function LpErgometros() {
   );
 
   return (
-    <div className="min-h-screen bg-dark-950 text-white antialiased">
+    <OrcamentoProvider origem="lp-ergometros" titulo="Ergômetros" waNumber={cfg.wa_number}>
+    <div className="min-h-screen bg-dark-950 text-white antialiased pb-24">
 
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
@@ -191,6 +193,14 @@ export default function LpErgometros() {
                           <p className="text-zinc-600 text-[11px] mt-0.5">no cartão de crédito</p>
                         </>
                       )}
+
+                      <div className="mt-4">
+                        <AddButton item={{
+                          alias: produto.alias, nome: produto.nome,
+                          preco: produto.preco_avista, peso: produto.peso_kg,
+                          img: produto.img_url ? convertImgUrl(produto.img_url) : '',
+                        }} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -253,5 +263,6 @@ export default function LpErgometros() {
         </div>
       </footer>
     </div>
+    </OrcamentoProvider>
   );
 }
