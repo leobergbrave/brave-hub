@@ -3,8 +3,68 @@ import { supabase } from '../lib/supabase';
 import {
   Globe, Edit2, ExternalLink, Plus, Trash2, ChevronDown, ChevronRight,
   Save, Loader2, RefreshCw, Check, X, Phone, FileText, Layout, Package, Code2,
-  Share2, Image as ImageIcon, Copy
+  Share2, Image as ImageIcon, Copy, Search
 } from 'lucide-react';
+
+/* Busca produtos no catálogo (preços reais do Bling) e vira cada um em variante
+   com um clique — evita digitar peso/preço na mão. Preço fica congelado no config. */
+function BuscaCatalogo({ onAdd }) {
+  const [termo, setTermo] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [resultados, setResultados] = useState(null);
+
+  const buscar = async () => {
+    if (termo.trim().length < 3) return;
+    setBuscando(true);
+    const { data } = await supabase
+      .from('produtos')
+      .select('codigo_sku, nome, preco, preco_avista, peso_kg')
+      .ilike('nome', `%${termo.trim()}%`)
+      .gt('preco', 0)
+      .order('peso_kg', { ascending: true, nullsFirst: false })
+      .limit(30);
+    setResultados(data || []);
+    setBuscando(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input value={termo} onChange={e => setTermo(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscar(); } }}
+          placeholder='Buscar no catálogo (ex.: "Anilha Bumper", "Kettlebell")'
+          className="flex-1 bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-700" />
+        <button onClick={buscar} disabled={buscando || termo.trim().length < 3}
+          className="text-[11px] font-bold text-orange-400 bg-orange-500/10 px-3 py-2 rounded-lg hover:bg-orange-500/20 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+          {buscando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Buscar
+        </button>
+      </div>
+      {resultados !== null && (
+        <div className="max-h-48 overflow-y-auto space-y-1 border border-dark-700 rounded-lg p-2 bg-dark-950/50">
+          {resultados.length === 0 && <p className="text-[11px] text-zinc-600 p-1">Nada com preço no catálogo pra "{termo}". Tenta outro termo.</p>}
+          {resultados.map((p, i) => {
+            const preco = Number(p.preco_avista) > 0 ? Number(p.preco_avista) : Number(p.preco);
+            const peso = Number(p.peso_kg) || 0;
+            return (
+              <button key={i}
+                onClick={() => onAdd({
+                  rotulo: peso > 0 ? `${String(peso).replace('.', ',')} kg` : (p.codigo_sku || p.nome.slice(0, 12)),
+                  preco, peso, sku: p.codigo_sku || '',
+                })}
+                className="w-full flex items-center justify-between gap-2 text-left px-2 py-1.5 rounded-lg hover:bg-orange-500/10 group">
+                <span className="text-[11px] text-zinc-300 truncate">{p.nome} <span className="text-zinc-600">({p.codigo_sku})</span></span>
+                <span className="text-[11px] font-bold text-orange-400 shrink-0 flex items-center gap-1">
+                  R$ {preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const OG_CARDS = [
   { slug: 'ergometros',  titulo: 'Ergômetros',   url: '/lp/ergometros'  },
@@ -653,6 +713,13 @@ export default function LandingPagesTab() {
                         {(prod.variantes || []).length === 0 && (
                           <p className="text-[11px] text-zinc-600">Sem variantes — o card usa um botão único de "Adicionar ao orçamento" com o preço à vista acima.</p>
                         )}
+                        <BuscaCatalogo onAdd={(v) =>
+                          setForm(f => {
+                            const ps = [...(f.config.produtos || [])];
+                            ps[pIdx] = { ...ps[pIdx], variantes: [...(ps[pIdx].variantes || []), v] };
+                            return { ...f, config: { ...f.config, produtos: ps } };
+                          })
+                        } />
                       </div>
 
                       {/* Features */}
