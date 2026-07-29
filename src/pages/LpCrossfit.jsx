@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, MessageCircle, Mail, Loader2, Trophy, Package, Shield, Zap, DollarSign, Truck } from 'lucide-react';
+import { OrcamentoProvider, AddButton, VarianteChips } from '../components/lp/OrcamentoLP';
 import { LP_CROSSFIT_DEFAULT } from '../data/lpCrossfitConfig';
 
 const IconInstagram = () => (
@@ -85,7 +86,8 @@ export default function LpCrossfit() {
     .filter(s => s.produtos.length > 0);
 
   return (
-    <div className="min-h-screen bg-dark-950 text-white antialiased">
+    <OrcamentoProvider origem="lp-crossfit" titulo="Box CrossFit" waNumber={cfg.wa_number}>
+    <div className="min-h-screen bg-dark-950 text-white antialiased pb-24">
 
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
@@ -202,6 +204,22 @@ export default function LpCrossfit() {
                           {p.preco_nota && <p className="text-zinc-600 text-[11px] mt-1.5">{p.preco_nota}</p>}
                         </div>
                       )}
+
+                      {/* ── ORÇAMENTO: chips de variante (peso) ou botão único ── */}
+                      <div className="mt-4">
+                        {p.variantes?.length > 0 ? (
+                          <VarianteChips
+                            produto={{ nome: p.nome, img: p.img_url ? convertImgUrl(p.img_url) : '' }}
+                            variantes={p.variantes}
+                          />
+                        ) : (
+                          <AddButton item={{
+                            alias: p.alias, nome: p.nome,
+                            preco: p.preco_avista, peso: p.peso_kg,
+                            img: p.img_url ? convertImgUrl(p.img_url) : '',
+                          }} />
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -287,5 +305,6 @@ export default function LpCrossfit() {
         </div>
       </footer>
     </div>
+    </OrcamentoProvider>
   );
 }

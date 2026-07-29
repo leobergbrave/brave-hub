@@ -29,6 +29,52 @@ export function AddButton({ item, className = '', label = 'Adicionar ao orçamen
   );
 }
 
+/* Chips de variantes (pesos/tamanhos) — cada variante tem preço fixo próprio.
+   <VarianteChips produto={{ nome, img }} variantes={[{ rotulo:'8 kg', preco:199, peso:8, sku? }]} />
+   Tocar num chip adiciona aquela variante ao orçamento na hora (preço congelado da LP). */
+export function VarianteChips({ produto, variantes = [], className = '' }) {
+  const orc = useOrcamento();
+  if (!variantes.length) return null;
+  return (
+    <div className={className}>
+      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2">
+        Toque no peso para adicionar
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {variantes.map((v) => {
+          const key = `${produto.nome} ${v.rotulo}`;
+          const noOrc = orc?.itens?.[key];
+          return (
+            <button
+              key={v.rotulo}
+              onClick={() => orc?.add({
+                key,
+                sku: v.sku,
+                nome: produto.nome,
+                variante: v.rotulo,
+                preco: Number(v.preco) || 0,
+                peso: Number(v.peso) || 0,
+                img: produto.img || '',
+              })}
+              className={`flex flex-col items-center rounded-xl px-3 py-2 min-w-[64px] border transition-all active:scale-95 ${
+                noOrc
+                  ? 'bg-neon text-dark-950 border-neon font-black'
+                  : 'bg-dark-900 border-dark-600 text-white hover:border-neon/50'
+              }`}
+            >
+              <span className="text-sm font-black leading-none">{v.rotulo}</span>
+              <span className={`text-[10px] mt-1 font-bold ${noOrc ? 'text-dark-950/80' : 'text-neon'}`}>
+                {Number(v.preco) > 0 ? fmtBRL(v.preco) : 'consultar'}
+              </span>
+              {noOrc && <span className="text-[9px] font-black mt-0.5">✓ ×{noOrc.qtd}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
   const [itens, setItens]     = useState({});   // key -> { alias, sku, nome, preco, img, peso, qtd, variante }
   const [aberto, setAberto]   = useState(false);
@@ -187,7 +233,9 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-sm font-bold leading-tight truncate">{it.nome}</p>
                         {it.variante && <p className="text-neon text-[11px] font-semibold">{it.variante}</p>}
-                        {Number(it.preco) > 0 && <p className="text-zinc-400 text-xs mt-0.5">{fmtBRL(it.preco)}</p>}
+                        {Number(it.preco) > 0
+                          ? <p className="text-zinc-400 text-xs mt-0.5">{fmtBRL(it.preco)}</p>
+                          : <p className="text-amber-400/90 text-[11px] mt-0.5">valor a confirmar</p>}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button onClick={() => setQtd(it.key, -1)} className="w-7 h-7 rounded-lg bg-dark-700 text-white flex items-center justify-center hover:bg-dark-600"><Minus className="w-3.5 h-3.5" /></button>
@@ -225,6 +273,9 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
                         <div className="flex justify-between text-zinc-400"><span>Produtos</span><span>{fmtBRL(subtotal)}</span></div>
                         {freteInfo?.frete > 0 && <div className="flex justify-between text-zinc-400"><span>Frete</span><span>{fmtBRL(freteInfo.frete)}</span></div>}
                         <div className="flex justify-between text-white font-black text-base pt-1"><span>Total</span><span className="text-neon">{fmtBRL(totalComFrete)}</span></div>
+                        {lista.some(i => !(Number(i.preco) > 0)) && (
+                          <p className="text-amber-400/80 text-[11px] pt-1">* itens "a confirmar" não entram no total — o especialista fecha o valor com você.</p>
+                        )}
                       </div>
 
                       {/* dados */}

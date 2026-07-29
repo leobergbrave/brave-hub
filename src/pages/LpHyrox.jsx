@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, MessageCircle, Mail, Loader2, Trophy, TrendingUp, Shield } from 'lucide-react';
+import { OrcamentoProvider, AddButton, VarianteChips } from '../components/lp/OrcamentoLP';
 
 const fmtBRL = (v) => Number(v) > 0
   ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -171,7 +172,8 @@ export default function LpHyrox() {
   );
 
   return (
-    <div className="min-h-screen bg-dark-950 text-white antialiased">
+    <OrcamentoProvider origem="lp-hyrox" titulo="HYROX" waNumber={cfg.wa_number}>
+    <div className="min-h-screen bg-dark-950 text-white antialiased pb-24">
 
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
@@ -321,6 +323,22 @@ export default function LpHyrox() {
                       )}
                     </div>
                   )}
+
+                  {/* ── ORÇAMENTO: chips de variante (peso) ou botão único ── */}
+                  <div className="mt-4">
+                    {produto.variantes?.length > 0 ? (
+                      <VarianteChips
+                        produto={{ nome: produto.nome, img: produto.img_url ? convertImgUrl(produto.img_url) : '' }}
+                        variantes={produto.variantes}
+                      />
+                    ) : (
+                      <AddButton item={{
+                        alias: produto.alias, nome: produto.nome,
+                        preco: produto.preco_avista, peso: produto.peso_kg,
+                        img: produto.img_url ? convertImgUrl(produto.img_url) : '',
+                      }} />
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -382,5 +400,6 @@ export default function LpHyrox() {
         </div>
       </footer>
     </div>
+    </OrcamentoProvider>
   );
 }

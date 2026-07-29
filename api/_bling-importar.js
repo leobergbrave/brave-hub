@@ -294,6 +294,36 @@ export default async function handler(req, res) {
     const token = await getValidToken(true);
     if (!token) return res.status(500).json({ ok: false, error: 'Sem token Bling. Reconecte nas configurações.' });
 
+    // Inspeção pontual: como o Bling devolve UM produto específico (por SKU)?
+    // Usado pra diagnosticar variantes com preco=0 / peso trocado. Só leitura.
+    if (mode === 'inspecionar-sku') {
+      const { sku } = req.body || {};
+      if (!sku) return res.status(400).json({ ok: false, error: 'Informe o sku.' });
+      const resBusca = await blingGet(`/produtos?codigo=${encodeURIComponent(sku)}&limite=10`, token);
+      const jBusca = resBusca.ok ? await resBusca.json() : null;
+      const encontrados = jBusca?.data || [];
+      const detalhes = [];
+      for (const p of encontrados.slice(0, 3)) {
+        const d = await fetchProdutoDetalhe(p.id, token);
+        detalhes.push({
+          id: p.id,
+          listagem: { nome: p.nome, codigo: p.codigo, preco: p.preco, tipo: p.tipo, formato: p.formato },
+          detalhe: d ? {
+            nome: d.nome, codigo: d.codigo, formato: d.formato, tipo: d.tipo,
+            preco: d.preco, precoCusto: d.precoCusto, precoVenda: d.precoVenda,
+            pesoBruto: d.pesoBruto, pesoLiquido: d.pesoLiquido,
+            situacao: d.situacao,
+            variacoes: Array.isArray(d.variacoes)
+              ? d.variacoes.map(v => ({ id: v.id, nome: v.nome, codigo: v.codigo, preco: v.preco, pesoBruto: v.pesoBruto }))
+              : d.variacao || null,
+            estrutura: d.estrutura ? 'tem estrutura' : null,
+            camposDetalhe: Object.keys(d),
+          } : null,
+        });
+      }
+      return res.status(200).json({ ok: true, sku, encontrados: encontrados.length, detalhes });
+    }
+
     if (mode === 'inspecionar') {
       const lista = await fetchProdutosLista(token, 1, false);
       const amostra = lista.slice(0, 3);

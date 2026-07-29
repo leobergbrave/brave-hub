@@ -142,6 +142,30 @@ export default function LandingPagesTab() {
       return { ...f, config: { ...f.config, produtos: ps } };
     });
 
+  // ── Variantes (peso → preço fixo) ──────────────────────────
+  const setVariante = (pIdx, vIdx, key, val) =>
+    setForm(f => {
+      const ps = [...(f.config.produtos || [])];
+      const vs = [...(ps[pIdx].variantes || [])];
+      vs[vIdx] = { ...vs[vIdx], [key]: val };
+      ps[pIdx] = { ...ps[pIdx], variantes: vs };
+      return { ...f, config: { ...f.config, produtos: ps } };
+    });
+
+  const addVariante = (pIdx) =>
+    setForm(f => {
+      const ps = [...(f.config.produtos || [])];
+      ps[pIdx] = { ...ps[pIdx], variantes: [...(ps[pIdx].variantes || []), { rotulo: '', preco: 0, peso: 0, sku: '' }] };
+      return { ...f, config: { ...f.config, produtos: ps } };
+    });
+
+  const removeVariante = (pIdx, vIdx) =>
+    setForm(f => {
+      const ps = [...(f.config.produtos || [])];
+      ps[pIdx] = { ...ps[pIdx], variantes: (ps[pIdx].variantes || []).filter((_, i) => i !== vIdx) };
+      return { ...f, config: { ...f.config, produtos: ps } };
+    });
+
   const removeFeature = (pIdx, fIdx) =>
     setForm(f => {
       const ps = [...(f.config.produtos || [])];
@@ -593,6 +617,42 @@ export default function LandingPagesTab() {
                         <Input label="À vista (texto)" value={prod.preco_avista_txt} onChange={v => setProd(pIdx, 'preco_avista_txt', v)} placeholder="A partir de R$ 999" />
                         <Input label="Parcelado (texto)" value={prod.preco_prazo_txt} onChange={v => setProd(pIdx, 'preco_prazo_txt', v)} placeholder="10x a partir de R$ 1.199" />
                         <Input label="Nota do preço" value={prod.preco_nota} onChange={v => setProd(pIdx, 'preco_nota', v)} placeholder="Disponível de 5 a 25 kg" />
+                      </div>
+
+                      {/* Variantes de peso (chips no orçamento da LP) */}
+                      <div className="space-y-2 bg-dark-900/40 border border-dark-700 rounded-xl p-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                            Variantes de peso <span className="text-zinc-600 normal-case font-normal">(cada peso com preço fixo — viram botões que o cliente toca pra adicionar ao orçamento)</span>
+                          </label>
+                          <button onClick={() => addVariante(pIdx)}
+                            className="text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1 transition-colors shrink-0">
+                            <Plus className="w-3 h-3" /> Adicionar
+                          </button>
+                        </div>
+                        {(prod.variantes || []).length > 0 && (
+                          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 text-[9px] font-bold text-zinc-600 uppercase tracking-wider px-1">
+                            <span>Rótulo</span><span>Preço à vista</span><span>Peso (kg)</span><span>SKU (opcional)</span><span />
+                          </div>
+                        )}
+                        {(prod.variantes || []).map((va, vIdx) => (
+                          <div key={vIdx} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 items-center">
+                            <input value={va.rotulo || ''} onChange={e => setVariante(pIdx, vIdx, 'rotulo', e.target.value)} placeholder="8 kg"
+                              className="bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-700" />
+                            <input type="number" value={va.preco ?? ''} onChange={e => setVariante(pIdx, vIdx, 'preco', parseFloat(e.target.value) || 0)} placeholder="199"
+                              className="bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-700" />
+                            <input type="number" value={va.peso ?? ''} onChange={e => setVariante(pIdx, vIdx, 'peso', parseFloat(e.target.value) || 0)} placeholder="8"
+                              className="bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-700" />
+                            <input value={va.sku || ''} onChange={e => setVariante(pIdx, vIdx, 'sku', e.target.value)} placeholder="KB8"
+                              className="bg-dark-900 border border-dark-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-orange-500/50 placeholder:text-zinc-700" />
+                            <button onClick={() => removeVariante(pIdx, vIdx)} className="p-1.5 text-zinc-600 hover:text-red-400 transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        {(prod.variantes || []).length === 0 && (
+                          <p className="text-[11px] text-zinc-600">Sem variantes — o card usa um botão único de "Adicionar ao orçamento" com o preço à vista acima.</p>
+                        )}
                       </div>
 
                       {/* Features */}
