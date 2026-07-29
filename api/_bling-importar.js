@@ -314,7 +314,11 @@ export default async function handler(req, res) {
       let corrigidos = 0, semPeso = 0;
       const naoEncontrados = [];
       for (const local of alvo) {
-        const b = porCodigo.get(local.codigo_sku.trim().toUpperCase());
+        // SKUs locais usam ponto (DBO17.5); no Bling estao com virgula (DBO17,5)
+        const skuUp = local.codigo_sku.trim().toUpperCase();
+        const b = porCodigo.get(skuUp)
+          || porCodigo.get(skuUp.replace(/\./g, ','))
+          || porCodigo.get(skuUp.replace(/,/g, '.'));
         if (!b || !(parseFloat(b.preco) > 0)) { naoEncontrados.push(local.codigo_sku); continue; }
         // peso real só existe no detalhe
         const det = await fetchProdutoDetalhe(b.id, token);
