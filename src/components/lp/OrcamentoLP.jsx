@@ -87,13 +87,14 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
   const [sucesso, setSucesso] = useState(null);  // { link } | null
   const [erro, setErro]       = useState('');
 
+  // Adicionar NÃO abre a gaveta — comportamento de loja: o item vai pra sacola,
+  // o cliente segue navegando e abre a sacola (barra flutuante) quando quiser fechar.
   const add = useCallback((item) => {
     const key = item.key || item.alias || item.sku || item.nome;
     setItens(prev => {
       const atual = prev[key];
       return { ...prev, [key]: { ...item, key, qtd: (atual?.qtd || 0) + 1 } };
     });
-    setAberto(true);
     setFrete(null);
   }, []);
 
@@ -162,9 +163,10 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
     <Ctx.Provider value={{ add, itens, totalItens }}>
       {children}
 
-      {/* ── Barra flutuante (aparece com ≥1 item) ── */}
+      {/* ── Sacola flutuante (aparece com ≥1 item; re-anima a cada item novo) ── */}
       {totalItens > 0 && !aberto && (
         <button
+          key={totalItens}
           onClick={() => setAberto(true)}
           className="fixed bottom-4 inset-x-4 z-[60] flex items-center justify-between gap-3 bg-neon text-dark-950 font-black rounded-2xl px-5 py-4 shadow-2xl shadow-neon/30 animate-fade-in-up max-w-lg mx-auto"
         >
@@ -173,9 +175,12 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
               <ShoppingCart className="w-5 h-5" />
               <span className="absolute -top-2 -right-2 bg-dark-950 text-neon text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-black">{totalItens}</span>
             </span>
-            Meu orçamento
+            <span className="text-left leading-tight">
+              Fechar meu orçamento
+              <span className="block text-[10px] font-bold opacity-70">{totalItens} {totalItens === 1 ? 'item' : 'itens'} · continue escolhendo</span>
+            </span>
           </span>
-          <span className="flex items-center gap-1.5 text-sm">{fmtBRL(subtotal)} <ArrowRight className="w-4 h-4" /></span>
+          <span className="flex items-center gap-1.5 text-sm shrink-0">{subtotal > 0 ? fmtBRL(subtotal) : ''} <ArrowRight className="w-4 h-4" /></span>
         </button>
       )}
 
@@ -293,12 +298,16 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
 
                 {/* CTA fixo */}
                 {lista.length > 0 && (
-                  <div className="p-4 border-t border-dark-700 shrink-0">
+                  <div className="p-4 border-t border-dark-700 shrink-0 space-y-2">
                     <button onClick={enviar} disabled={enviando}
                       className="w-full flex items-center justify-center gap-2 bg-neon text-dark-950 font-black rounded-xl py-4 hover:bg-neon-dim disabled:opacity-60 transition-colors text-base">
                       {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Gerar meu orçamento <ArrowRight className="w-5 h-5" /></>}
                     </button>
-                    <p className="text-zinc-600 text-[11px] text-center mt-2">Sem compromisso — um especialista confirma tudo com você.</p>
+                    <button onClick={() => setAberto(false)}
+                      className="w-full text-zinc-400 hover:text-white text-sm font-bold py-2 transition-colors">
+                      ← Continuar escolhendo produtos
+                    </button>
+                    <p className="text-zinc-600 text-[11px] text-center">Sem compromisso — um especialista confirma tudo com você.</p>
                   </div>
                 )}
               </>
