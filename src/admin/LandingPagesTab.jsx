@@ -16,13 +16,10 @@ function BuscaCatalogo({ onAdd }) {
   const buscar = async () => {
     if (termo.trim().length < 3) return;
     setBuscando(true);
-    const { data } = await supabase
-      .from('produtos')
-      .select('codigo_sku, nome, preco, preco_avista, peso_kg')
-      .ilike('nome', `%${termo.trim()}%`)
-      .gt('preco', 0)
-      .order('peso_kg', { ascending: true, nullsFirst: false })
-      .limit(30);
+    // cada palavra vira um filtro independente — "Bumper Black" acha "Anilha Black Bumper 2.0"
+    let q = supabase.from('produtos').select('codigo_sku, nome, preco, preco_avista, peso_kg');
+    for (const palavra of termo.trim().split(/\s+/)) q = q.ilike('nome', `%${palavra}%`);
+    const { data } = await q.order('peso_kg', { ascending: true, nullsFirst: false }).limit(40);
     setResultados(data || []);
     setBuscando(false);
   };
@@ -41,22 +38,27 @@ function BuscaCatalogo({ onAdd }) {
       </div>
       {resultados !== null && (
         <div className="max-h-48 overflow-y-auto space-y-1 border border-dark-700 rounded-lg p-2 bg-dark-950/50">
-          {resultados.length === 0 && <p className="text-[11px] text-zinc-600 p-1">Nada com preço no catálogo pra "{termo}". Tenta outro termo.</p>}
+          {resultados.length === 0 && <p className="text-[11px] text-zinc-600 p-1">Nada no catálogo pra "{termo}". Tenta menos palavras (ex.: só "Bumper").</p>}
           {resultados.map((p, i) => {
             const preco = Number(p.preco_avista) > 0 ? Number(p.preco_avista) : Number(p.preco);
             const peso = Number(p.peso_kg) || 0;
+            const temPreco = preco > 0;
             return (
-              <button key={i}
+              <button key={i} disabled={!temPreco}
                 onClick={() => onAdd({
                   rotulo: peso > 0 ? `${String(peso).replace('.', ',')} kg` : (p.codigo_sku || p.nome.slice(0, 12)),
                   preco, peso, sku: p.codigo_sku || '',
                 })}
-                className="w-full flex items-center justify-between gap-2 text-left px-2 py-1.5 rounded-lg hover:bg-orange-500/10 group">
+                className={`w-full flex items-center justify-between gap-2 text-left px-2 py-1.5 rounded-lg group ${temPreco ? 'hover:bg-orange-500/10' : 'opacity-50 cursor-not-allowed'}`}>
                 <span className="text-[11px] text-zinc-300 truncate">{p.nome} <span className="text-zinc-600">({p.codigo_sku})</span></span>
-                <span className="text-[11px] font-bold text-orange-400 shrink-0 flex items-center gap-1">
-                  R$ {preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100" />
-                </span>
+                {temPreco ? (
+                  <span className="text-[11px] font-bold text-orange-400 shrink-0 flex items-center gap-1">
+                    R$ {preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-zinc-600 shrink-0">sem preço no Bling</span>
+                )}
               </button>
             );
           })}
