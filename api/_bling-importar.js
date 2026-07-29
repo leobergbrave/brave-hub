@@ -299,9 +299,14 @@ export default async function handler(req, res) {
     if (mode === 'inspecionar-sku') {
       const { sku } = req.body || {};
       if (!sku) return res.status(400).json({ ok: false, error: 'Informe o sku.' });
-      const resBusca = await blingGet(`/produtos?codigo=${encodeURIComponent(sku)}&limite=10`, token);
-      const jBusca = resBusca.ok ? await resBusca.json() : null;
-      const encontrados = jBusca?.data || [];
+      let encontrados = [];
+      for (const q of [`codigos[]=${encodeURIComponent(sku)}`, `codigo=${encodeURIComponent(sku)}`, `nome=${encodeURIComponent(sku)}`]) {
+        await sleep(300);
+        const r = await blingGet(`/produtos?${q}&limite=10`, token);
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j?.data?.length) { encontrados = j.data; break; }
+      }
       const detalhes = [];
       for (const p of encontrados.slice(0, 3)) {
         const d = await fetchProdutoDetalhe(p.id, token);
