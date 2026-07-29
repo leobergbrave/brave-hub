@@ -313,6 +313,7 @@ export default async function handler(req, res) {
 
       let corrigidos = 0, semPeso = 0;
       const naoEncontrados = [];
+      const erros = [];
       for (const local of alvo) {
         // SKUs locais usam ponto (DBO17.5); no Bling estao com virgula (DBO17,5)
         const skuUp = local.codigo_sku.trim().toUpperCase();
@@ -324,18 +325,19 @@ export default async function handler(req, res) {
         const det = await fetchProdutoDetalhe(b.id, token);
         const peso = parseFloat(det?.pesoBruto || det?.pesoLiquido || 0);
         if (!(peso > 0)) semPeso++;
+        // sem bling_id: a coluna pode nao existir (mesmo fallback do upsertProduto)
         const { error } = await supabaseAdmin.from('produtos').update({
           preco: parseFloat(b.preco),
           ...(peso > 0 ? { peso_kg: peso } : {}),
           ...(det?.nome ? { nome: det.nome } : {}),
-          bling_id: b.id,
         }).eq('id', local.id);
         if (!error) corrigidos++;
+        else if (erros.length < 5) erros.push(`${local.codigo_sku}: ${error.message}`);
       }
 
       log('corrigir-variantes', 'info', 'Correção concluída', { alvo: alvo.length, corrigidos, semPeso, naoEncontrados: naoEncontrados.length });
       return res.status(200).json({
-        ok: true, alvo: alvo.length, corrigidos, semPeso,
+        ok: true, alvo: alvo.length, corrigidos, semPeso, erros,
         naoEncontrados: naoEncontrados.slice(0, 60),
         totalNaoEncontrados: naoEncontrados.length,
       });
