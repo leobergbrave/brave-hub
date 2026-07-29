@@ -294,6 +294,49 @@ export default async function handler(req, res) {
     const token = await getValidToken(true);
     if (!token) return res.status(500).json({ ok: false, error: 'Sem token Bling. Reconecte nas configurações.' });
 
+    // Corrige as linhas locais corrompidas (preco=0, peso com valor de preço, nome
+    // truncado — herança de importação antiga). Cirúrgico: SÓ mexe em produtos com
+    // preco<=0 que casam por SKU no Bling; preços curados manualmente ficam intactos.
+    if (mode === 'corrigir-variantes') {
+      const { data: corrompidos } = await supabaseAdmin
+        .from('produtos')
+        .select('id, codigo_sku, nome, preco, peso_kg')
+        .or('preco.is.null,preco.lte.0')
+        .not('codigo_sku', 'is', null);
+      const alvo = (corrompidos || []).filter(p => (p.codigo_sku || '').trim());
+      if (!alvo.length) return res.status(200).json({ ok: true, corrigidos: 0, mensagem: 'Nenhum produto com preço zerado.' });
+
+      // mapa codigo→produto da listagem completa do Bling (a lista já traz o preço)
+      const listaBling = await fetchProdutosLista(token, 20, false);
+      const porCodigo = new Map();
+      for (const b of listaBling) if (b.codigo) porCodigo.set(String(b.codigo).trim().toUpperCase(), b);
+
+      let corrigidos = 0, semPeso = 0;
+      const naoEncontrados = [];
+      for (const local of alvo) {
+        const b = porCodigo.get(local.codigo_sku.trim().toUpperCase());
+        if (!b || !(parseFloat(b.preco) > 0)) { naoEncontrados.push(local.codigo_sku); continue; }
+        // peso real só existe no detalhe
+        const det = await fetchProdutoDetalhe(b.id, token);
+        const peso = parseFloat(det?.pesoBruto || det?.pesoLiquido || 0);
+        if (!(peso > 0)) semPeso++;
+        const { error } = await supabaseAdmin.from('produtos').update({
+          preco: parseFloat(b.preco),
+          ...(peso > 0 ? { peso_kg: peso } : {}),
+          ...(det?.nome ? { nome: det.nome } : {}),
+          bling_id: b.id,
+        }).eq('id', local.id);
+        if (!error) corrigidos++;
+      }
+
+      log('corrigir-variantes', 'info', 'Correção concluída', { alvo: alvo.length, corrigidos, semPeso, naoEncontrados: naoEncontrados.length });
+      return res.status(200).json({
+        ok: true, alvo: alvo.length, corrigidos, semPeso,
+        naoEncontrados: naoEncontrados.slice(0, 60),
+        totalNaoEncontrados: naoEncontrados.length,
+      });
+    }
+
     // Inspeção pontual: como o Bling devolve UM produto específico (por SKU)?
     // Usado pra diagnosticar variantes com preco=0 / peso trocado. Só leitura.
     if (mode === 'inspecionar-sku') {
