@@ -17,14 +17,18 @@ export default async function handler(req, res) {
 
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  // URL da automação de CONTATO no BotConversa (diferente da automação do vigia,
-  // que avisa o Léo). Config/env podem sobrescrever a padrão.
-  let webhook = process.env.BOTCONVERSA_CONTATO_WEBHOOK
-    || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
+  // Automações de CONTATO no BotConversa (distintas do vigia, que avisa o Léo),
+  // uma por canal: FSS manda a mensagem COM o link do orçamento; a padrão
+  // (Entrada Rápida / Tiago) usa {equipamentos}, sem link.
+  const ehFss = String(origem || '').toUpperCase() === 'FSS';
+  let webhook = ehFss
+    ? 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/EPSbPfdggLNq/'
+    : 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
   try {
     const { data: cfg } = await supabase.from('prospeccao_config').select('*').eq('id', 1).maybeSingle();
-    if (cfg?.webhook_contato) webhook = cfg.webhook_contato;
-  } catch { /* coluna pode não existir ainda */ }
+    if (ehFss && cfg?.webhook_contato_fss) webhook = cfg.webhook_contato_fss;
+    if (!ehFss && cfg?.webhook_contato) webhook = cfg.webhook_contato;
+  } catch { /* colunas podem não existir */ }
 
   try {
     const r = await fetch(webhook, {
