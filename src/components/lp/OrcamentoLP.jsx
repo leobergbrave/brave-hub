@@ -24,7 +24,7 @@ export function AddButton({ item, className = '', label = 'Adicionar ao orçamen
         jaTem ? 'bg-neon/15 text-neon border border-neon/40' : 'bg-neon text-dark-950 hover:bg-neon-dim'
       } ${className}`}
     >
-      {jaTem ? <><Check className="w-4 h-4" /> No orçamento ({jaTem.qtd})</> : <><Plus className="w-4 h-4" /> {label}</>}
+      {jaTem ? <><Check className="w-4 h-4" /> No orçamento ({jaTem.qtd}) · ajustar</> : <><Plus className="w-4 h-4" /> {label}</>}
     </button>
   );
 }
@@ -86,15 +86,18 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
   const [enviando, setEnviando] = useState(false);
   const [sucesso, setSucesso] = useState(null);  // { link } | null
   const [erro, setErro]       = useState('');
+  const [sheetKey, setSheetKey] = useState(null); // item recém-tocado → aba de quantidade
 
-  // Adicionar NÃO abre a gaveta — comportamento de loja: o item vai pra sacola,
-  // o cliente segue navegando e abre a sacola (barra flutuante) quando quiser fechar.
+  // Adicionar abre a ABA DE QUANTIDADE (bottom sheet), não a gaveta inteira.
+  // Item novo entra com qtd 1; item que já está no orçamento só reabre a aba
+  // pra ajustar a quantidade (tocar de novo não soma +1 escondido).
   const add = useCallback((item) => {
     const key = item.key || item.alias || item.sku || item.nome;
     setItens(prev => {
-      const atual = prev[key];
-      return { ...prev, [key]: { ...item, key, qtd: (atual?.qtd || 0) + 1 } };
+      if (prev[key]) return prev;
+      return { ...prev, [key]: { ...item, key, qtd: 1 } };
     });
+    setSheetKey(key);
     setFrete(null);
   }, []);
 
@@ -162,6 +165,73 @@ export function OrcamentoProvider({ origem, titulo, waNumber, children }) {
   return (
     <Ctx.Provider value={{ add, itens, totalItens }}>
       {children}
+
+      {/* ── Aba de quantidade (abre ao tocar num produto) ── */}
+      {sheetKey && itens[sheetKey] && !aberto && (() => {
+        const it = itens[sheetKey];
+        return (
+          <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSheetKey(null)} />
+            <div className="relative w-full sm:max-w-md bg-dark-900 border-t sm:border border-dark-700 rounded-t-3xl sm:rounded-3xl animate-fade-in-up">
+              <div className="w-10 h-1 rounded-full bg-dark-600 mx-auto mt-3 sm:hidden" />
+
+              {/* produto escolhido */}
+              <div className="flex items-center gap-4 px-5 pt-4 pb-3">
+                <div className="w-16 h-16 rounded-xl bg-dark-800 overflow-hidden flex items-center justify-center shrink-0">
+                  {it.img ? <img src={it.img} alt={it.nome} className="w-full h-full object-contain p-1.5" /> : <span className="text-3xl opacity-40">🏋️</span>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-black text-base leading-tight">{it.nome}</p>
+                  {it.variante && <p className="text-neon text-sm font-bold mt-0.5">{it.variante}</p>}
+                  {Number(it.preco) > 0
+                    ? <p className="text-zinc-400 text-sm mt-0.5">{fmtBRL(it.preco)} <span className="text-zinc-600 text-xs">/ unidade</span></p>
+                    : <p className="text-amber-400/90 text-xs mt-0.5">valor a confirmar com o especialista</p>}
+                </div>
+                <button onClick={() => setSheetKey(null)} className="p-2 text-zinc-500 hover:text-white rounded-lg self-start">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* quantidade — grande, dedo-friendly */}
+              <div className="px-5 py-4 border-y border-dark-700/70 bg-dark-800/30">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3 text-center">Quantidade</p>
+                <div className="flex items-center justify-center gap-6">
+                  <button onClick={() => setQtd(it.key, -1)}
+                    className="w-14 h-14 rounded-2xl bg-dark-700 text-white flex items-center justify-center active:scale-95 hover:bg-dark-600 transition-all">
+                    {it.qtd <= 1 ? <Trash2 className="w-5 h-5 text-red-400" /> : <Minus className="w-6 h-6" />}
+                  </button>
+                  <span className="text-white font-black text-5xl w-20 text-center tabular-nums">{it.qtd}</span>
+                  <button onClick={() => setQtd(it.key, 1)}
+                    className="w-14 h-14 rounded-2xl bg-neon text-dark-950 flex items-center justify-center active:scale-95 hover:bg-neon-dim transition-all">
+                    <Plus className="w-6 h-6" />
+                  </button>
+                </div>
+                {Number(it.preco) > 0 && (
+                  <p className="text-center text-sm mt-3 text-zinc-400">
+                    Este item: <span className="text-neon font-black">{fmtBRL(it.preco * it.qtd)}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* resumo + ações */}
+              <div className="p-5 space-y-2.5">
+                <div className="flex justify-between text-sm text-zinc-400">
+                  <span>Seu orçamento ({totalItens} {totalItens === 1 ? 'item' : 'itens'})</span>
+                  <span className="text-white font-black">{fmtBRL(subtotal)}</span>
+                </div>
+                <button onClick={() => setSheetKey(null)}
+                  className="w-full bg-neon text-dark-950 font-black rounded-xl py-4 text-base active:scale-[0.99] hover:bg-neon-dim transition-all">
+                  Continuar escolhendo
+                </button>
+                <button onClick={() => { setSheetKey(null); setAberto(true); }}
+                  className="w-full bg-dark-800 border border-dark-600 text-white font-bold rounded-xl py-3.5 text-sm hover:border-neon/40 transition-colors flex items-center justify-center gap-2">
+                  <ShoppingCart className="w-4 h-4" /> Fechar meu orçamento <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Sacola flutuante (aparece com ≥1 item; re-anima a cada item novo) ── */}
       {totalItens > 0 && !aberto && (
