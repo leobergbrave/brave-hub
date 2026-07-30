@@ -343,6 +343,55 @@ export default async function handler(req, res) {
       });
     }
 
+    // Importa SÓ os produtos do Bling que ainda não existem localmente (por SKU).
+    // Usa apenas a listagem (rápido, sem detalhe por produto — não estoura timeout);
+    // o peso vem parseado do nome ("...32kg" → 32; "...25LB" → 11.3).
+    if (mode === 'importar-faltantes') {
+      const lista = await fetchProdutosLista(token, 20, true);
+      const comCodigo = lista.filter(p => p.codigo && String(p.codigo).trim());
+
+      const { data: locais } = await supabaseAdmin.from('produtos').select('codigo_sku');
+      const locaisSet = new Set((locais || []).map(l => (l.codigo_sku || '').trim().toUpperCase()));
+      // considera ponto/vírgula equivalentes (DBO17.5 ≡ DBO17,5)
+      const temLocal = (sku) => {
+        const s = sku.trim().toUpperCase();
+        return locaisSet.has(s) || locaisSet.has(s.replace(/,/g, '.')) || locaisSet.has(s.replace(/\./g, ','));
+      };
+
+      const pesoDoNome = (nome) => {
+        const m = String(nome || '').match(/(\d+(?:[.,]\d+)?)\s*(kg|lb)s?\b/i);
+        if (!m) return null;
+        const n = parseFloat(m[1].replace(',', '.'));
+        if (!(n > 0)) return null;
+        return m[2].toLowerCase() === 'lb' ? Math.round(n * 0.4536 * 10) / 10 : n;
+      };
+
+      const novos = comCodigo.filter(b => !temLocal(String(b.codigo)));
+      const linhas = novos.map(b => ({
+        nome: b.nome || 'Produto Bling',
+        codigo_sku: String(b.codigo).trim(),
+        preco: parseFloat(b.preco) || 0,
+        peso_kg: pesoDoNome(b.nome),
+        origem: 'bling',
+      }));
+
+      let inseridos = 0;
+      const errosIns = [];
+      for (let i = 0; i < linhas.length; i += 100) {
+        const lote = linhas.slice(i, i + 100);
+        const { error, count } = await supabaseAdmin.from('produtos').insert(lote, { count: 'exact' });
+        if (error) { if (errosIns.length < 3) errosIns.push(error.message); continue; }
+        inseridos += count ?? lote.length;
+      }
+
+      log('importar-faltantes', 'info', 'Concluído', { totalBling: comCodigo.length, novos: novos.length, inseridos });
+      return res.status(200).json({
+        ok: true, totalBling: comCodigo.length, jaExistiam: comCodigo.length - novos.length,
+        novos: novos.length, inseridos, semPreco: linhas.filter(l => !(l.preco > 0)).length,
+        erros: errosIns,
+      });
+    }
+
     // Inspeção pontual: como o Bling devolve UM produto específico (por SKU)?
     // Usado pra diagnosticar variantes com preco=0 / peso trocado. Só leitura.
     if (mode === 'inspecionar-sku') {

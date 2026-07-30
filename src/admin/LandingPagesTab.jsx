@@ -16,9 +16,16 @@ function BuscaCatalogo({ onAdd }) {
   const buscar = async () => {
     if (termo.trim().length < 3) return;
     setBuscando(true);
-    // cada palavra vira um filtro independente — "Bumper Black" acha "Anilha Black Bumper 2.0"
+    // cada palavra vira um filtro independente (nome OU sku) — "Bumper Black" acha
+    // "Anilha Black Bumper 2.0" e "KB32" acha por SKU. Token numérico tipo "32kg"
+    // vira "%32%" pra casar "32kg", "32 kg" e "032kg".
     let q = supabase.from('produtos').select('codigo_sku, nome, preco, preco_avista, peso_kg');
-    for (const palavra of termo.trim().split(/\s+/)) q = q.ilike('nome', `%${palavra}%`);
+    for (const palavra of termo.trim().split(/\s+/)) {
+      const m = palavra.match(/^(\d+[.,]?\d*)(kg|lb)?$/i);
+      const p = (m ? m[1] : palavra).replace(/[%,()]/g, '');
+      if (!p) continue;
+      q = q.or(`nome.ilike.%${p}%,codigo_sku.ilike.%${p}%`);
+    }
     const { data } = await q.order('peso_kg', { ascending: true, nullsFirst: false }).limit(40);
     setResultados(data || []);
     setBuscando(false);
