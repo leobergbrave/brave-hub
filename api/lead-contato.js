@@ -24,9 +24,10 @@ export default async function handler(req, res) {
   //   SEM link (Entrada Rápida — orçamento vem depois): fluxo de {equipamentos}.
   const org = String(origem || '').toUpperCase();
   const temLink = !!(link && String(link).trim());
-  const W_COM_LINK = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/EPSbPfdggLNq/';
-  const W_SEM_LINK = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
-  let webhook = temLink ? W_COM_LINK : W_SEM_LINK;
+  const W_FSS_LINK   = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/EPSbPfdggLNq/';
+  const W_TIAGO_LINK = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/3tZyKf8phu7S/';
+  const W_SEM_LINK   = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
+  let webhook = !temLink ? W_SEM_LINK : (org === 'TIAGO' ? W_TIAGO_LINK : W_FSS_LINK);
   try {
     const { data: cfg } = await supabase.from('prospeccao_config').select('*').eq('id', 1).maybeSingle();
     if (temLink && org === 'TIAGO' && cfg?.webhook_contato_tiago) webhook = cfg.webhook_contato_tiago;
