@@ -637,6 +637,9 @@ export default function App() {
 
       // Canal FSS: dispara automaticamente a 1ª mensagem de WhatsApp pro cliente
       // (do número do Léo, via BotConversa) com o link do orçamento.
+      if (origemFinal === 'FSS' && (telefoneCliente || '').replace(/\D/g, '').length < 10) {
+        showToastMessage('⚠️ Origem FSS sem telefone do cliente — WhatsApp NÃO disparado.', true);
+      }
       if (origemFinal === 'FSS' && (telefoneCliente || '').replace(/\D/g, '').length >= 10) {
         fetch('/api/lead-contato', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -664,7 +667,7 @@ export default function App() {
       const btnGerarLink = document.getElementById('btn-gerar-link');
       if (btnGerarLink) btnGerarLink.disabled = false;
     }
-  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, showToastMessage, fetchHistorico]);
+  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, origemLead, origemCustom, showToastMessage, fetchHistorico]);
 
   // ── Template Handlers ──
   const handleCarregarModelo = useCallback((modelo) => {
