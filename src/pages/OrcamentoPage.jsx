@@ -407,9 +407,10 @@ export default function OrcamentoPage() {
     if (error) { console.error('add cliente:', error); return; }
     setOrcamentoSalvo(prev => ({ ...prev, payload: novoPayload }));
     setQtds(prev => ({ ...prev, [id]: 1 }));
-    fetch('/api/orcamento-adicionado', {
+    fetch('/api/lead-contato', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        acao: 'orcamento-adicionado',
         slug, cliente: orcamentoSalvo.cliente, produto: nomeCompleto,
         valor: Number(novo.preco) || 0, link: window.location.href,
       }),
