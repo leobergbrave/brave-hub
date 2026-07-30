@@ -17,6 +17,132 @@ function fmt(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+const normTxt = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+function lpImgUrl(url) {
+  if (!url) return '';
+  const m = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/) || url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w400` : url;
+}
+
+/* ── "Adicionar mais produtos" — o cliente busca no catálogo curado das LPs
+   (preços definidos pelo Léo) e adiciona ao próprio orçamento. ── */
+function AdicionarProdutos({ onAdd }) {
+  const [catalogo, setCatalogo] = useState(null);
+  const [busca, setBusca] = useState('');
+  const [chipsAbertos, setChipsAbertos] = useState(null); // nome do produto expandido
+  const [flash, setFlash] = useState('');
+
+  useEffect(() => {
+    supabase.from('landing_pages_config').select('id, config')
+      .in('id', ['ergometros', 'hyrox-oficial', 'crossfit-box'])
+      .then(({ data }) => {
+        const lista = [];
+        const vistos = new Set();
+        (data || []).forEach(row => (row.config?.produtos || []).forEach(p => {
+          const nome = (p.nome || '').trim();
+          if (!nome) return;
+          const k = normTxt(nome);
+          if (vistos.has(k)) return;
+          vistos.add(k);
+          lista.push({
+            nome,
+            img: lpImgUrl(p.img_url || ''),
+            preco: Number(p.preco_avista) || 0,
+            variantes: Array.isArray(p.variantes) ? p.variantes.filter(v => v.rotulo) : [],
+          });
+        }));
+        setCatalogo(lista);
+      });
+  }, []);
+
+  const resultados = useMemo(() => {
+    const q = normTxt(busca.trim());
+    if (q.length < 2 || !catalogo) return [];
+    const palavras = q.split(/\s+/);
+    return catalogo.filter(p => { const n = normTxt(p.nome); return palavras.every(w => n.includes(w)); }).slice(0, 8);
+  }, [busca, catalogo]);
+
+  const adicionar = (p, variante) => {
+    onAdd({
+      nome: p.nome,
+      variante: variante?.rotulo || null,
+      preco: variante ? (Number(variante.preco) || 0) : p.preco,
+      peso: variante ? (Number(variante.peso) || 0) : 0,
+      img: p.img,
+    });
+    const rotulo = variante ? `${p.nome} ${variante.rotulo}` : p.nome;
+    setFlash(rotulo);
+    setTimeout(() => setFlash(''), 2500);
+    setChipsAbertos(null);
+  };
+
+  return (
+    <section className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 pb-6">
+      <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-5 sm:p-7">
+        <h3 className="text-gray-900 font-black text-lg sm:text-xl mb-1">Quer adicionar mais equipamentos? 🏋️</h3>
+        <p className="text-zinc-500 text-sm mb-4">Digite o que procura — o item entra no seu orçamento na hora, e nosso especialista já fica sabendo.</p>
+
+        <input
+          value={busca}
+          onChange={e => { setBusca(e.target.value); setChipsAbertos(null); }}
+          placeholder="Ex.: kettlebell, remo, anilha, sled…"
+          className="w-full bg-white border border-gray-300 text-gray-900 text-base rounded-xl px-4 py-3.5 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 placeholder:text-zinc-400"
+        />
+
+        {flash && (
+          <p className="mt-3 text-sm font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-xl px-4 py-2.5">
+            ✅ "{flash}" adicionado ao seu orçamento!
+          </p>
+        )}
+
+        {busca.trim().length >= 2 && catalogo && resultados.length === 0 && (
+          <p className="mt-3 text-sm text-zinc-500">Nada encontrado pra "{busca}". Tenta outra palavra — ou fala com o especialista no WhatsApp que ele encontra pra você.</p>
+        )}
+
+        {resultados.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {resultados.map((p) => (
+              <div key={p.nome} className="bg-white border border-gray-200 rounded-xl p-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                    {p.img ? <img src={p.img} alt={p.nome} className="w-full h-full object-contain p-1" /> : <span className="text-xl opacity-30">🏋️</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-900 text-sm font-bold leading-tight">{p.nome}</p>
+                    {p.variantes.length > 0
+                      ? <p className="text-zinc-500 text-xs mt-0.5">{p.variantes.length} opções de peso</p>
+                      : (p.preco > 0
+                        ? <p className="text-emerald-600 text-sm font-black mt-0.5">{fmt(p.preco)} <span className="text-[10px] font-bold text-zinc-400">à vista</span></p>
+                        : <p className="text-amber-600 text-xs mt-0.5">valor sob consulta</p>)}
+                  </div>
+                  <button
+                    onClick={() => p.variantes.length > 0 ? setChipsAbertos(chipsAbertos === p.nome ? null : p.nome) : adicionar(p)}
+                    className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black px-4 py-2.5 rounded-xl active:scale-95 transition-all"
+                  >
+                    {p.variantes.length > 0 ? (chipsAbertos === p.nome ? 'Fechar' : 'Escolher peso') : '+ Adicionar'}
+                  </button>
+                </div>
+                {chipsAbertos === p.nome && p.variantes.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
+                    {p.variantes.map((v) => (
+                      <button key={v.rotulo} onClick={() => adicionar(p, v)}
+                        className="flex flex-col items-center rounded-xl px-3 py-2 min-w-[64px] border border-gray-200 bg-gray-50 hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition-all">
+                        <span className="text-sm font-black text-gray-900 leading-none">{v.rotulo}</span>
+                        <span className="text-[10px] mt-1 font-bold text-emerald-600">{Number(v.preco) > 0 ? fmt(Number(v.preco)) : 'consultar'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function OrcamentoPage() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
@@ -262,6 +388,34 @@ export default function OrcamentoPage() {
     return { ...orcamento, itens, pesoTotal, totalAvista, totalCartao, parcelaValor };
   }, [orcamento, qtds]);
 
+  // Cliente adiciona produto do catálogo das LPs: entra no payload salvo do
+  // orçamento (preço congelado da LP) e o Léo é avisado no WhatsApp.
+  const adicionarProdutoCliente = useCallback(async (novo) => {
+    if (!orcamentoSalvo) return;
+    const id = 'cli:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const nomeCompleto = novo.variante ? `${novo.nome} ${novo.variante}` : novo.nome;
+    const item = {
+      id, nome: nomeCompleto, quantidade: 1, q: 1,
+      preco: Number(novo.preco) || 0,
+      preco_avista: Number(novo.preco) || null,
+      peso_kg: Number(novo.peso) || 0,
+      url_imagem: novo.img || '',
+      adicionado_cliente: true,
+    };
+    const novoPayload = { ...orcamentoSalvo.payload, itens: [...(orcamentoSalvo.payload.itens || []), item] };
+    const { error } = await supabase.from('orcamentos_salvos').update({ payload: novoPayload }).eq('id', orcamentoSalvo.id);
+    if (error) { console.error('add cliente:', error); return; }
+    setOrcamentoSalvo(prev => ({ ...prev, payload: novoPayload }));
+    setQtds(prev => ({ ...prev, [id]: 1 }));
+    fetch('/api/orcamento-adicionado', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug, cliente: orcamentoSalvo.cliente, produto: nomeCompleto,
+        valor: Number(novo.preco) || 0, link: window.location.href,
+      }),
+    }).catch(() => {});
+  }, [orcamentoSalvo, slug]);
+
   const handleNegociarProjeto = useCallback(() => {
     if (!activeOrcamento) return;
     const texto = `Olá ${activeOrcamento.consultor}! Analisei o orçamento no valor de ${fmt(activeOrcamento.totalAvista)} à vista / ${fmt(activeOrcamento.totalCartao)} parcelado. Podemos conversar sobre o projeto?`;
@@ -495,6 +649,10 @@ export default function OrcamentoPage() {
         </div>
       </section>
 
+      {/* ══════════════════════════════════════════
+          2.5 ADICIONAR MAIS PRODUTOS (busca no catálogo das LPs)
+          ══════════════════════════════════════════ */}
+      {orcamentoSalvo && <AdicionarProdutos onAdd={adicionarProdutoCliente} />}
 
       {/* ══════════════════════════════════════════
           3. RESUMO FINANCEIRO
