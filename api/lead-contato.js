@@ -18,19 +18,13 @@ export default async function handler(req, res) {
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   // URL da automação de CONTATO no BotConversa (diferente da automação do vigia,
-  // que avisa o Léo). Lê da config de prospecção se existir; senão, env.
-  let webhook = process.env.BOTCONVERSA_CONTATO_WEBHOOK || null;
+  // que avisa o Léo). Config/env podem sobrescrever a padrão.
+  let webhook = process.env.BOTCONVERSA_CONTATO_WEBHOOK
+    || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
   try {
     const { data: cfg } = await supabase.from('prospeccao_config').select('*').eq('id', 1).maybeSingle();
     if (cfg?.webhook_contato) webhook = cfg.webhook_contato;
   } catch { /* coluna pode não existir ainda */ }
-
-  if (!webhook) {
-    return res.status(200).json({
-      ok: false,
-      error: 'Webhook de contato não configurado. Crie a automação "Contato Brave HUB" no BotConversa e salve a URL do catch.',
-    });
-  }
 
   try {
     const r = await fetch(webhook, {
