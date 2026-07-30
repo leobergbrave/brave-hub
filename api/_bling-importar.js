@@ -367,12 +367,12 @@ export default async function handler(req, res) {
       };
 
       const novos = comCodigo.filter(b => !temLocal(String(b.codigo)));
+      // sem 'origem'/'bling_id': essas colunas podem não existir (mesmo fallback do upsertProduto)
       const linhas = novos.map(b => ({
         nome: b.nome || 'Produto Bling',
         codigo_sku: String(b.codigo).trim(),
         preco: parseFloat(b.preco) || 0,
         peso_kg: pesoDoNome(b.nome),
-        origem: 'bling',
       }));
 
       let inseridos = 0;
