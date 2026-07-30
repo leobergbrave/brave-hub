@@ -174,7 +174,7 @@ export default function App() {
         setNomeCliente(orc.cliente || '');
         setNomeConsultor(orc.consultor || 'LEO BERG');
         const orig = orc.origem_lead || '';
-        const ORIGENS_FIXAS = ['FSS', 'RD STATION', 'ENVIADO BRAVE', 'UAIROX', 'INDICAÇÃO'];
+        const ORIGENS_FIXAS = ['FSS', 'TIAGO', 'UAIROX', 'INDICAÇÃO'];
         if (ORIGENS_FIXAS.includes(orig)) { setOrigemLead(orig); setOrigemCustom(''); }
         else if (orig) { setOrigemLead('PERSONALIZADO'); setOrigemCustom(orig); }
         else { setOrigemLead(''); setOrigemCustom(''); }
@@ -635,15 +635,16 @@ export default function App() {
       navigator.clipboard.writeText(link).catch(() => {});
       showToastMessage('Link gerado e copiado para a área de transferência!');
 
-      // Canal FSS: dispara automaticamente a 1ª mensagem de WhatsApp pro cliente
-      // (do número do Léo, via BotConversa) com o link do orçamento.
-      if (origemFinal === 'FSS' && (telefoneCliente || '').replace(/\D/g, '').length < 10) {
-        showToastMessage('⚠️ Origem FSS sem telefone do cliente — WhatsApp NÃO disparado.', true);
+      // Canais FSS e TIAGO: disparam automaticamente a 1ª mensagem de WhatsApp
+      // pro cliente (do número do Léo, via BotConversa) com o link do orçamento.
+      const disparaAuto = origemFinal === 'FSS' || origemFinal === 'TIAGO';
+      if (disparaAuto && (telefoneCliente || '').replace(/\D/g, '').length < 10) {
+        showToastMessage(`⚠️ Origem ${origemFinal} sem telefone do cliente — WhatsApp NÃO disparado.`, true);
       }
-      if (origemFinal === 'FSS' && (telefoneCliente || '').replace(/\D/g, '').length >= 10) {
+      if (disparaAuto && (telefoneCliente || '').replace(/\D/g, '').length >= 10) {
         fetch('/api/lead-contato', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: telefoneCliente, nome: nomeCliente || 'Cliente Brave', link, origem: 'FSS', titulo: 'Orçamento BRAVE' }),
+          body: JSON.stringify({ telefone: telefoneCliente, nome: nomeCliente || 'Cliente Brave', link, origem: origemFinal, titulo: 'Orçamento BRAVE' }),
         })
           .then(r => r.json())
           .then(j => showToastMessage(j.ok ? '📲 WhatsApp de abertura enviado ao cliente!' : 'Orçamento salvo, mas o WhatsApp não saiu: ' + (j.error || ''), !j.ok))
@@ -1480,8 +1481,7 @@ export default function App() {
                     className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all">
                     <option value="">Selecione a origem...</option>
                     <option value="FSS">FSS (dispara WhatsApp automático)</option>
-                    <option value="RD STATION">RD Station</option>
-                    <option value="ENVIADO BRAVE">Enviado Brave</option>
+                    <option value="TIAGO">Tiago (dispara WhatsApp automático)</option>
                     <option value="UAIROX">Uairox</option>
                     <option value="INDICAÇÃO">Indicação</option>
                     <option value="PERSONALIZADO">Personalizado</option>

@@ -51,7 +51,7 @@ export default function EntradaRapidaTab() {
         body: JSON.stringify({
           telefone: dados.telefone,
           nome: dados.nome || 'Cliente Brave',
-          origem: 'ENVIADO BRAVE',
+          origem: 'TIAGO',
           titulo: 'Indicação Tiago',
           equipamentos: dados.equipamentos,
         }),

@@ -17,17 +17,21 @@ export default async function handler(req, res) {
 
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  // Automações de CONTATO no BotConversa (distintas do vigia, que avisa o Léo),
-  // uma por canal: FSS manda a mensagem COM o link do orçamento; a padrão
-  // (Entrada Rápida / Tiago) usa {equipamentos}, sem link.
-  const ehFss = String(origem || '').toUpperCase() === 'FSS';
-  let webhook = ehFss
-    ? 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/EPSbPfdggLNq/'
-    : 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
+  // Automações de CONTATO no BotConversa (distintas do vigia, que avisa o Léo).
+  // Roteamento por origem + presença de link:
+  //   COM link (orçamento pronto): FSS → fluxo FSS; TIAGO → fluxo próprio (ou o
+  //   do FSS enquanto não existir automação dedicada).
+  //   SEM link (Entrada Rápida — orçamento vem depois): fluxo de {equipamentos}.
+  const org = String(origem || '').toUpperCase();
+  const temLink = !!(link && String(link).trim());
+  const W_COM_LINK = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/EPSbPfdggLNq/';
+  const W_SEM_LINK = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
+  let webhook = temLink ? W_COM_LINK : W_SEM_LINK;
   try {
     const { data: cfg } = await supabase.from('prospeccao_config').select('*').eq('id', 1).maybeSingle();
-    if (ehFss && cfg?.webhook_contato_fss) webhook = cfg.webhook_contato_fss;
-    if (!ehFss && cfg?.webhook_contato) webhook = cfg.webhook_contato;
+    if (temLink && org === 'TIAGO' && cfg?.webhook_contato_tiago) webhook = cfg.webhook_contato_tiago;
+    else if (temLink && cfg?.webhook_contato_fss) webhook = cfg.webhook_contato_fss;
+    else if (!temLink && cfg?.webhook_contato) webhook = cfg.webhook_contato;
   } catch { /* colunas podem não existir */ }
 
   try {
