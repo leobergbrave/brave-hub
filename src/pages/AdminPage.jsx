@@ -20,12 +20,14 @@ import LandingPagesTab from '../admin/LandingPagesTab';
 import ModelosTab from '../admin/ModelosTab';
 import ComboErgoTab from '../admin/ComboErgoTab';
 import ProdutosErgoTab from '../admin/ProdutosErgoTab';
+import EntradaRapidaTab from '../admin/EntradaRapidaTab';
 
 
 const NAV_SECTIONS = [
   {
     label: 'COMERCIAL',
     items: [
+      { id: 'entradarapida', label: 'Entrada Rápida',   icon: Sparkles },
       { id: 'leads',      label: 'Leads',               icon: Users },
       { id: 'clientes',   label: 'Clientes',            icon: BookUser },
       { id: 'contatos',   label: 'Contatos',            icon: BookUser },
@@ -89,6 +91,7 @@ export default function AdminPage() {
       case 'dashboard':  return <DashboardTab />;
       case 'cockpit':    return <CockpitTab />;
       case 'leads':      return <LeadsTab />;
+      case 'entradarapida': return <EntradaRapidaTab />;
       case 'clientes':   return <ClientesTab onNavigate={handleTabChange} />;
       case 'contatos':   return <ContatosTab />;
       case 'prospeccao': return <ProspeccaoTab />;
