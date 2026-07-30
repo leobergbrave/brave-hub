@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Globe, Edit2, ExternalLink, Plus, Trash2, ChevronDown, ChevronRight,
@@ -141,7 +141,20 @@ export default function LandingPagesTab() {
   const [jsonErro, setJsonErro]       = useState('');
   const [toast, setToast]             = useState('');
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+  const showToast = (msg, ms = 3000) => { setToast(msg); setTimeout(() => setToast(''), ms); };
+
+  // Foto do form no momento em que o editor abriu — base pra detectar alterações não salvas
+  const origRef = useRef('');
+  const snap = (f) => JSON.stringify({ titulo: f.titulo, wa_number: f.wa_number, config: f.config });
+  const dirty = form ? snap(form) !== origRef.current : false;
+
+  // Aviso do navegador ao fechar/recarregar com edição pendente
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [dirty]);
 
   const fetchPaginas = async () => {
     setLoading(true);
@@ -155,28 +168,52 @@ export default function LandingPagesTab() {
   const iniciarEdicao = (pagina) => {
     setEditando(pagina.id);
     const cfg = JSON.parse(JSON.stringify(pagina.config || {}));
-    setForm({ ...pagina, config: cfg });
+    const f = { ...pagina, config: cfg };
+    setForm(f);
+    origRef.current = snap(f);
     setJsonRaw(JSON.stringify(cfg, null, 2));
     setJsonErro('');
     setSecao('geral');
     setProdAberto(null);
   };
 
-  const cancelar = () => { setEditando(null); setForm(null); };
+  const cancelar = () => {
+    if (dirty && !window.confirm('Você tem alterações NÃO salvas nesta página. Descartar mesmo assim?')) return;
+    setEditando(null); setForm(null);
+  };
 
   const salvar = async () => {
     if (!editando || !form) return;
     setSalvando(true);
     try {
-      const { error } = await supabase
+      // Trava otimista: só grava se ninguém salvou esta página depois que o editor
+      // foi aberto (updated_at igual ao que carregamos). Evita que uma aba antiga
+      // sobrescreva silenciosamente o que foi salvo em outra aba.
+      let q = supabase
         .from('landing_pages_config')
         .update({ titulo: form.titulo, wa_number: form.wa_number, config: form.config, updated_at: new Date().toISOString() })
         .eq('id', editando);
+      q = form.updated_at ? q.eq('updated_at', form.updated_at) : q;
+      const { data, error } = await q.select('updated_at');
       if (error) throw error;
+
+      if (!data || data.length === 0) {
+        // conflito: a página foi salva em outra aba/janela depois que abrimos aqui
+        const { data: fresh } = await supabase.from('landing_pages_config').select('updated_at').eq('id', editando).maybeSingle();
+        if (fresh) setForm(f => ({ ...f, updated_at: fresh.updated_at }));
+        showToast('⚠️ NADA foi gravado: esta página foi salva em outra aba depois que você abriu este editor. Se quiser sobrescrever com o que está NESTA tela, clique Salvar de novo.', 9000);
+        return;
+      }
+
+      setForm(f => {
+        const nf = { ...f, updated_at: data[0].updated_at };
+        origRef.current = snap(nf);
+        return nf;
+      });
       showToast('✅ Página salva com sucesso!');
       await fetchPaginas();
     } catch (e) {
-      showToast('❌ ' + e.message);
+      showToast('❌ ' + e.message, 6000);
     } finally {
       setSalvando(false);
     }
@@ -440,7 +477,7 @@ export default function LandingPagesTab() {
                 className="flex items-center gap-1.5 text-xs text-white bg-orange-500 hover:bg-orange-400 disabled:opacity-50 px-4 py-2 rounded-lg transition-all font-bold"
               >
                 {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                Salvar
+                {dirty ? 'Salvar •' : 'Salvar'}
               </button>
             </div>
           </div>
@@ -815,7 +852,7 @@ export default function LandingPagesTab() {
               className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white font-bold text-sm px-6 py-3 rounded-xl transition-all"
             >
               {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar Página
+              {dirty ? 'Salvar Página — alterações pendentes' : 'Salvar Página'}
             </button>
           </div>
         </div>
