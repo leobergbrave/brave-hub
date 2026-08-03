@@ -146,6 +146,17 @@ export default async function handler(req, res) {
   }
 
   // 5. Criar ou atualizar contato no Bling
+  // Bling v3: o documento vai em numeroDocumento (cpfCnpj era a API antiga — a v3
+  // ignora) e o endereço precisa ir aninhado em endereco.geral (plano é descartado).
+  const enderecoBling = {
+    endereco: df.logradouro || '',
+    numero: df.numero || '',
+    complemento: df.complemento || '',
+    bairro: df.bairro || '',
+    municipio: df.cidade || '',
+    uf: df.estado || '',
+    cep: (df.cep || '').replace(/\D/g, ''),
+  };
   const contatoPayload = {
     nome: cliente.nome,
     tipo: isPJ ? 'J' : 'F',
@@ -154,20 +165,12 @@ export default async function handler(req, res) {
     emailNotaFiscal: cliente.email || '',
     telefone: cliente.telefone || '',
     celular: cliente.telefone || '',
-    ...(cpfLimpo ? { cpfCnpj: cpfLimpo } : {}),
+    ...(cpfLimpo ? { numeroDocumento: cpfLimpo, cpfCnpj: cpfLimpo } : {}),
     ...(isPJ
       ? { fantasia: df.nomeFantasia || '', ie: df.inscricaoEstadual || '' }
-      : { dataNascimento: df.dataNascimento || '' }),
-    endereco: {
-      endereco: df.logradouro || '',
-      numero: df.numero || '',
-      complemento: df.complemento || '',
-      bairro: df.bairro || '',
-      municipio: df.cidade || '',
-      uf: df.estado || '',
-      cep: (df.cep || '').replace(/\D/g, ''),
-      pais: 'Brasil',
-    },
+      : {}),
+    ...(!isPJ && df.dataNascimento ? { dadosAdicionais: { dataNascimento: df.dataNascimento } } : {}),
+    endereco: { geral: enderecoBling, cobranca: enderecoBling },
   };
 
   await sleep(300);

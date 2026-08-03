@@ -141,29 +141,74 @@ Deno.serve(async (req) => {
     
     await sleep(400); // Evitar rate limit (max 3 req/sec)
 
-    // 2. Buscar ou Criar Contato
+    // 2. Buscar ou Criar Contato — enriquecido com o cadastro local do cliente
+    // (CPF/CNPJ, telefone, email e endereço), no formato da API v3:
+    // documento em numeroDocumento e endereço aninhado em endereco.geral.
+    let cliLocal: any = null;
+    try {
+      const telCli = String(payload?.telefoneCliente || '').replace(/\D/g, '');
+      if (telCli.length >= 10) {
+        const { data } = await supabaseClient.from('clientes').select('*').eq('telefone', telCli).maybeSingle();
+        cliLocal = data;
+      }
+      if (!cliLocal) {
+        const { data } = await supabaseClient.from('clientes').select('*').ilike('nome', nomeCliente).maybeSingle();
+        cliLocal = data;
+      }
+    } catch (_) { /* segue sem enriquecimento */ }
+
+    const dfCli = cliLocal?.dados_fiscais || {};
+    const cpfCli = String(cliLocal?.cpf_cnpj || dfCli.cpfCnpj || '').replace(/\D/g, '');
+    const isPJCli = (cliLocal?.tipo_pessoa || dfCli.tipoPessoa || 'F') === 'J';
+    const endCli = {
+      endereco: dfCli.logradouro || '',
+      numero: dfCli.numero || '',
+      complemento: dfCli.complemento || '',
+      bairro: dfCli.bairro || '',
+      municipio: dfCli.cidade || '',
+      uf: dfCli.estado || '',
+      cep: String(dfCli.cep || '').replace(/\D/g, ''),
+    };
+
     let idContato = null;
-    const resContBusca = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?pesquisa=${encodeURIComponent(nomeCliente)}`, { method: 'GET' }, supabaseClient);
-    
-    if (resContBusca.ok) {
-      const contData = await resContBusca.json();
-      if (contData && contData.data && contData.data.length > 0) {
-        idContato = contData.data[0].id;
+    // CPF primeiro (match exato); nome como fallback
+    if (cpfCli) {
+      const resDoc = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?cpf_cnpj=${cpfCli}`, { method: 'GET' }, supabaseClient);
+      if (resDoc.ok) {
+        const j = await resDoc.json();
+        const match = (j?.data || []).find((c: any) =>
+          String(c.numeroDocumento || c.cpfCnpj || '').replace(/\D/g, '') === cpfCli);
+        idContato = match?.id || null;
+      }
+      await sleep(400);
+    }
+    if (!idContato) {
+      const resContBusca = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?pesquisa=${encodeURIComponent(nomeCliente)}`, { method: 'GET' }, supabaseClient);
+      if (resContBusca.ok) {
+        const contData = await resContBusca.json();
+        if (contData && contData.data && contData.data.length > 0) {
+          idContato = contData.data[0].id;
+        }
       }
     }
 
     await sleep(400);
 
     if (!idContato) {
-      // Criar Contato
+      // Criar Contato completo
       const resContCria = await fetchWithBlingAuth('https://api.bling.com.br/v3/contatos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nome: nomeCliente,
-          tipo: 'F', // F = Física, J = Jurídica (como padrão vamos de F)
+          tipo: isPJCli ? 'J' : 'F',
           situacao: 'A',
-          contribuinte: 9 // 9 = Não contribuinte
+          contribuinte: 9, // 9 = Não contribuinte
+          ...(cpfCli ? { numeroDocumento: cpfCli, cpfCnpj: cpfCli } : {}),
+          ...(cliLocal?.email ? { email: cliLocal.email, emailNotaFiscal: cliLocal.email } : {}),
+          ...(cliLocal?.telefone ? { telefone: cliLocal.telefone, celular: cliLocal.telefone } : {}),
+          ...(isPJCli ? { fantasia: dfCli.nomeFantasia || '', ie: dfCli.inscricaoEstadual || '' } : {}),
+          ...(endCli.endereco || endCli.cep ? { endereco: { geral: endCli, cobranca: endCli } } : {}),
         })
       }, supabaseClient);
 
