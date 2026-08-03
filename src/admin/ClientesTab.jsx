@@ -1217,6 +1217,9 @@ export default function ClientesTab({ onNavigate }) {
                           <p className="text-xs mt-0.5">ID: {blingEnvioResult.propostaId}</p>
                         )}
                         <p className="text-xs mt-0.5 text-green-400/70">Total: {formatCurrency(blingEnvioResult.total || 0)}</p>
+                        {blingEnvioResult.vendedor && (
+                          <p className="text-xs mt-0.5 text-green-400/70">Vendedor: {blingEnvioResult.vendedor}</p>
+                        )}
                         {blingEnvioResult.itensSemBling?.length > 0 && (
                           <p className="text-xs mt-1.5 text-amber-400">
                             ⚠ {blingEnvioResult.itensSemBling.length} iten(s) sem ID Bling — importe os produtos para vincular:

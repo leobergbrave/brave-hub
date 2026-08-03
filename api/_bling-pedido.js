@@ -234,18 +234,48 @@ export default async function handler(req, res) {
   }
 
   // 8. Buscar vendedor no Bling (obrigatorio para propostas-comerciais)
+  //
+  // A versao antiga fazia .toLowerCase().includes("leo") — mas "Léo Berg" em
+  // minusculas continua "léo berg" (o E tem acento), entao NUNCA casava, e o
+  // fallback lista[0] pegava o primeiro vendedor da conta (Lais Carlos). Por isso
+  // as propostas saiam no nome errado.
+  //
+  // Agora: BLING_VENDEDOR_ID (se definido) manda; senao match por nome SEM acento,
+  // exato e depois parcial inequivoco. Sem match, erra explicito em vez de
+  // atribuir a proposta a outra pessoa em silencio.
+  const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const alvoVend = semAcento(orc.consultor || 'Leo Berg');
+
   let idVendedor = null;
-  await sleep(300);
-  const vendRes = await blingRequest("https://api.bling.com.br/v3/vendedores", "GET", null, token);
-  if (vendRes?.ok) {
-    const vendData = await vendRes.json();
-    const lista = vendData?.data || [];
-    const match = lista.find(v => (v.contato?.nome || "").toLowerCase().includes("leo"));
-    idVendedor = match?.id || lista[0]?.id || null;
+  let vendedorNome = null;
+  const idFixoVend = process.env.BLING_VENDEDOR_ID;
+  if (idFixoVend) {
+    idVendedor = isNaN(Number(idFixoVend)) ? idFixoVend : Number(idFixoVend);
+    vendedorNome = `(fixo por BLING_VENDEDOR_ID)`;
+  } else {
+    await sleep(300);
+    const vendRes = await blingRequest("https://api.bling.com.br/v3/vendedores", "GET", null, token);
+    if (vendRes?.ok) {
+      const vendData = await vendRes.json();
+      const lista = (vendData?.data || []).filter(v => (v?.contato?.nome || '').trim());
+      let match = lista.find(v => semAcento(v.contato.nome) === alvoVend);
+      if (!match && alvoVend.length >= 3) {
+        const parciais = lista.filter(v => {
+          const n = semAcento(v.contato.nome);
+          return n.length >= 3 && (n.includes(alvoVend) || alvoVend.includes(n));
+        });
+        if (parciais.length === 1) match = parciais[0]; // so aceita se for inequivoco
+      }
+      if (match) { idVendedor = match.id; vendedorNome = match.contato.nome; }
+    }
   }
   if (!idVendedor) {
-    return res.status(200).json({ ok: false, error: "Nenhum vendedor encontrado no Bling." });
+    return res.status(200).json({
+      ok: false,
+      error: `Vendedor "${orc.consultor || 'Léo Berg'}" não encontrado no Bling. Confira o nome do consultor no orçamento (ou defina BLING_VENDEDOR_ID).`,
+    });
   }
+  console.log('[Bling proposta] vendedor:', idVendedor, vendedorNome);
 
   // 9. Calcular total
   const totalItens = itens.reduce((acc, i) => acc + i.valor * i.quantidade, 0);
@@ -298,6 +328,7 @@ export default async function handler(req, res) {
     contatoId,
     propostaId,
     propostaNumero,
+    vendedor: vendedorNome,
     total: totalProposta,
     itensSemBling: itensSemBling.length > 0 ? itensSemBling : undefined,
   });
