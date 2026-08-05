@@ -149,7 +149,12 @@ export default async function handler(req, res) {
     const { data } = await supabaseAdmin.from('pedidos_avisados').select('bling_pedido_id').in('bling_pedido_id', ids);
     jaAvisados = new Set((data || []).map(d => String(d.bling_pedido_id)));
   }
-  const pendentes = atendidos.filter(p => !jaAvisados.has(String(p.id)));
+  // Teto por rodada: o cron-job.org corta em 30s (limite do plano free). O que
+  // sobrar é pego na rodada seguinte — o dedupe garante que ninguém repete.
+  const limite = Number(req.body?.limite || req.query?.limite || 10);
+  const todosPendentes = atendidos.filter(p => !jaAvisados.has(String(p.id)));
+  const pendentes = todosPendentes.slice(0, limite);
+  const adiados = todosPendentes.length - pendentes.length;
 
   const urlCliente = process.env.BOTCONVERSA_PEDIDO_ENVIADO_WEBHOOK
     || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/2HkzWVzdknYs/';
@@ -250,8 +255,9 @@ export default async function handler(req, res) {
     vendedor: vendedorLeo,
     pedidosVarridos: pedidos.length,
     atendidos: atendidos.length,
-    jaAvisados: atendidos.length - pendentes.length,
+    jaAvisados: atendidos.length - todosPendentes.length,
     processados: resultado.length,
+    ...(adiados > 0 ? { adiadosParaProximaRodada: adiados } : {}),
     resultado,
     ...(modo === 'enviar' && !urlCliente
       ? { aviso: 'BOTCONVERSA_PEDIDO_ENVIADO_WEBHOOK não configurado — o cliente não foi avisado.' }
