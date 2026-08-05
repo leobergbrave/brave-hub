@@ -147,7 +147,8 @@ export default async function handler(req, res) {
   }
   const pendentes = atendidos.filter(p => !jaAvisados.has(String(p.id)));
 
-  const urlCliente = process.env.BOTCONVERSA_PEDIDO_ENVIADO_WEBHOOK || null;
+  const urlCliente = process.env.BOTCONVERSA_PEDIDO_ENVIADO_WEBHOOK
+    || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/2HkzWVzdknYs/';
   const urlLeo = process.env.BOTCONVERSA_WEBHOOK
     || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
   const telLeo = process.env.ALERTA_TELEFONE || '5548996459791';
@@ -199,10 +200,18 @@ export default async function handler(req, res) {
     }
     const telefoneFull = telefone.startsWith('55') ? telefone : '55' + telefone;
 
+    // Só o primeiro nome — "Oi Maria" soa melhor que "Oi Maria Aparecida da Silva".
+    // Em pedido de empresa o Bling traz a razão social; nesse caso mantemos inteiro.
+    const primeiroNome = /ltda|me|eireli|s\.?a\.?$/i.test(nome) ? nome : String(nome).split(/\s+/)[0];
+    const mensagem = `Oi ${primeiroNome}! Aqui é o Léo, da BRAVE 🏋️\n\n` +
+      `Boa notícia: seu pedido${numero ? ` #${numero}` : ''} saiu para entrega 📦\n\n` +
+      `Qualquer dúvida sobre a entrega, é só me chamar aqui!`;
+
     let enviado = false;
     if (urlCliente) {
       enviado = await avisar(urlCliente, {
-        telefone: telefoneFull, nome, numero_pedido: numero,
+        telefone: telefoneFull, nome, primeiro_nome: primeiroNome,
+        numero_pedido: numero, mensagem,
         rastreio: codigo, link_rastreio: url,
       });
     }
