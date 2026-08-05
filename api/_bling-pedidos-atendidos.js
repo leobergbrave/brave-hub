@@ -97,6 +97,10 @@ export default async function handler(req, res) {
 
   const modo = req.body?.modo || req.query?.modo || 'listar';
   const dias = Number(req.body?.dias || req.query?.dias || 7);
+  // Teste ponta a ponta sem incomodar cliente: manda a mensagem real (do fluxo
+  // real, com dados reais do pedido) para este telefone em vez do comprador.
+  // Nada é marcado como avisado, então o disparo de verdade continua pendente.
+  const telefoneTeste = soDigitos(req.body?.telefoneTeste || req.query?.telefoneTeste);
 
   // Sem a tabela de controle não dá para enviar: a cada rodada do cron o mesmo
   // cliente receberia a mensagem de novo. Barra antes de mandar qualquer coisa.
@@ -194,11 +198,12 @@ export default async function handler(req, res) {
 
     if (modo !== 'enviar') { resultado.push({ ...item, acao: 'simulado' }); continue; }
 
-    if (!telefone || telefone.length < 10) {
+    if (!telefoneTeste && (!telefone || telefone.length < 10)) {
       resultado.push({ ...item, acao: 'sem-telefone' });
       continue;
     }
-    const telefoneFull = telefone.startsWith('55') ? telefone : '55' + telefone;
+    const telDestino = telefoneTeste || telefone;
+    const telefoneFull = telDestino.startsWith('55') ? telDestino : '55' + telDestino;
 
     // Só o primeiro nome — "Oi Maria" soa melhor que "Oi Maria Aparecida da Silva".
     // Em pedido de empresa o Bling traz a razão social; nesse caso mantemos inteiro.
@@ -223,6 +228,11 @@ export default async function handler(req, res) {
     });
 
     let erroRegistro = null;
+    if (telefoneTeste) {
+      // teste não consome o pedido: ele segue pendente para o disparo real
+      resultado.push({ ...item, destinoTeste: telefoneFull, acao: enviado ? 'teste-enviado' : 'teste-falhou' });
+      continue;
+    }
     if (enviado) {
       const { error } = await supabaseAdmin.from('pedidos_avisados').insert({
         bling_pedido_id: String(p.id), numero: String(numero), cliente_nome: nome,
