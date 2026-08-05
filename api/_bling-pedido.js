@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { buscarContatoBling } from './_bling-contato-busca.js';
 
 /**
  * POST /api/enviar-bling-pedido
@@ -100,7 +101,11 @@ export default async function handler(req, res) {
 
   // Address: fiscal form as base (more complete), client dados_fiscais overrides if set
   const df = { ...dfFiscal, ...(cliente.dados_fiscais || {}) };
-  const isPJ = (cliente.tipo_pessoa || dfFiscal.tipoPessoa || 'F') === 'J';
+  // O Bling valida documento x tipo: CPF (11 digitos) exige F, CNPJ (14) exige J.
+  // Documento com tamanho invalido e descartado, senao o cadastro e recusado.
+  const tipoDoc = cpfLimpo.length === 14 ? 'J' : cpfLimpo.length === 11 ? 'F' : null;
+  const docValido = tipoDoc ? cpfLimpo : '';
+  const isPJ = tipoDoc ? tipoDoc === 'J' : (cliente.tipo_pessoa || dfFiscal.tipoPessoa || 'F') === 'J';
 
   // Persist CPF back to client record if it was found from the fiscal form but missing in clientes
   if (!cliente.cpf_cnpj && cpfLimpo) {
@@ -110,40 +115,15 @@ export default async function handler(req, res) {
       .then(() => {}).catch(() => {});
   }
 
-  // 4. Buscar contato existente no Bling (CPF/CNPJ primeiro, depois email como fallback)
-  let contatoId = null;
-
-  if (cpfLimpo) {
-    await sleep(300);
-    const searchRes = await blingRequest(
-      `https://api.bling.com.br/v3/contatos?cpf_cnpj=${cpfLimpo}`, 'GET', null, token
-    );
-    if (searchRes?.ok) {
-      const j = await searchRes.json();
-      const match = (j.data || []).find(c => {
-        const docBling = (c.numeroDocumento || c.cpfCnpj || c.cpf || c.cnpj || '').replace(/\D/g, '');
-        return docBling === cpfLimpo;
-      });
-      contatoId = match?.id || null;
-    }
-  }
-
-  // Fallback: buscar por email se CPF vazio ou sem match
-  if (!contatoId && cliente.email) {
-    await sleep(300);
-    const emailRes = await blingRequest(
-      `https://api.bling.com.br/v3/contatos?email=${encodeURIComponent(cliente.email)}`, 'GET', null, token
-    );
-    if (emailRes?.ok) {
-      const j = await emailRes.json();
-      const emailLower = (cliente.email || '').toLowerCase();
-      const match = (j.data || []).find(c => (c.email || '').toLowerCase() === emailLower);
-      if (match) {
-        contatoId = match.id;
-        console.log('[Bling contato] Encontrado por email:', contatoId);
-      }
-    }
-  }
+  // 4. Buscar contato existente no Bling (documento → email → nome).
+  // Ver _bling-contato-busca.js: o filtro ?cpf_cnpj= da v3 e ignorado.
+  await sleep(300);
+  const achado = await buscarContatoBling(
+    (path) => blingRequest(`https://api.bling.com.br/v3${path}`, 'GET', null, token),
+    { documento: cpfLimpo, nome: cliente.nome, email: cliente.email }
+  );
+  let contatoId = achado?.id || null;
+  if (achado) console.log('[Bling contato] Encontrado via', achado.via, '→', achado.id, achado.nome);
 
   // 5. Criar ou atualizar contato no Bling
   // Bling v3: o documento vai em numeroDocumento (cpfCnpj era a API antiga — a v3
@@ -165,7 +145,7 @@ export default async function handler(req, res) {
     emailNotaFiscal: cliente.email || '',
     telefone: cliente.telefone || '',
     celular: cliente.telefone || '',
-    ...(cpfLimpo ? { numeroDocumento: cpfLimpo, cpfCnpj: cpfLimpo } : {}),
+    ...(docValido ? { numeroDocumento: docValido } : {}),
     ...(isPJ
       ? { fantasia: df.nomeFantasia || '', ie: df.inscricaoEstadual || '' }
       : {}),

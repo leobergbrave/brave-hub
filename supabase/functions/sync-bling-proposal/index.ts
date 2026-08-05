@@ -158,8 +158,13 @@ Deno.serve(async (req) => {
     } catch (_) { /* segue sem enriquecimento */ }
 
     const dfCli = cliLocal?.dados_fiscais || {};
-    const cpfCli = String(cliLocal?.cpf_cnpj || dfCli.cpfCnpj || '').replace(/\D/g, '');
-    const isPJCli = (cliLocal?.tipo_pessoa || dfCli.tipoPessoa || 'F') === 'J';
+    const docCli = String(cliLocal?.cpf_cnpj || dfCli.cpfCnpj || '').replace(/\D/g, '');
+    // O Bling valida o documento contra o tipo: CPF (11) exige F, CNPJ (14) exige J.
+    // Documento com tamanho invalido e descartado — senao a criacao do contato falha.
+    const tipoDoc = docCli.length === 14 ? 'J' : docCli.length === 11 ? 'F' : null;
+    const cpfCli = tipoDoc ? docCli : '';
+    const tipoCli = tipoDoc || ((cliLocal?.tipo_pessoa || dfCli.tipoPessoa || 'F') === 'J' ? 'J' : 'F');
+    const isPJCli = tipoCli === 'J';
     const endCli = {
       endereco: dfCli.logradouro || '',
       numero: dfCli.numero || '',
@@ -170,47 +175,75 @@ Deno.serve(async (req) => {
       cep: String(dfCli.cep || '').replace(/\D/g, ''),
     };
 
+    // Busca do contato: documento → nome.
+    // CUIDADO: a v3 IGNORA o filtro ?cpf_cnpj= (documento inexistente devolve a
+    // primeira pagina inteira). Os filtros validos sao numeroDocumento e pesquisa.
+    // Era por isso que o contato existente nunca era achado e a criacao falhava
+    // com "O CPF ja esta cadastrado no contato X".
+    const listarContatos = async (query: string) => {
+      try {
+        const r = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?${query}&limite=100`, { method: 'GET' }, supabaseClient);
+        if (!r.ok) return [];
+        const j = await r.json();
+        return j?.data || [];
+      } catch (_) { return []; }
+    };
+
     let idContato = null;
-    // CPF primeiro (match exato); nome como fallback
     if (cpfCli) {
-      const resDoc = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?cpf_cnpj=${cpfCli}`, { method: 'GET' }, supabaseClient);
-      if (resDoc.ok) {
-        const j = await resDoc.json();
-        const match = (j?.data || []).find((c: any) =>
-          String(c.numeroDocumento || c.cpfCnpj || '').replace(/\D/g, '') === cpfCli);
-        idContato = match?.id || null;
+      for (const q of [`numeroDocumento=${cpfCli}`, `pesquisa=${cpfCli}`]) {
+        const lista = await listarContatos(q);
+        const match = lista.find((c: any) =>
+          String(c.numeroDocumento || c.cpfCnpj || c.cpf || c.cnpj || '').replace(/\D/g, '') === cpfCli);
+        if (match) { idContato = match.id; break; }
+        await sleep(400);
       }
-      await sleep(400);
     }
     if (!idContato) {
-      const resContBusca = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos?pesquisa=${encodeURIComponent(nomeCliente)}`, { method: 'GET' }, supabaseClient);
-      if (resContBusca.ok) {
-        const contData = await resContBusca.json();
-        if (contData && contData.data && contData.data.length > 0) {
-          idContato = contData.data[0].id;
-        }
-      }
+      // Só aceita match exato de nome ou resultado único — pegar data[0] cegamente
+      // pendurava a proposta no contato errado.
+      const lista = await listarContatos(`pesquisa=${encodeURIComponent(nomeCliente)}`);
+      const alvoNome = normalize(nomeCliente);
+      const exato = lista.find((c: any) => normalize(c.nome || '') === alvoNome);
+      const match = exato || (lista.length === 1 ? lista[0] : null);
+      if (match) idContato = match.id;
     }
 
     await sleep(400);
 
     if (!idContato) {
-      // Criar Contato completo
-      const resContCria = await fetchWithBlingAuth('https://api.bling.com.br/v3/contatos', {
+      // Criar Contato. O enriquecimento (documento, contato, endereco) e
+      // best-effort: se o Bling recusar o cadastro completo por validacao, cria
+      // o minimo e segue — a proposta nao pode morrer por causa disso.
+      const contatoMinimo = {
+        nome: nomeCliente,
+        tipo: tipoCli,
+        situacao: 'A',
+        contribuinte: 9, // 9 = Não contribuinte
+      };
+      const contatoCompleto = {
+        ...contatoMinimo,
+        ...(cpfCli ? { numeroDocumento: cpfCli } : {}),
+        ...(cliLocal?.email ? { email: cliLocal.email, emailNotaFiscal: cliLocal.email } : {}),
+        ...(cliLocal?.telefone ? { telefone: cliLocal.telefone, celular: cliLocal.telefone } : {}),
+        ...(isPJCli && dfCli.nomeFantasia ? { fantasia: dfCli.nomeFantasia } : {}),
+        ...(isPJCli && dfCli.inscricaoEstadual ? { ie: dfCli.inscricaoEstadual } : {}),
+        ...(endCli.endereco || endCli.cep ? { endereco: { geral: endCli } } : {}),
+      };
+
+      const criarContato = async (corpo: any) => fetchWithBlingAuth('https://api.bling.com.br/v3/contatos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome: nomeCliente,
-          tipo: isPJCli ? 'J' : 'F',
-          situacao: 'A',
-          contribuinte: 9, // 9 = Não contribuinte
-          ...(cpfCli ? { numeroDocumento: cpfCli, cpfCnpj: cpfCli } : {}),
-          ...(cliLocal?.email ? { email: cliLocal.email, emailNotaFiscal: cliLocal.email } : {}),
-          ...(cliLocal?.telefone ? { telefone: cliLocal.telefone, celular: cliLocal.telefone } : {}),
-          ...(isPJCli ? { fantasia: dfCli.nomeFantasia || '', ie: dfCli.inscricaoEstadual || '' } : {}),
-          ...(endCli.endereco || endCli.cep ? { endereco: { geral: endCli, cobranca: endCli } } : {}),
-        })
+        body: JSON.stringify(corpo),
       }, supabaseClient);
+
+      let resContCria = await criarContato(contatoCompleto);
+      if (!resContCria.ok) {
+        const errText = await resContCria.text();
+        console.warn('[sync-bling-proposal] contato completo recusado, tentando minimo:', errText.slice(0, 300));
+        await sleep(400);
+        resContCria = await criarContato(contatoMinimo);
+      }
 
       if (resContCria.ok) {
         const newContData = await resContCria.json();

@@ -8,6 +8,22 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+/* supabase.functions.invoke devolve só "Edge Function returned a non-2xx status
+   code" — a mensagem útil vem no corpo da resposta, dentro de error.context. */
+async function detalharErroEdge(error) {
+  try {
+    const body = await error?.context?.json?.();
+    const msg = body?.error || body?.message;
+    if (msg) return String(msg);
+  } catch (_) {
+    try {
+      const txt = await error?.context?.text?.();
+      if (txt) return txt.slice(0, 400);
+    } catch (__) { /* segue com a mensagem genérica */ }
+  }
+  return error?.message || 'Erro desconhecido';
+}
+
 const STATUS_MAP = {
   Pendente: { icon: Clock, color: 'text-amber-400', bg: 'bg-amber-400/10' },
   Aprovado: { icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
@@ -213,11 +229,11 @@ export default function OrcamentosTab() {
     if (!orc) { alert('Orçamento gerado não encontrado.'); return; }
     if (!confirm('Deseja gerar a proposta no Bling?')) return;
     try {
-      const { error } = await supabase.functions.invoke('sync-bling-proposal', {
+      const { data, error } = await supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: orc.cliente, consultor: orc.consultor, payload: orc.payload },
       });
-      if (error) throw error;
-      alert('Proposta gerada no Bling com sucesso!');
+      if (error) throw new Error(await detalharErroEdge(error));
+      alert(`Proposta gerada no Bling com sucesso!${data?.vendedor?.nome ? `\nVendedor: ${data.vendedor.nome}` : ''}`);
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
   };
 
@@ -485,11 +501,11 @@ export default function OrcamentosTab() {
   const handleGerarBling = async (o) => {
     if (!confirm('Deseja gerar a proposta no Bling para este orçamento?')) return;
     try {
-      const { error } = await supabase.functions.invoke('sync-bling-proposal', {
+      const { data, error } = await supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: o.cliente, consultor: o.consultor, payload: o.payload },
       });
-      if (error) throw error;
-      alert('Proposta gerada no Bling com sucesso!');
+      if (error) throw new Error(await detalharErroEdge(error));
+      alert(`Proposta gerada no Bling com sucesso!${data?.vendedor?.nome ? `\nVendedor: ${data.vendedor.nome}` : ''}`);
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
   };
 
