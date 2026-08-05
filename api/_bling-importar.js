@@ -550,6 +550,27 @@ export default async function handler(req, res) {
       75: 'Parcialmente atendido', 81: 'Verificado NF',
     };
 
+    // Diagnóstico: quais filtros de busca por documento a API v3 realmente respeita?
+    // (descoberto que ?cpf_cnpj= é ignorado — devolve a primeira página inteira)
+    if (mode === 'testar-filtros-contato') {
+      const doc = String(req.body?.cpfCnpj || '00000000000').replace(/\D/g, '');
+      const testes = [`numeroDocumento=${doc}`, `pesquisa=${doc}`, `cpf_cnpj=${doc}`, `criterio=1&pesquisa=${doc}`];
+      const out = [];
+      for (const q of testes) {
+        await sleep(350);
+        const r = await blingGet(`/contatos?${q}&limite=100`, token);
+        let total = null, primeiro = null;
+        if (r.ok) {
+          const j = await r.json();
+          total = (j?.data || []).length;
+          primeiro = j?.data?.[0] ? { nome: j.data[0].nome, doc: j.data[0].numeroDocumento } : null;
+        }
+        out.push({ filtro: q, status: r.status, totalRetornado: total, primeiro });
+      }
+      return res.status(200).json({ ok: true, doc, resultados: out,
+        dica: 'totalRetornado 0 com documento falso = filtro respeitado; 100 = filtro ignorado' });
+    }
+
     if (mode === 'inspecionar-contato') {
       const { cpfCnpj } = req.body;
       const cpfLimpo = (cpfCnpj || '').replace(/\D/g, '');
