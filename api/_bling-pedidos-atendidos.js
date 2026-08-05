@@ -98,6 +98,18 @@ export default async function handler(req, res) {
   const modo = req.body?.modo || req.query?.modo || 'listar';
   const dias = Number(req.body?.dias || req.query?.dias || 7);
 
+  // Sem a tabela de controle não dá para enviar: a cada rodada do cron o mesmo
+  // cliente receberia a mensagem de novo. Barra antes de mandar qualquer coisa.
+  if (modo === 'enviar' || modo === 'marcar-avisados') {
+    const { error: errTabela } = await supabaseAdmin.from('pedidos_avisados').select('bling_pedido_id').limit(1);
+    if (errTabela) {
+      return res.status(200).json({
+        ok: false,
+        error: 'A tabela pedidos_avisados não existe (rode a migration no Supabase). Sem ela o cliente receberia a mesma mensagem a cada checagem. Detalhe: ' + errTabela.message,
+      });
+    }
+  }
+
   const token = await getValidToken();
   if (!token) return res.status(200).json({ ok: false, error: 'Sem token Bling. Reconecte nas configurações.' });
 
@@ -168,6 +180,17 @@ export default async function handler(req, res) {
     const numero = detalhe?.numero || p?.numero || '';
     const item = { pedidoId: String(p.id), numero, nome, telefone, rastreio: codigo, linkRastreio: url };
 
+    // Represa o histórico: marca como avisado SEM enviar. Serve pra ligar a
+    // automação sem disparar aviso retroativo de pedido despachado semanas atrás.
+    if (modo === 'marcar-avisados') {
+      const { error } = await supabaseAdmin.from('pedidos_avisados').insert({
+        bling_pedido_id: String(p.id), numero: String(numero), cliente_nome: nome,
+        telefone: telefone || null, rastreio: codigo || null,
+      });
+      resultado.push({ ...item, acao: error ? 'erro: ' + error.message : 'marcado-sem-enviar' });
+      continue;
+    }
+
     if (modo !== 'enviar') { resultado.push({ ...item, acao: 'simulado' }); continue; }
 
     if (!telefone || telefone.length < 10) {
@@ -190,13 +213,16 @@ export default async function handler(req, res) {
       alerta: `📦 Pedido #${numero} de ${nome} saiu para entrega${codigo ? ` · rastreio ${codigo}` : ''}. ${enviado ? 'Cliente avisado ✅' : '⚠️ Cliente NÃO avisado (automação de cliente não configurada)'}`,
     });
 
+    let erroRegistro = null;
     if (enviado) {
-      await supabaseAdmin.from('pedidos_avisados').insert({
+      const { error } = await supabaseAdmin.from('pedidos_avisados').insert({
         bling_pedido_id: String(p.id), numero: String(numero), cliente_nome: nome,
         telefone: telefoneFull, rastreio: codigo || null,
       });
+      // Se o registro falhar, o cliente seria avisado de novo na próxima rodada.
+      if (error) erroRegistro = error.message;
     }
-    resultado.push({ ...item, acao: enviado ? 'enviado' : 'falhou' });
+    resultado.push({ ...item, acao: enviado ? 'enviado' : 'falhou', ...(erroRegistro ? { erroRegistro } : {}) });
   }
 
   return res.status(200).json({
