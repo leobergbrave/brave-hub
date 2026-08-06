@@ -212,10 +212,20 @@ export default async function handler(req, res) {
 
     // Só o primeiro nome — "Oi Maria" soa melhor que "Oi Maria Aparecida da Silva".
     // Em pedido de empresa o Bling traz a razão social; nesse caso mantemos inteiro.
-    const primeiroNome = /ltda|me|eireli|s\.?a\.?$/i.test(nome) ? nome : String(nome).split(/\s+/)[0];
-    const mensagem = `Oi ${primeiroNome}! Aqui é o Léo, da BRAVE 🏋️\n\n` +
-      `Boa notícia: seu pedido${numero ? ` #${numero}` : ''} saiu para entrega 📦\n\n` +
-      `Qualquer dúvida sobre a entrega, é só me chamar aqui!`;
+    // O Bling costuma guardar nome em CAIXA ALTA; capitalizamos pra não gritar
+    // com o cliente ("Oi RICARDO!" vira "Oi Ricardo!").
+    const ehEmpresa = /ltda|eireli|s\.?a\.?$|\bme\b/i.test(nome);
+    const primeiraPalavra = String(nome).trim().split(/\s+/)[0] || 'tudo bem';
+    const primeiroNome = ehEmpresa
+      ? nome
+      : primeiraPalavra.charAt(0).toUpperCase() + primeiraPalavra.slice(1).toLowerCase();
+
+    const mensagem =
+      `Oi ${primeiroNome}! Aqui é o Léo, da BRAVE 🏋️\n` +
+      `Boa notícia!\n\n` +
+      `📦Seu pedido${numero ? ` #${numero}` : ''} acabou de sair do nosso CD e já está com a transportadora\n\n` +
+      `🚚Em breve vamos receber o rastreio e te enviar pelo e-mail e pelo WhatsApp do nosso time “Sucesso do Cliente” (outro número)\n\n` +
+      `🙋🏽‍♂️Qualquer dúvida sobre a entrega, é só me chamar aqui!`;
 
     let enviado = false;
     if (urlCliente) {
