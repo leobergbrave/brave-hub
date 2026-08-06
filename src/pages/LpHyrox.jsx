@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Check, MessageCircle, Mail, Loader2, Trophy, TrendingUp, Shield } from 'lucide-react';
 import { OrcamentoProvider, AddButton, VarianteChips } from '../components/lp/OrcamentoLP';
+import LogoBrave from '../components/LogoBrave';
 
 const fmtBRL = (v) => Number(v) > 0
   ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -178,7 +179,7 @@ export default function LpHyrox() {
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
         <div className="max-w-6xl mx-auto px-5 py-4">
-          <img src="/logo-lp.png" alt="Brave Fitness" className="h-10 object-contain" />
+          <LogoBrave className="h-10" />
         </div>
       </header>
 
@@ -372,7 +373,7 @@ export default function LpHyrox() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
             <div>
-              <img src="/logo-lp.png" alt="Brave Fitness" className="h-8 object-contain mb-3" />
+              <LogoBrave className="h-8 object-contain mb-3" />
               <p className="text-zinc-600 text-sm">CNPJ: 33.167.844/0001-80</p>
               <a href="mailto:comercial@bravefitness.com.br"
                 className="text-zinc-600 text-sm hover:text-zinc-400 flex items-center gap-1.5 mt-1 transition-colors">

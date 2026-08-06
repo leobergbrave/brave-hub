@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { Mail, Eye, CheckCircle2, XCircle, TrendingUp, Save, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 
-const LOGO_URL = 'https://jisbvqrnnujqgbsfondy.supabase.co/storage/v1/object/public/produtos_media/branding/logo-brave.png';
+// Logo oficial servida pelo próprio site (versionada junto do código, em vez de
+// uma cópia solta no Storage que ninguém lembra de atualizar). Fundo do e-mail
+// é escuro → versão clara. Ver src/components/LogoBrave.jsx.
+const LOGO_URL = 'https://brave-hub-two.vercel.app/brave-claro.png';
 const WHATSAPP_CONSULTOR = 'https://wa.me/5531973446109';
 
 const DEFAULT_CONFIG = {

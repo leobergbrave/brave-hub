@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Check, MessageCircle, Mail, Loader2, Trophy, Package, Shield, Zap, DollarSign, Truck } from 'lucide-react';
 import { OrcamentoProvider, AddButton, VarianteChips } from '../components/lp/OrcamentoLP';
 import { LP_CROSSFIT_DEFAULT } from '../data/lpCrossfitConfig';
+import LogoBrave from '../components/LogoBrave';
 
 const IconInstagram = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -92,7 +93,7 @@ export default function LpCrossfit() {
       {/* ── HEADER ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
         <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
-          <img src="/logo-lp.png" alt="Brave Fitness" className="h-9 md:h-10 object-contain" />
+          <LogoBrave className="h-9 md:h-10" />
           <a href={wa(cfg.wa_msg_geral)} target="_blank" rel="noopener noreferrer"
             className="hidden sm:inline-flex items-center gap-2 bg-neon hover:bg-neon-dim text-dark-950 font-bold text-xs px-4 py-2 rounded-full transition-colors">
             <MessageCircle className="w-4 h-4" />
@@ -278,7 +279,7 @@ export default function LpCrossfit() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
             <div>
-              <img src="/logo-lp.png" alt="Brave Fitness" className="h-8 object-contain mb-3" />
+              <LogoBrave className="h-8 object-contain mb-3" />
               <p className="text-zinc-600 text-sm">CNPJ: 33.167.844/0001-80</p>
               <a href="mailto:contato@bravefitness.com.br"
                 className="text-zinc-600 text-sm hover:text-zinc-400 flex items-center gap-1.5 mt-1 transition-colors">

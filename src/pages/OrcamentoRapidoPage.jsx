@@ -8,6 +8,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { parseMediaUrl, calcularFreteComRegra } from '../data';
 import { InstitutionalFooter } from '../components/BraveCredentials';
+import LogoBrave from '../components/LogoBrave';
 
 /* ═══════════════════════════════════════════════
    ORÇAMENTO RÁPIDO — Página self-service para leads do WhatsApp
@@ -15,7 +16,6 @@ import { InstitutionalFooter } from '../components/BraveCredentials';
    Suporta múltiplos produtos: /orcamento-rapido/remo,esteira,skierg
    ═══════════════════════════════════════════════ */
 
-const LOGO_URL = 'https://jisbvqrnnujqgbsfondy.supabase.co/storage/v1/object/public/produtos_media/brave_logo.png';
 
 // Mapa de capitais por UF — extraído como constante de módulo para evitar duplicação
 const CAPITAIS = {
@@ -476,8 +476,7 @@ export default function OrcamentoRapidoPage() {
 
       {/* ── Header unificado: Logo + Dados + Saudação ── */}
       <header className="relative z-10 bg-white border-b border-gray-100 pt-8 pb-6 px-6 text-center">
-        <img src="/logo-orcamento.png" alt="Brave" className="h-24 sm:h-12 mx-auto mb-3 object-contain"
-          onError={e => { e.target.style.display = 'none'; }} />
+        <LogoBrave tema="escuro" className="h-24 sm:h-12 mx-auto mb-3" />
         <div className="flex items-center justify-center gap-5 flex-wrap mb-4">
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
             <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />

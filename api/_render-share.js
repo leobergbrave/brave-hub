@@ -25,7 +25,9 @@ export default async function handler(req, res) {
   const nomeCurto = cliente.split(' ')[0].toUpperCase();
 
   const baseUrl = `https://${req.headers.host}`;
-  const ogImageUrl = `${baseUrl}/logo-orcamento.png`;
+  // Card 1200x630 com a marca — o antigo era a logo crua (JPEG de fundo branco),
+  // que o WhatsApp exibia com moldura branca e recorte torto.
+  const ogImageUrl = `${baseUrl}/og-brave.png`;
   const redirectUrl = `${baseUrl}/orcamento/${slug}`;
 
   const html = `

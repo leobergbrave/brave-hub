@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { ChevronRight, MessageCircle, Mail, Loader2, Users, FileText } from 'lucide-react';
+import LogoBrave from '../components/LogoBrave';
 
 const IconInstagram = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -105,7 +106,7 @@ export default function LpBoxHibrido() {
       <header className="sticky top-0 z-50 bg-dark-950/95 backdrop-blur-sm border-b border-neon/20">
         <div className="max-w-6xl mx-auto px-5 py-4">
           <div>
-            <img src="/logo-lp.png" alt="Brave Fitness" className="h-10 object-contain" />
+            <LogoBrave className="h-10" />
             <p className="text-[10px] text-zinc-600 mt-0.5 tracking-wide">{cfg.hero.breadcrumb}</p>
           </div>
         </div>
@@ -308,7 +309,7 @@ export default function LpBoxHibrido() {
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
             <div>
-              <img src="/logo-lp.png" alt="Brave Fitness" className="h-8 object-contain mb-3" />
+              <LogoBrave className="h-8 object-contain mb-3" />
               <p className="text-zinc-600 text-sm">CNPJ: 33.167.844/0001-80</p>
               <a href="mailto:comercial@bravefitness.com.br"
                 className="text-zinc-600 text-sm hover:text-zinc-400 flex items-center gap-1.5 mt-1 transition-colors">

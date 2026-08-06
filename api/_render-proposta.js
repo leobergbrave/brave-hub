@@ -63,7 +63,7 @@ export function gerarHTML(proposta) {
   <meta name="description" content="${proposta.objetivo || 'Equipamentos BRAVE'} — proposta preparada exclusivamente para ${primeiroNome}.">
   <meta property="og:title" content="Proposta Exclusiva — ${primeiroNome} | BRAVE" />
   <meta property="og:description" content="${proposta.objetivo || 'Confira os equipamentos selecionados especialmente para você.'}" />
-  <meta property="og:image" content="https://brave-hub-two.vercel.app/logo-orcamento.png" />
+  <meta property="og:image" content="https://brave-hub-two.vercel.app/og-brave.png" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="BRAVE Equipamentos" />
   <link rel="preconnect" href="https://fonts.googleapis.com">

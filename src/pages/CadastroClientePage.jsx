@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Loader2, AlertCircle, Building2, User, MapPin, Phone, CreditCard, Search, Shield } from 'lucide-react';
 import { InstitutionalFooter } from '../components/BraveCredentials';
+import LogoBrave from '../components/LogoBrave';
 
 function formatCpf(v) {
   return v.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2').slice(0, 14);
@@ -135,7 +136,7 @@ export default function CadastroClientePage() {
   if (sucesso) return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
       <div className="text-center max-w-sm">
-        <img src="/logo-orcamento.png" alt="Brave" className="h-12 object-contain mx-auto mb-8" />
+        <LogoBrave tema="escuro" className="h-12 mx-auto mb-8" />
         <div className="w-20 h-20 rounded-full bg-green-100 border border-green-200 flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 className="w-10 h-10 text-green-600" />
         </div>
@@ -158,11 +159,7 @@ export default function CadastroClientePage() {
       {/* ── Header com logo preta ─────────────────────────────────────────── */}
       <div className="max-w-lg mx-auto mb-8">
         <div className="text-center mb-6">
-          <img
-            src="/logo-orcamento.png"
-            alt="Brave"
-            className="h-14 object-contain mx-auto mb-5"
-          />
+          <LogoBrave tema="escuro" className="h-14 mx-auto mb-5" />
           <h1 className="text-2xl font-black text-gray-900 uppercase tracking-widest mb-2">
             Cadastro de Cliente
           </h1>

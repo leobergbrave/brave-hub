@@ -8,6 +8,7 @@ import {
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
 import { supabase } from '../lib/supabase';
 import { InstitutionalFooter } from '../components/BraveCredentials';
+import LogoBrave from '../components/LogoBrave';
 
 /* ═══════════════════════════════════════════════
    VITRINE DO CLIENTE — Orçamento Final
@@ -457,7 +458,7 @@ export default function OrcamentoPage() {
       <header className="relative z-10 pt-10 pb-6 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
-            <img src="/logo-orcamento.png" alt="Brave" className="h-24 sm:h-14 object-contain" />
+            <LogoBrave tema="escuro" className="h-24 sm:h-14" />
             <div className="text-right">
               <h1 className="text-lg sm:text-xl font-black text-gray-900 uppercase tracking-widest">Proposta Comercial</h1>
               <p className="text-[11px] text-zinc-500 mt-0.5">Equipamentos de alta performance</p>
