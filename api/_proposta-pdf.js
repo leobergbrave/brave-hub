@@ -76,6 +76,49 @@ function linkPdf(orc, t, versao) {
   return { tipo: t.tipo, nome, url: `${base}/pdf/${orc.slug}/${t.tipo}/v${v}/${encodeURIComponent(nome)}` };
 }
 
+const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/* Resumo em texto dos valores, para o cliente ter os números na conversa sem
+   precisar abrir o PDF. Repete a mesma conta da edge fn sync-bling-proposal
+   (preço do item, senão preço de tabela com o desconto da condição) para que o
+   texto e o documento do Bling nunca divirjam. */
+function montarResumo(orc, temDuas) {
+  const p = orc.payload || {};
+  const itens = p.itens || [];
+  const frete = Number(p.frete) || 0;
+  const descAvista = Number(p.condicoes?.descontoAvista) || 0;
+  const descPrazo = Number(p.condicoes?.descontoCartao) || 0;
+  const parcelas = Number(p.condicoes?.parcelas) || 12;
+
+  const soma = (campo, descPct) => itens.reduce((acc, i) => {
+    const tabela = Number(i.preco) || 0;
+    const unit = i[campo] != null ? Number(i[campo]) : tabela * (1 - descPct / 100);
+    return acc + unit * (Number(i.quantidade) || 0);
+  }, 0);
+
+  const totalAvista = soma('preco_avista', descAvista) + frete;
+  const totalPrazo = soma('preco_prazo', descPrazo) + frete;
+  const valorParcela = parcelas > 0 ? totalPrazo / parcelas : totalPrazo;
+
+  if (!itens.length) {
+    return '✅ Sua proposta está pronta! Qualquer dúvida é só me chamar por aqui!';
+  }
+  if (!temDuas) {
+    return `✅ Sua proposta está pronta!\n\nValor total: *${brl(totalAvista)}* (frete incluso)\n\nQualquer dúvida é só me chamar por aqui!`;
+  }
+  return [
+    '✅ Sua proposta está pronta! Enviei as duas condições:',
+    '',
+    `💰 *À VISTA: ${brl(totalAvista)}*`,
+    '(melhor desconto, frete já incluso)',
+    '',
+    `💳 *A PRAZO: ${brl(totalPrazo)}*`,
+    `em até ${parcelas}x de ${brl(valorParcela)}`,
+    '',
+    'Qualquer dúvida é só me chamar por aqui!',
+  ].join('\n');
+}
+
 /* Propostas criadas antes de guardarmos o numero — resolve consultando a API do
    Bling pelos ids sem numero salvo, mais recentes primeiro, até achar a que
    bate. Cada consulta preenche a coluna, então o custo é pago uma vez só. */
@@ -314,22 +357,19 @@ async function despacharPdfs(orc) {
 
   const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
 
-  /* Texto de abertura herdado do fluxo do BotConversa que disparava ao salvar o
-     orçamento. Aquele fluxo mandava o LINK do orçamento (proibido pela
-     diretoria) e foi desligado — mas a conversa que ele abria funcionava bem,
-     então o mesmo tom veio para cá, agora com as propostas oficiais anexadas.
-     A frase da central só cabe a quem veio da central: nos outros canais o Léo
-     já está falando com o cliente no próprio WhatsApp. */
+  /* Só o lead da central (FSS) recebe apresentação: para ele esta é a primeira
+     mensagem no WhatsApp do consultor, e o texto vem do fluxo do BotConversa
+     que fazia esse papel (fluxo desligado por mandar o LINK do orçamento).
+     Nos demais canais — TIAGO inclusive — a conversa já está em andamento, e
+     reapresentar-se soaria automatizado: ali vão só as propostas e o fechamento. */
   const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0].toUpperCase();
-  const daCentral = ['FSS', 'TIAGO'].includes(String(orc.origem_lead || '').toUpperCase());
+  const daCentral = String(orc.origem_lead || '').toUpperCase() === 'FSS';
   const consultor = orc.consultor || 'Léo Berg';
 
-  const aberturas = [
+  const aberturas = daCentral ? [
     `Fala ${primeiroNome} tudo bem?\n${consultor} da BRAVE aqui👍`,
-    daCentral
-      ? 'Estamos nos falando ali pelo número da central, mas estou te enviando o orçamento por aqui também para fazer a melhor negociação pra você'
-      : 'Conforme combinamos, estou te enviando o orçamento aqui para fazer a melhor negociação pra você',
-  ];
+    'Estamos nos falando ali pelo número da central, mas estou te enviando o orçamento por aqui também para fazer a melhor negociação pra você',
+  ] : [];
 
   for (const texto of aberturas) {
     const r = await enviar({ type: 'text', value: texto });
@@ -348,16 +388,14 @@ async function despacharPdfs(orc) {
   }
 
   if (enviados.length > 0) {
-    // Fechamento explicando as duas condições — o cliente recebe dois arquivos
-    // parecidos e precisa saber qual é qual sem abrir os dois.
+    /* Fechamento com os valores por escrito: o cliente recebe dois arquivos
+       parecidos e precisa saber qual é qual — e quanto dá — sem abrir os dois.
+       Os números saem do payload do próprio orçamento (mesma conta que gerou as
+       propostas no Bling), nunca de leitura do PDF: valor errado numa proposta
+       comercial é problema sério, e cálculo não erra onde interpretação erra. */
     const temDuas = enviados.includes('avista') && enviados.includes('prazo');
     await sleep(700);
-    await enviar({
-      type: 'text',
-      value: temDuas
-        ? '✅ Sua proposta está pronta! Enviei as duas condições:\n\n💰 À VISTA — com o melhor desconto\n💳 A PRAZO — parcelado\n\nQualquer dúvida é só me chamar por aqui!'
-        : '✅ Sua proposta está pronta! Qualquer dúvida é só me chamar por aqui!',
-    });
+    await enviar({ type: 'text', value: montarResumo(orc, temDuas) });
     await supabaseAdmin.from('orcamentos_salvos')
       .update({ proposta_pdf_enviado_em: new Date().toISOString() })
       .eq('id', orc.id);
