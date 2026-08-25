@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, X, UserCheck, Copy, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Search, X, UserCheck, Copy, CheckCircle2, AlertTriangle, Loader2, Clock } from 'lucide-react';
 
 /* Seletor de cliente cadastrado para o gerador de orçamento.
    A diretoria exige orçamento com nome completo, CPF/CNPJ, email e endereço
@@ -21,13 +21,26 @@ export function dadosFaltantes(cliente) {
   return falta;
 }
 
+const CAMPOS = 'id, nome, telefone, email, cpf_cnpj, dados_fiscais';
+
 export default function ClienteSelect({ cliente, onSelect }) {
   const [busca, setBusca] = useState('');
   const [resultados, setResultados] = useState([]);
+  const [recentes, setRecentes] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [aberto, setAberto] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const timer = useRef(null);
+
+  // Últimos cadastros: é quase sempre pra eles que o orçamento seguinte vai.
+  useEffect(() => {
+    supabase
+      .from('clientes')
+      .select(CAMPOS)
+      .order('criado_em', { ascending: false })
+      .limit(3)
+      .then(({ data }) => setRecentes(data || []));
+  }, []);
 
   useEffect(() => {
     if (busca.trim().length < 2) { setResultados([]); return; }
@@ -37,7 +50,7 @@ export default function ClienteSelect({ cliente, onSelect }) {
       const q = busca.trim();
       const { data } = await supabase
         .from('clientes')
-        .select('id, nome, telefone, email, cpf_cnpj, dados_fiscais')
+        .select(CAMPOS)
         .or(`nome.ilike.%${q}%,telefone.ilike.%${q.replace(/\D/g, '') || q}%`)
         .order('atualizado_em', { ascending: false })
         .limit(8);
@@ -120,6 +133,30 @@ export default function ClienteSelect({ cliente, onSelect }) {
           {aberto && !buscando && busca.trim().length >= 2 && resultados.length === 0 && (
             <div className="absolute z-20 mt-1 w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-3 text-xs text-zinc-500">
               Nenhum cliente encontrado. Envie o link de cadastro pra ele preencher os dados.
+            </div>
+          )}
+
+          {/* Atalho pros últimos cadastros — some assim que você começa a buscar */}
+          {!busca.trim() && recentes.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="text-[10px] text-zinc-600 uppercase tracking-wide flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Últimos:
+              </span>
+              {recentes.map((c) => {
+                const f = dadosFaltantes(c);
+                return (
+                  <button key={c.id} type="button" onClick={() => onSelect(c)}
+                    title={f.length ? `Cadastro incompleto — falta: ${f.join(', ')}` : 'Cadastro completo'}
+                    className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border cursor-pointer transition-colors ${
+                      f.length
+                        ? 'text-amber-300 border-amber-500/25 hover:bg-amber-500/10'
+                        : 'text-green-300 border-green-500/25 hover:bg-green-500/10'
+                    }`}>
+                    {f.length ? <AlertTriangle className="w-2.5 h-2.5 shrink-0" /> : <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />}
+                    <span className="max-w-[160px] truncate">{c.nome}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
