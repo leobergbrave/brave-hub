@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.5
-// @description  Captura a proposta oficial do Bling na tela de impressão e envia ao Brave HUB, que gera e guarda o PDF. Fluxo: Salvar → Imprimir → Ok, e pronto.
+// @version      2.0
+// @description  Captura a proposta oficial do Bling e envia ao Brave HUB, que gera e guarda o PDF. Sem diálogo de impressão: Salvar → Imprimir → Ok e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
-// @run-at       document-idle
+// @run-at       document-start
 // ==/UserScript==
 
 (function () {
@@ -14,6 +14,23 @@
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
 
+  /* O Bling chama window.print() sozinho ao abrir esta tela. O diálogo do Chrome
+     CONGELA todo o JavaScript da página enquanto está aberto — o que travava a
+     captura no meio e obrigava a cancelar na mão. Como não precisamos do
+     diálogo (o PDF é gerado no servidor), ele é desligado aqui e devolvido
+     depois da captura, para Ctrl+P continuar funcionando se você quiser. */
+  const printOriginal = window.print;
+  window.print = function () { /* silenciado durante a captura */ };
+  const devolverPrint = () => { window.print = printOriginal; };
+
+  // Só continua quando o documento tiver corpo (rodamos em document-start).
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar, { once: true });
+  } else {
+    iniciar();
+  }
+
+  function iniciar() {
   // --- aviso flutuante -------------------------------------------------------
   // NUNCA pode sair no PDF: por isso tem id próprio (removido do clone enviado
   // ao HUB) e @media print, que o esconde também no Salvar-como-PDF do Chrome.
@@ -31,7 +48,7 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
-  const VERSAO = '1.5';
+  const VERSAO = '2.0';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
   setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);
@@ -147,13 +164,16 @@
       }
     } catch (e) {
       setBox(`❌ BRAVE HUB v${VERSAO}: falha de rede — ${e.message}`, '#7f1d1d');
+    } finally {
+      devolverPrint();
     }
   }
 
-  // Espera as imagens carregarem antes de capturar.
+  // Espera as imagens carregarem antes de capturar (o PDF precisa delas).
   const imgs = [...document.images];
   Promise.all(imgs.map((im) => im.complete
     ? Promise.resolve()
     : new Promise((res) => { im.addEventListener('load', res); im.addEventListener('error', res); })
-  )).then(() => setTimeout(enviar, 400));
+  )).then(() => setTimeout(enviar, 300));
+  } // fim de iniciar()
 })();
