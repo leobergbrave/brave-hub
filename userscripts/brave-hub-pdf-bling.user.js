@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      2.2
+// @version      2.3
 // @description  Captura a proposta oficial do Bling e envia ao Brave HUB, que gera e guarda o PDF. Sem diálogo de impressão: Salvar → Imprimir → Ok e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
+// @noframes
 // @run-at       document-start
 // ==/UserScript==
 
@@ -48,7 +49,7 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
-  const VERSAO = '2.2';
+  const VERSAO = '2.3';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
   setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);

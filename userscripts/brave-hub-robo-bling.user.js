@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Robô de propostas do Bling
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.0
+// @version      1.1
 // @description  Captura sozinho os PDFs oficiais das propostas pendentes, em janela invisível. Basta deixar o Bling aberto numa aba.
 // @match        https://www.bling.com.br/*
 // @grant        none
@@ -35,7 +35,7 @@
 
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
-  const VERSAO = '1.0';
+  const VERSAO = '1.1';
   const INTERVALO_MS = 90 * 1000;   // de quanto em quanto tempo procura pendências
   const ESPERA_MAX_MS = 40 * 1000;  // tempo máximo esperando uma proposta carregar
 
@@ -83,6 +83,21 @@
       form.submit();
       form.remove();
 
+      /* A tela de impressao chama window.print() sozinha. Mesmo dentro de um
+         iframe, esse dialogo e o do Chrome inteiro — e ele CONGELA o JavaScript
+         da pagina, travando o robo no meio da captura. Como o iframe e da mesma
+         origem, silenciamos o print dele assim que o documento existe; o loop
+         curto cobre o intervalo entre o submit e o carregamento. */
+      const silenciar = setInterval(() => {
+        try {
+          const w = iframe.contentWindow;
+          if (w && w.print && !w.__bhSilenciado) {
+            w.print = function () {};
+            w.__bhSilenciado = true;
+          }
+        } catch (_) { /* ainda navegando */ }
+      }, 10);
+
       const inicio = Date.now();
       const timer = setInterval(() => {
         let doc = null;
@@ -94,10 +109,10 @@
           && doc.querySelectorAll('table').length >= 2
           && [...doc.images].every((im) => im.complete);
         if (pronto) {
-          clearInterval(timer);
+          clearInterval(timer); clearInterval(silenciar);
           resolve({ iframe, doc });
         } else if (Date.now() - inicio > ESPERA_MAX_MS) {
-          clearInterval(timer);
+          clearInterval(timer); clearInterval(silenciar);
           iframe.remove();
           reject(new Error('a proposta não carregou a tempo'));
         }
