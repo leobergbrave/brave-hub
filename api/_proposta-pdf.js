@@ -212,9 +212,15 @@ export async function baixarPdf(req, res) {
   }
 
   const nomeCliente = (orc.cliente || 'Cliente').replace(/[^\p{L}\p{N} .-]/gu, '').trim();
-  const sufixo = { avista: ' (À vista)', prazo: ' (A prazo)', unica: '' }[t.tipo];
+  const sufixo = { avista: ' (A vista)', prazo: ' (A prazo)', unica: '' }[t.tipo];
   const nomeArquivo = `Proposta ${orc[t.numCol] || ''} - ${nomeCliente}${sufixo}.pdf`.replace(/\s+/g, ' ');
+  // Header HTTP e ASCII: acento cru vira "%EF%BF%BD" no nome baixado. O filename
+  // simples leva a versao sem acento e o filename* (RFC 5987) o nome correto.
+  const nomeAscii = nomeArquivo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '');
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${nomeAscii}"; filename*=UTF-8''${encodeURIComponent(nomeArquivo)}`
+  );
   res.status(200).send(Buffer.from(await file.arrayBuffer()));
 }
