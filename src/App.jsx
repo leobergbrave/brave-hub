@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart, Plus, Trash2, Truck, Weight, DollarSign,
-  PackageCheck, Link2, Dumbbell, ChevronDown, Sparkles, MapPin,
+  PackageCheck, Link2, FileCheck2, Dumbbell, ChevronDown, Sparkles, MapPin,
   Loader2, BrainCircuit, MessageSquareText, AlertTriangle, Search, Edit2, Check, X, UserRound, ImagePlus, Upload, FolderOpen,
   Mic, Square, FileText, MapPinned, CreditCard, Percent, Bookmark, Save, RotateCcw
 } from 'lucide-react';
@@ -1948,11 +1948,11 @@ export default function App() {
                 </div>
                 <button id="btn-gerar-link" onClick={handleGerarLink} disabled={itens.length === 0}
                   className="w-full mt-3 flex items-center justify-center gap-2.5 bg-gradient-to-r from-orange-dim to-orange-accent text-white font-bold text-sm py-4 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-orange-accent/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer">
-                  <Link2 className="w-5 h-5" />{editingSlug ? 'Regerar Link (Edição)' : 'Gerar Link para o Cliente'}
+                  <FileCheck2 className="w-5 h-5" />{editingSlug ? 'Regravar Orçamento (Edição)' : 'Gerar Orçamento e Propostas no Bling'}
                 </button>
                 {linkGerado && (
                   <div className="mt-3 bg-dark-800 border border-dark-600 rounded-xl p-3 animate-fade-in-up">
-                    <p className="text-[10px] uppercase font-semibold text-zinc-500 mb-1.5 tracking-wider">Link do Orçamento</p>
+                    <p className="text-[10px] uppercase font-semibold text-zinc-500 mb-1.5 tracking-wider">Link interno — não enviar ao cliente</p>
                     <p className="text-xs text-neon/80 break-all font-mono leading-relaxed select-all">{linkGerado}</p>
                   </div>
                 )}
