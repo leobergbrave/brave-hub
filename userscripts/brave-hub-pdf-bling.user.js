@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.3
+// @version      1.4
 // @description  Captura a proposta oficial do Bling na tela de impressão e envia ao Brave HUB, que gera e guarda o PDF. Fluxo: Salvar → Imprimir → Ok, e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -31,9 +31,22 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
+  const VERSAO = '1.4';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
-  setBox('⏳ BRAVE HUB: capturando proposta...');
+  setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);
+
+  // Cinto e suspensório: além do @media print, some o aviso no momento em que
+  // a impressão começa. Cobre o caso do preview do Chrome já estar aberto
+  // quando o script injeta o aviso (o preview re-renderiza a cada mudança).
+  const esconder = () => { box.style.display = 'none'; };
+  const mostrar = () => { box.style.display = ''; };
+  window.addEventListener('beforeprint', esconder);
+  window.addEventListener('afterprint', mostrar);
+  try {
+    const mq = window.matchMedia('print');
+    mq.addEventListener('change', (e) => (e.matches ? esconder() : mostrar()));
+  } catch (_) { /* navegador antigo: o @media print já cobre */ }
 
   // --- helpers ---------------------------------------------------------------
   const blobParaDataURL = (blob) => new Promise((resolve, reject) => {
@@ -111,10 +124,10 @@
   async function enviar() {
     const numero = acharNumero();
     if (!numero) {
-      setBox('❌ BRAVE HUB: não achei o nº da proposta nesta página.', '#7f1d1d');
+      setBox(`❌ BRAVE HUB v${VERSAO}: não achei o nº da proposta nesta página.`, '#7f1d1d');
       return;
     }
-    setBox(`⏳ BRAVE HUB: enviando proposta nº ${numero}...`);
+    setBox(`⏳ BRAVE HUB v${VERSAO}: enviando proposta nº ${numero}...`);
     const html = await montarHTML();
     try {
       const r = await fetch(`${HUB}/api/bling?acao=proposta_pdf_upload`, {
@@ -125,12 +138,12 @@
       const j = await r.json();
       if (j.ok) {
         const rot = j.rotulo ? ` ${j.rotulo}` : '';
-        setBox(`✅ BRAVE HUB: PDF${rot} da proposta nº ${numero} pronto (${j.cliente}). Pode fechar esta aba.`, '#14532d');
+        setBox(`✅ BRAVE HUB v${VERSAO}: PDF${rot} da proposta nº ${numero} pronto (${j.cliente}). Pode fechar esta aba.`, '#14532d');
       } else {
-        setBox(`❌ BRAVE HUB: ${j.error || 'erro desconhecido'}`, '#7f1d1d');
+        setBox(`❌ BRAVE HUB v${VERSAO}: ${j.error || 'erro desconhecido'}`, '#7f1d1d');
       }
     } catch (e) {
-      setBox(`❌ BRAVE HUB: falha de rede — ${e.message}`, '#7f1d1d');
+      setBox(`❌ BRAVE HUB v${VERSAO}: falha de rede — ${e.message}`, '#7f1d1d');
     }
   }
 
