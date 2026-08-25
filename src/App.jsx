@@ -52,7 +52,6 @@ export default function App() {
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [nomeConsultor, setNomeConsultor] = useState('Léo Berg');
   const [origemLead, setOrigemLead] = useState('');
-  const [origemCustom, setOrigemCustom] = useState('');
   const [dataCriacaoCustom, setDataCriacaoCustom] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
@@ -178,12 +177,9 @@ export default function App() {
         setEditingSlug(editSlug);
         setNomeCliente(orc.cliente || '');
         setNomeConsultor(orc.consultor || 'LEO BERG');
-        const orig = orc.origem_lead || '';
-        // TIAGO fica na lista so para orcamentos antigos abrirem na origem certa
-        const ORIGENS_FIXAS = ['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO', 'UAIROX', 'INDICAÇÃO'];
-        if (ORIGENS_FIXAS.includes(orig)) { setOrigemLead(orig); setOrigemCustom(''); }
-        else if (orig) { setOrigemLead('PERSONALIZADO'); setOrigemCustom(orig); }
-        else { setOrigemLead(''); setOrigemCustom(''); }
+        // Qualquer origem gravada volta como está: as antigas (Tiago, Uairox,
+        // Indicação…) entram no select como opção extra, em vez de sumirem.
+        setOrigemLead(orc.origem_lead || '');
         
         // Formatar data para o input datetime-local (yyyy-MM-ddThh:mm)
         if (orc.criado_em) {
@@ -631,7 +627,7 @@ export default function App() {
         frete: freteFinal
       };
 
-      const origemFinal = origemLead === 'PERSONALIZADO' ? (origemCustom.trim() || 'PERSONALIZADO') : origemLead;
+      const origemFinal = origemLead;
       const novoOrcamento = {
         slug,
         cliente: nomeCliente || 'Cliente Brave',
@@ -682,7 +678,7 @@ export default function App() {
       const btnGerarLink = document.getElementById('btn-gerar-link');
       if (btnGerarLink) btnGerarLink.disabled = false;
     }
-  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, origemLead, origemCustom, clienteSel, showToastMessage, fetchHistorico]);
+  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, origemLead, clienteSel, showToastMessage, fetchHistorico]);
 
   // ── Template Handlers ──
   const handleCarregarModelo = useCallback((modelo) => {
@@ -1510,19 +1506,15 @@ export default function App() {
                     <option value="FSS">FSS — veio da central (envia PDFs + apresentação)</option>
                     <option value="WHATSAPP">WhatsApp BRAVE — já em conversa (envia PDFs)</option>
                     <option value="VENDA DIRETA">Venda Direta (envia PDFs)</option>
-                    <option value="UAIROX">Uairox</option>
-                    <option value="INDICAÇÃO">Indicação</option>
-                    <option value="PERSONALIZADO">Personalizado</option>
+                    {/* Orçamento antigo abre com a origem que tinha (Uairox,
+                        Indicação, etc). Sem esta opção o select viria vazio e a
+                        origem se perderia ao salvar — o histórico de canal é
+                        justamente o que vai medir de onde vem a venda. */}
+                    {origemLead && !['FSS', 'WHATSAPP', 'VENDA DIRETA'].includes(origemLead) && (
+                      <option value={origemLead}>{origemLead} (origem antiga)</option>
+                    )}
                   </select>
                 </label>
-                {origemLead === 'PERSONALIZADO' && (
-                  <label className="block">
-                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Descreva a origem</span>
-                    <input type="text" value={origemCustom} onChange={e => setOrigemCustom(e.target.value)}
-                      placeholder="Ex: Instagram, Evento, Parceiro..."
-                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
-                  </label>
-                )}
               </div>
             </section>
 
