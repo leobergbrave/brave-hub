@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
-    const { cliente, consultor, payload } = body;
+    const { cliente, consultor, payload, clienteId } = body;
 
     if (!payload || !payload.itens) {
       return new Response(JSON.stringify({ error: 'Payload de orçamento inválido' }), {
@@ -146,8 +146,14 @@ Deno.serve(async (req) => {
     // documento em numeroDocumento e endereço aninhado em endereco.geral.
     let cliLocal: any = null;
     try {
+      // clienteId direto (gerador com cliente vinculado) elimina a adivinhação
+      // por telefone/nome — o contato Bling sai com os dados exatos do cadastro.
+      if (clienteId) {
+        const { data } = await supabaseClient.from('clientes').select('*').eq('id', clienteId).maybeSingle();
+        cliLocal = data;
+      }
       const telCli = String(payload?.telefoneCliente || '').replace(/\D/g, '');
-      if (telCli.length >= 10) {
+      if (!cliLocal && telCli.length >= 10) {
         const { data } = await supabaseClient.from('clientes').select('*').eq('telefone', telCli).maybeSingle();
         cliLocal = data;
       }

@@ -514,6 +514,29 @@ export default function OrcamentosTab() {
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
   };
 
+  /* Baixa os PDFs oficiais do Bling e abre a conversa do cliente no WhatsApp.
+     A diretoria proíbe mandar link ao cliente — o Léo anexa os arquivos na
+     conversa que abre pronta. (Fase 2: envio automático via BotConversa.) */
+  const enviarPdfsCliente = (o) => {
+    const pdfs = [
+      ['avista', o.bling_avista_pdf],
+      ['prazo', o.bling_prazo_pdf],
+      ['unica', o.proposta_pdf_path],
+    ].filter(([, p]) => p);
+    pdfs.forEach(([tipo], i) => setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = `/api/bling?acao=proposta_pdf&slug=${o.slug}&tipo=${tipo}`;
+      document.body.appendChild(a); a.click(); a.remove();
+    }, i * 900));
+    const tel = (o.payload?.telefoneCliente || '').replace(/\D/g, '');
+    if (tel.length >= 10) {
+      const msg = encodeURIComponent(`Olá! Aqui é da BRAVE Fitness 🦁 Segue em anexo sua proposta comercial em PDF. Qualquer dúvida estou à disposição!`);
+      setTimeout(() => window.open(`https://wa.me/55${tel}?text=${msg}`, '_blank'), pdfs.length * 900 + 300);
+    } else {
+      alert('Orçamento sem telefone do cliente — os PDFs foram baixados, envie manualmente.');
+    }
+  };
+
   const handleDuplicate = async (o) => {
     if (!confirm('Deseja duplicar este orçamento?')) return;
     try {
@@ -1154,6 +1177,13 @@ export default function OrcamentosTab() {
                           )}
                         </span>
                       ))}
+                      {(o.bling_avista_pdf || o.bling_prazo_pdf || o.proposta_pdf_path) && (
+                        <button onClick={() => enviarPdfsCliente(o)}
+                          title="Baixa os PDFs oficiais e abre a conversa do cliente no WhatsApp — é só anexar os arquivos"
+                          className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg hover:bg-cyan-500/10 cursor-pointer border border-cyan-500/20">
+                          <Send className="w-3 h-3" /> Enviar ao cliente
+                        </button>
+                      )}
                       {statusStr === 'Aprovado' && (
                         <button onClick={() => handleGerarLinkFiscal(o)}
                           className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 px-2.5 py-1.5 rounded-lg hover:bg-purple-500/10 cursor-pointer border border-purple-500/20">

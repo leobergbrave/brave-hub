@@ -13,6 +13,7 @@ import {
 } from './data';
 import { supabase } from './lib/supabase';
 import { salvarVinculoPropostas } from './lib/bling';
+import ClienteSelect, { dadosFaltantes } from './components/ClienteSelect';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — Gerador de Orçamentos
@@ -42,6 +43,9 @@ export default function App() {
   const [estado, setEstado] = useState('');
   const [zona, setZona] = useState('');
   const [nomeCliente, setNomeCliente] = useState('');
+  // Cliente cadastrado vinculado (obrigatório: diretoria exige orçamento com
+  // nome completo, CPF/CNPJ, email e endereço com CEP do cliente)
+  const [clienteSel, setClienteSel] = useState(null);
   const [telefoneCliente, setTelefoneCliente] = useState('');
   const [cep, setCep] = useState('');
   const [cepInfo, setCepInfo] = useState(null); // { localidade, uf, logradouro, bairro }
@@ -592,6 +596,18 @@ export default function App() {
 
   const handleGerarLink = useCallback(async () => {
     if (itens.length === 0) return;
+    // Trava da diretoria: orçamento só com cliente cadastrado e dados completos
+    // (nome completo, CPF/CNPJ, email, endereço com CEP).
+    const falta = dadosFaltantes(clienteSel);
+    if (falta.length > 0) {
+      showToastMessage(
+        clienteSel
+          ? `⚠️ Cadastro do cliente incompleto — falta: ${falta.join(', ')}. Envie o link /cadastro pra ele completar.`
+          : '⚠️ Selecione um cliente cadastrado. Se ainda não se cadastrou, envie o link de cadastro (botão acima do campo).',
+        true
+      );
+      return;
+    }
     try {
       showToastMessage('Gerando link...', false);
       const btnGerarLink = document.getElementById('btn-gerar-link');
@@ -620,6 +636,7 @@ export default function App() {
         cliente: nomeCliente || 'Cliente Brave',
         consultor: nomeConsultor || 'LEO BERG',
         origem_lead: origemFinal || null,
+        cliente_id: clienteSel?.id || null,
         payload
       };
 
@@ -654,7 +671,7 @@ export default function App() {
       
       // Envia para a Bling e notifica o resultado
       supabase.functions.invoke('sync-bling-proposal', {
-        body: { cliente: nomeCliente, consultor: nomeConsultor, payload }
+        body: { cliente: nomeCliente, consultor: nomeConsultor, payload, clienteId: clienteSel?.id || null }
       }).then(({ data, error: blingErr }) => {
         if (blingErr) { showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true); return; }
         showToastMessage('Proposta enviada ao Bling com sucesso!');
@@ -670,7 +687,7 @@ export default function App() {
       const btnGerarLink = document.getElementById('btn-gerar-link');
       if (btnGerarLink) btnGerarLink.disabled = false;
     }
-  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, origemLead, origemCustom, showToastMessage, fetchHistorico]);
+  }, [itens, estado, zona, telefoneCliente, descontoAvista, descontoCartao, parcelasCartao, freteFinal, nomeCliente, nomeConsultor, dataCriacaoCustom, origemLead, origemCustom, clienteSel, showToastMessage, fetchHistorico]);
 
   // ── Template Handlers ──
   const handleCarregarModelo = useCallback((modelo) => {
@@ -1443,6 +1460,13 @@ export default function App() {
                 <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Dados do Orçamento</h2>
               </div>
               <div className="space-y-4">
+                <ClienteSelect cliente={clienteSel} onSelect={(c) => {
+                  setClienteSel(c);
+                  if (c) {
+                    setNomeCliente(c.nome || '');
+                    if (c.telefone) setTelefoneCliente(c.telefone);
+                  }
+                }} />
                 <label className="block">
                   <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Cliente / Box</span>
                   <input type="text" value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)}
