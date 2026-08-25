@@ -653,20 +653,14 @@ export default function App() {
       navigator.clipboard.writeText(link).catch(() => {});
       showToastMessage('Link gerado e copiado para a área de transferência!');
 
-      // Canais FSS e TIAGO: disparam automaticamente a 1ª mensagem de WhatsApp
-      // pro cliente (do número do Léo, via BotConversa) com o link do orçamento.
-      const disparaAuto = origemFinal === 'FSS' || origemFinal === 'TIAGO';
-      if (disparaAuto && (telefoneCliente || '').replace(/\D/g, '').length < 10) {
-        showToastMessage(`⚠️ Origem ${origemFinal} sem telefone do cliente — WhatsApp NÃO disparado.`, true);
-      }
-      if (disparaAuto && (telefoneCliente || '').replace(/\D/g, '').length >= 10) {
-        fetch('/api/lead-contato', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: telefoneCliente, nome: nomeCliente || 'Cliente Brave', link, origem: origemFinal, titulo: 'Orçamento BRAVE' }),
-        })
-          .then(r => r.json())
-          .then(j => showToastMessage(j.ok ? '📲 WhatsApp de abertura enviado ao cliente!' : 'Orçamento salvo, mas o WhatsApp não saiu: ' + (j.error || ''), !j.ok))
-          .catch(() => showToastMessage('Orçamento salvo, mas falhou o disparo do WhatsApp.', true));
+      /* O disparo automatico da 1a mensagem foi DESLIGADO (25/08/2026).
+         Aquele fluxo do BotConversa mandava o LINK do orcamento ao cliente —
+         exatamente o que a diretoria proibiu. Hoje quem fala com o cliente e o
+         envio dos PDFs (api/_proposta-pdf.js), que reaproveita o mesmo texto de
+         abertura e anexa as propostas oficiais do Bling. */
+      const semTelefone = (telefoneCliente || '').replace(/\D/g, '').length < 10;
+      if ((origemFinal === 'FSS' || origemFinal === 'TIAGO') && semTelefone) {
+        showToastMessage(`⚠️ Origem ${origemFinal} sem telefone do cliente — os PDFs não terão para onde ir.`, true);
       }
       
       // Envia para a Bling e notifica o resultado

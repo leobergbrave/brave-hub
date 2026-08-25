@@ -57,7 +57,7 @@ const TIPOS = [
   { tipo: 'prazo', idCol: 'bling_prazo_id', numCol: 'bling_prazo_numero', pdfCol: 'bling_prazo_pdf' },
   { tipo: 'unica', idCol: 'bling_pedido_id', numCol: 'bling_proposta_numero', pdfCol: 'proposta_pdf_path' },
 ];
-const COLS = 'id, slug, cliente, payload, origem_lead, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
+const COLS = 'id, slug, cliente, consultor, payload, origem_lead, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
 
 /* Nome e URL do PDF para entrega ao cliente. O caminho leva um carimbo de
    versao (/v<epoch>/) porque WhatsApp, BotConversa e o chat do FSS cacheiam
@@ -314,13 +314,29 @@ async function despacharPdfs(orc) {
 
   const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
 
-  const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0];
-  const saudacao = await enviar({
-    type: 'text',
-    value: `Olá, ${primeiroNome}! Aqui é da BRAVE Fitness 🦁\nSegue sua proposta comercial em PDF. Qualquer dúvida, é só chamar!`,
-  });
-  if (!saudacao.ok) {
-    return { ok: false, error: `BotConversa recusou o envio (HTTP ${saudacao.status}): ${saudacao.texto.slice(0, 250)}` };
+  /* Texto de abertura herdado do fluxo do BotConversa que disparava ao salvar o
+     orçamento. Aquele fluxo mandava o LINK do orçamento (proibido pela
+     diretoria) e foi desligado — mas a conversa que ele abria funcionava bem,
+     então o mesmo tom veio para cá, agora com as propostas oficiais anexadas.
+     A frase da central só cabe a quem veio da central: nos outros canais o Léo
+     já está falando com o cliente no próprio WhatsApp. */
+  const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0].toUpperCase();
+  const daCentral = ['FSS', 'TIAGO'].includes(String(orc.origem_lead || '').toUpperCase());
+  const consultor = orc.consultor || 'Léo Berg';
+
+  const aberturas = [
+    `Fala ${primeiroNome} tudo bem?\n${consultor} da BRAVE aqui👍`,
+    daCentral
+      ? 'Estamos nos falando ali pelo número da central, mas estou te enviando o orçamento por aqui também para fazer a melhor negociação pra você'
+      : 'Conforme combinamos, estou te enviando o orçamento aqui para fazer a melhor negociação pra você',
+  ];
+
+  for (const texto of aberturas) {
+    const r = await enviar({ type: 'text', value: texto });
+    if (!r.ok) {
+      return { ok: false, error: `BotConversa recusou o envio (HTTP ${r.status}): ${r.texto.slice(0, 250)}` };
+    }
+    await sleep(700);
   }
 
   const enviados = [];
@@ -332,6 +348,16 @@ async function despacharPdfs(orc) {
   }
 
   if (enviados.length > 0) {
+    // Fechamento explicando as duas condições — o cliente recebe dois arquivos
+    // parecidos e precisa saber qual é qual sem abrir os dois.
+    const temDuas = enviados.includes('avista') && enviados.includes('prazo');
+    await sleep(700);
+    await enviar({
+      type: 'text',
+      value: temDuas
+        ? '✅ Sua proposta está pronta! Enviei as duas condições:\n\n💰 À VISTA — com o melhor desconto\n💳 A PRAZO — parcelado\n\nQualquer dúvida é só me chamar por aqui!'
+        : '✅ Sua proposta está pronta! Qualquer dúvida é só me chamar por aqui!',
+    });
     await supabaseAdmin.from('orcamentos_salvos')
       .update({ proposta_pdf_enviado_em: new Date().toISOString() })
       .eq('id', orc.id);
