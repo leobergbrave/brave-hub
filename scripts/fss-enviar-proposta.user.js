@@ -1,118 +1,203 @@
 // ==UserScript==
-// @name         Brave HUB — Enviar proposta pelo FSS
+// @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      1.0
-// @description  Botão na tela do contato do FSS que manda os PDFs oficiais da proposta no WhatsApp do cliente.
-// @match        https://app.fullsalessystem.com/v2/location/*/contacts/*
+// @version      2.0
+// @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
+// @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
 
 /*
- * Por que existe: a diretoria exige que o cliente receba o PDF oficial do Bling,
- * e o Léo atende os leads dentro do FSS. Sem isso ele teria que sair do FSS,
- * achar o orçamento no HUB e só então enviar.
+ * Por que existe: o cliente que veio do FSS responde no chat do FSS, que tem
+ * numero proprio — o envio pelo BotConversa cairia em outra conversa. Antes o
+ * Leo baixava o PDF no computador ou no celular so para reanexar aqui.
  *
- * Como acha o contato: o FSS é um SPA e não expõe o telefone num lugar estável,
- * então lemos o link "tel:" da tela (ver acharTelefone). O casamento com o
- * orçamento é feito no servidor pelos 8 últimos dígitos — DDI e nono dígito
- * entram e saem conforme a origem do lead.
+ * Como anexa sem baixar: busca o PDF do HUB por fetch, monta um File em memoria
+ * e entrega ao campo de anexo do chat (DataTransfer). Se a tela nao tiver um
+ * input de arquivo alcancavel, cai para um evento de colar (paste), que os
+ * editores de mensagem costumam aceitar.
  *
- * Não use console.log para acompanhar: o FSS injeta `debugger` em loop para
- * travar quem abre o DevTools. Por isso o próprio botão mostra o estado.
+ * Nao use console.log para depurar: o FSS injeta `debugger` em loop para travar
+ * quem abre o DevTools. Por isso o proprio painel mostra o estado.
  */
 
 (function () {
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const ID = 'brave-hub-enviar-proposta';
+  const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
+  let dados = null;
+  let indiceAtual = 0;
 
   function acharTelefone() {
-    // 1) link de discagem é o mais confiável
     const tel = document.querySelector('a[href^="tel:"]');
     if (tel) {
       const n = tel.getAttribute('href').replace(/\D/g, '');
       if (n.length >= 10) return n;
     }
-    // 2) fallback: primeiro telefone brasileiro visível na coluna do contato
     const m = (document.body.innerText || '').match(/\+?55?\s?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}/);
     return m ? m[0].replace(/\D/g, '') : null;
   }
 
-  function criarBotao() {
+  function painel() {
     let el = document.getElementById(ID);
     if (el) return el;
-    el = document.createElement('button');
+    el = document.createElement('div');
     el.id = ID;
-    el.type = 'button';
     el.style.cssText = [
       'position:fixed', 'bottom:20px', 'right:20px', 'z-index:2147483647',
-      'background:#0e7490', 'color:#fff', 'border:none', 'border-radius:10px',
-      'padding:12px 18px', 'font:600 13px/1.3 system-ui,sans-serif',
-      'box-shadow:0 4px 16px rgba(0,0,0,.3)', 'cursor:pointer', 'max-width:320px',
-      'text-align:left',
+      'background:#0f172a', 'color:#fff', 'border-radius:12px', 'padding:12px 14px',
+      'font:600 13px/1.35 system-ui,sans-serif', 'box-shadow:0 6px 24px rgba(0,0,0,.35)',
+      'max-width:330px', 'display:flex', 'flex-direction:column', 'gap:8px',
     ].join(';');
     document.body.appendChild(el);
     return el;
   }
 
-  const setBtn = (texto, cor, ativo) => {
-    const b = criarBotao();
+  function botao(texto, cor, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button';
     b.textContent = texto;
-    b.style.background = cor;
-    b.style.cursor = ativo ? 'pointer' : 'default';
-    b.disabled = !ativo;
-  };
+    b.style.cssText = [
+      'background:' + cor, 'color:#fff', 'border:none', 'border-radius:8px',
+      'padding:9px 12px', 'font:600 12px/1.2 system-ui,sans-serif',
+      'cursor:pointer', 'text-align:left', 'width:100%',
+    ].join(';');
+    b.onclick = onClick;
+    return b;
+  }
 
-  async function enviar(slug, cliente) {
-    setBtn('⏳ Enviando PDFs...', '#57534e', false);
+  function status(texto, cor) {
+    const p = painel();
+    p.innerHTML = '';
+    const s = document.createElement('div');
+    s.textContent = texto;
+    s.style.cssText = 'font-weight:600;color:' + (cor || '#e2e8f0');
+    p.appendChild(s);
+    return p;
+  }
+
+  async function baixarComoArquivo(url, nome) {
+    const r = await fetch(url, { credentials: 'omit' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    return new File([blob], nome, { type: 'application/pdf' });
+  }
+
+  function entregarAoChat(file) {
+    // 1) campo de anexo do proprio chat (o ultimo costuma ser o da conversa aberta)
+    const inputs = [...document.querySelectorAll('input[type="file"]')];
+    const aceita = (i) => {
+      const a = (i.accept || '').toLowerCase();
+      return !a || a.includes('pdf') || a.includes('application') || a.includes('*');
+    };
+    const alvo = inputs.filter(aceita).pop();
+    if (alvo) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      alvo.files = dt.files;
+      alvo.dispatchEvent(new Event('input', { bubbles: true }));
+      alvo.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'anexado no campo de arquivo';
+    }
+    // 2) colar no editor da mensagem
+    const editor = document.querySelector('[contenteditable="true"], textarea');
+    if (editor) {
+      editor.focus();
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      editor.dispatchEvent(new ClipboardEvent('paste', {
+        bubbles: true, cancelable: true, clipboardData: dt,
+      }));
+      return 'colado no campo de mensagem';
+    }
+    throw new Error('nao achei o campo de anexo — abra a conversa do cliente');
+  }
+
+  async function anexarProximo() {
+    const arquivos = dados?.arquivos || [];
+    if (!arquivos.length) return;
+    const a = arquivos[indiceAtual];
+    status(`⏳ Anexando: ${a.nome}`);
+    try {
+      const file = await baixarComoArquivo(a.url, a.nome);
+      const via = entregarAoChat(file);
+      const restam = arquivos.length - indiceAtual - 1;
+      const p = status(`✅ ${via.charAt(0).toUpperCase() + via.slice(1)}: ${a.nome}`, '#4ade80');
+      if (restam > 0) {
+        indiceAtual += 1;
+        p.appendChild(botao(`📎 Envie essa e clique para a próxima (${restam})`, '#0e7490', anexarProximo));
+      } else {
+        indiceAtual = 0;
+        p.appendChild(botao('📎 Anexar tudo de novo', '#334155', () => { indiceAtual = 0; anexarProximo(); }));
+      }
+    } catch (e) {
+      const p = status(`❌ ${e.message}`, '#fca5a5');
+      p.appendChild(botao('Tentar de novo', '#0e7490', anexarProximo));
+    }
+  }
+
+  async function enviarPeloWhatsApp() {
+    status('⏳ Enviando pelo WhatsApp...');
     try {
       const r = await fetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: dados.slug }),
       });
       const j = await r.json();
-      if (j.ok) setBtn(`✅ Proposta enviada para ${cliente}`, '#15803d', false);
-      else setBtn(`❌ ${j.error || 'falhou'} — clique pra tentar de novo`, '#991b1b', true);
+      status(j.ok ? `✅ Proposta enviada no WhatsApp de ${dados.cliente}` : `❌ ${j.error}`,
+        j.ok ? '#4ade80' : '#fca5a5');
     } catch (e) {
-      setBtn(`❌ Falha de rede — clique pra tentar de novo`, '#991b1b', true);
+      status(`❌ Falha de rede: ${e.message}`, '#fca5a5');
     }
+    setTimeout(montarMenu, 5000);
+  }
+
+  function montarMenu() {
+    const p = painel();
+    p.innerHTML = '';
+    const t = document.createElement('div');
+    t.textContent = `Proposta de ${dados.cliente}`;
+    t.style.cssText = 'font-weight:700;font-size:12px;color:#e2e8f0';
+    p.appendChild(t);
+    if (dados.enviadoEm) {
+      const s = document.createElement('div');
+      s.textContent = `já enviada em ${new Date(dados.enviadoEm).toLocaleDateString('pt-BR')}`;
+      s.style.cssText = 'font-size:11px;color:#94a3b8;font-weight:500';
+      p.appendChild(s);
+    }
+    indiceAtual = 0;
+    p.appendChild(botao('📎 Anexar aqui na conversa', '#0e7490', anexarProximo));
+    p.appendChild(botao('📲 Enviar pelo WhatsApp', '#334155', enviarPeloWhatsApp));
   }
 
   async function verificar() {
     const tel = acharTelefone();
     if (!tel) {
-      const b = document.getElementById(ID);
-      if (b) b.remove();
+      document.getElementById(ID)?.remove();
       ultimoTelefone = null;
       return;
     }
-    if (tel === ultimoTelefone) return; // já avaliado para este contato
+    if (tel === ultimoTelefone) return;
     ultimoTelefone = tel;
-
-    setBtn('⏳ Consultando proposta...', '#57534e', false);
+    status('⏳ Consultando proposta...');
     try {
       const r = await fetch(`${HUB}/api/bling?acao=proposta_por_telefone&telefone=${tel}`);
       const j = await r.json();
       if (!j.encontrado) {
-        setBtn('Sem proposta pronta para este contato', '#44403c', false);
+        document.getElementById(ID)?.remove();
         return;
       }
-      const jaFoi = j.enviadoEm
-        ? ` (já enviada em ${new Date(j.enviadoEm).toLocaleDateString('pt-BR')})`
-        : '';
-      const b = criarBotao();
-      setBtn(`📤 Enviar proposta para ${j.cliente}${jaFoi}`, jaFoi ? '#0f766e' : '#0e7490', true);
-      b.onclick = () => enviar(j.slug, j.cliente);
+      dados = j;
+      montarMenu();
     } catch (e) {
-      setBtn('❌ Não consegui falar com o HUB', '#991b1b', false);
+      status('❌ Nao consegui falar com o HUB', '#fca5a5');
     }
   }
 
-  // O SPA troca de contato sem recarregar a página: revalida periodicamente.
+  // O SPA troca de contato sem recarregar: revalida periodicamente.
   verificar();
   setInterval(verificar, 3000);
 })();

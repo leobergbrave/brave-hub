@@ -59,6 +59,23 @@ const TIPOS = [
 ];
 const COLS = 'id, slug, cliente, payload, origem_lead, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
 
+/* Nome e URL do PDF para entrega ao cliente. O caminho leva um carimbo de
+   versao (/v<epoch>/) porque WhatsApp, BotConversa e o chat do FSS cacheiam
+   midia POR URL: reenviar uma proposta recapturada na mesma URL devolvia o
+   arquivo antigo do cache, sem consultar o servidor. */
+const semAcento = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
+function linkPdf(orc, t, versao) {
+  const base = process.env.HUB_BASE_URL || 'https://brave-hub-two.vercel.app';
+  const sufixo = { avista: ' - A vista', prazo: ' - A prazo', unica: '' }[t.tipo];
+  // Sem espaco nem acento no nome: a URL vai para o WhatsApp/BotConversa, e
+  // %20 no caminho ja quebrou o download em intermediario. Hifen sempre passa.
+  const nome = semAcento(`Proposta ${orc[t.numCol] || ''} - ${orc.cliente || 'Cliente'}${sufixo}`)
+    .replace(/[^A-Za-z0-9 .-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-')
+    .replace(/^-|-$/g, '').slice(0, 80) + '.pdf';
+  const v = versao || Date.now();
+  return { tipo: t.tipo, nome, url: `${base}/pdf/${orc.slug}/${t.tipo}/v${v}/${encodeURIComponent(nome)}` };
+}
+
 /* Propostas criadas antes de guardarmos o numero — resolve consultando a API do
    Bling pelos ids sem numero salvo, mais recentes primeiro, até achar a que
    bate. Cada consulta preenche a coluna, então o custo é pago uma vez só. */
@@ -276,15 +293,7 @@ async function despacharPdfs(orc) {
      BotConversa cacheiam mídia POR URL: ao reenviar uma proposta recapturada
      na mesma URL, o cliente recebia de volta o arquivo antigo do cache, sem o
      servidor ser consultado. Endereço novo a cada envio elimina isso. */
-  const base = process.env.HUB_BASE_URL || 'https://brave-hub-two.vercel.app';
-  const semAcento = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
-  const versao = Date.now();
-  const arquivos = disponiveis.map((t) => {
-    const sufixo = { avista: ' - A vista', prazo: ' - A prazo', unica: '' }[t.tipo];
-    const nome = semAcento(`Proposta ${orc[t.numCol] || ''} - ${orc.cliente || 'Cliente'}${sufixo}.pdf`)
-      .replace(/[^A-Za-z0-9 .-]/g, '').replace(/\s+/g, ' ').trim();
-    return { tipo: t.tipo, url: `${base}/pdf/${orc.slug}/${t.tipo}/v${versao}/${encodeURIComponent(nome)}` };
-  });
+  const arquivos = disponiveis.map((t) => linkPdf(orc, t));
 
   // Contato no BotConversa (busca por telefone; cria se não existir)
   let subscriberId = null;
@@ -381,6 +390,8 @@ export async function propostaPorTelefone(req, res) {
     cliente: achado.cliente,
     enviadoEm: achado.proposta_pdf_enviado_em || null,
     pdfs: TIPOS.filter(t => achado[t.pdfCol]).map(t => t.tipo),
+    // arquivos prontos para o userscript do FSS anexar direto na conversa
+    arquivos: TIPOS.filter(t => achado[t.pdfCol]).map(t => linkPdf(achado, t)),
   });
 }
 
