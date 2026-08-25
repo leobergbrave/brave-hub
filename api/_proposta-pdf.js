@@ -83,6 +83,12 @@ function linkPdf(orc, t, versao) {
    criados antes da renomeação continuarem funcionando. */
 const ORIGENS_AUTOMATICAS = ['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO'];
 
+/* "SOMENTE BLING": o orcamento vira proposta no Bling e para por ai — o
+   consultor imprime e guarda o PDF por conta propria. Fica de fora da fila do
+   robo (capturar seria trabalho inutil) e, por nao estar em
+   ORIGENS_AUTOMATICAS, nada e enviado ao cliente. */
+const ORIGENS_SEM_CAPTURA = ['SOMENTE BLING'];
+
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /* Resumo em texto dos valores, para o cliente ter os números na conversa sem
@@ -491,6 +497,7 @@ export async function propostasPendentes(req, res) {
 
   const pendentes = [];
   for (const o of linhas || []) {
+    if (ORIGENS_SEM_CAPTURA.includes(String(o.origem_lead || '').toUpperCase())) continue;
     for (const t of TIPOS) {
       if (o[t.idCol] && !o[t.pdfCol]) {
         pendentes.push({

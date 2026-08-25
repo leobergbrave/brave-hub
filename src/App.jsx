@@ -1506,11 +1506,12 @@ export default function App() {
                     <option value="FSS">FSS — veio da central (envia PDFs + apresentação)</option>
                     <option value="WHATSAPP">WhatsApp BRAVE — já em conversa (envia PDFs)</option>
                     <option value="VENDA DIRETA">Venda Direta (envia PDFs)</option>
+                    <option value="SOMENTE BLING">Gerar no Bling — eu mesmo imprimo (não envia nada)</option>
                     {/* Orçamento antigo abre com a origem que tinha (Uairox,
                         Indicação, etc). Sem esta opção o select viria vazio e a
                         origem se perderia ao salvar — o histórico de canal é
                         justamente o que vai medir de onde vem a venda. */}
-                    {origemLead && !['FSS', 'WHATSAPP', 'VENDA DIRETA'].includes(origemLead) && (
+                    {origemLead && !['FSS', 'WHATSAPP', 'VENDA DIRETA', 'SOMENTE BLING'].includes(origemLead) && (
                       <option value={origemLead}>{origemLead} (origem antiga)</option>
                     )}
                   </select>
