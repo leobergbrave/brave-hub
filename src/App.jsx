@@ -1462,9 +1462,15 @@ export default function App() {
               <div className="space-y-4">
                 <ClienteSelect cliente={clienteSel} onSelect={(c) => {
                   setClienteSel(c);
-                  if (c) {
-                    setNomeCliente(c.nome || '');
-                    if (c.telefone) setTelefoneCliente(c.telefone);
+                  if (!c) return;
+                  setNomeCliente(c.nome || '');
+                  if (c.telefone) setTelefoneCliente(c.telefone);
+                  // O CEP do cadastro já resolve o frete: a busca preenche
+                  // cidade, estado e zona (capital/interior) de uma vez.
+                  const cepCli = String(c.dados_fiscais?.cep || '').replace(/\D/g, '');
+                  if (cepCli.length === 8) {
+                    setCep(cepCli.replace(/(\d{5})(\d{3})/, '$1-$2'));
+                    handleBuscarCep(cepCli);
                   }
                 }} />
                 <label className="block">
