@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.1
+// @version      1.2
 // @description  Captura a proposta oficial do Bling na tela de impressão e envia ao Brave HUB, que gera e guarda o PDF. Fluxo: Salvar → Imprimir → Ok, e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -77,10 +77,24 @@
   }
 
   function acharNumero() {
+    // 1) Tabela "Número da Proposta | 8026": o número está na célula VIZINHA,
+    // então innerText traz uma quebra de linha no meio — \s+ cobre os dois casos.
     const texto = document.body.innerText || '';
-    const m = texto.match(/Proposta\s*N[ºo°]?\s*\.?\s*:?\s*(\d{1,10})/i)
-      || texto.match(/N[úu]mero da Proposta\s*:?\s*(\d{1,10})/i);
-    return m ? m[1] : null;
+    const padroes = [
+      /N[úu]mero\s+da\s+Proposta\s*:?\s*(\d{1,10})/i,
+      /Proposta\s*N[ºo°]?\s*\.?\s*:?\s*(\d{1,10})/i,
+    ];
+    for (const p of padroes) {
+      const m = texto.match(p);
+      if (m) return m[1];
+    }
+    // 2) Fallback estrutural: acha a célula com o rótulo e lê a célula seguinte.
+    for (const td of document.querySelectorAll('td, th')) {
+      if (!/n[úu]mero\s+da\s+proposta/i.test(td.textContent || '')) continue;
+      const val = (td.nextElementSibling?.textContent || '').replace(/\D/g, '');
+      if (val) return val;
+    }
+    return null;
   }
 
   // --- fluxo principal -------------------------------------------------------
