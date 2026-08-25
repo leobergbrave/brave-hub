@@ -503,6 +503,42 @@ export async function propostasPendentes(req, res) {
   return res.status(200).json({ ok: true, pendentes });
 }
 
+/* Sessao do Bling para o robo de servidor (Railway).
+   POST /api/bling?acao=sessao_bling  (header x-hub-token)  body: { cookies }
+   GET  /api/bling?acao=sessao_bling  (header x-hub-token)  -> devolve os cookies
+
+   Por que guardar cookies em vez de usuario e senha: assim o Leo nunca precisa
+   entregar a senha, e a sessao ja existente e reaproveitada. O userscript
+   renova isso sempre que ele abre o Bling. Sao credenciais de verdade — nunca
+   logar o valor, nunca devolver sem o token. */
+export async function sessaoBling(req, res) {
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  }
+
+  if (req.method === 'POST') {
+    const { cookies } = req.body || {};
+    if (!cookies || typeof cookies !== 'string' || cookies.length < 20) {
+      return res.status(400).json({ ok: false, error: 'cookies obrigatorios.' });
+    }
+    const { error } = await supabaseAdmin.from('bling_config')
+      .update({ sessao_cookies: cookies, sessao_atualizada_em: new Date().toISOString() })
+      .eq('id', 1);
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    console.log('[sessao-bling] cookies atualizados:', cookies.split(';').length, 'itens');
+    return res.status(200).json({ ok: true, itens: cookies.split(';').length });
+  }
+
+  const { data } = await supabaseAdmin.from('bling_config')
+    .select('sessao_cookies, sessao_atualizada_em').eq('id', 1).maybeSingle();
+  if (!data?.sessao_cookies) {
+    return res.status(200).json({ ok: false, error: 'Nenhuma sessao guardada ainda.' });
+  }
+  return res.status(200).json({
+    ok: true, cookies: data.sessao_cookies, atualizadaEm: data.sessao_atualizada_em,
+  });
+}
+
 export async function baixarPdf(req, res) {
   const { slug, tipo } = req.query || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
