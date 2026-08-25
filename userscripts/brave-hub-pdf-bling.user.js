@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.2
+// @version      1.3
 // @description  Captura a proposta oficial do Bling na tela de impressão e envia ao Brave HUB, que gera e guarda o PDF. Fluxo: Salvar → Imprimir → Ok, e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -15,7 +15,16 @@
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
 
   // --- aviso flutuante -------------------------------------------------------
+  // NUNCA pode sair no PDF: por isso tem id próprio (removido do clone enviado
+  // ao HUB) e @media print, que o esconde também no Salvar-como-PDF do Chrome.
+  const estiloPrint = document.createElement('style');
+  estiloPrint.setAttribute('data-brave-hub', '1');
+  estiloPrint.textContent = '@media print { #brave-hub-aviso { display: none !important; } }';
+  document.head.appendChild(estiloPrint);
+
   const box = document.createElement('div');
+  box.id = 'brave-hub-aviso';
+  box.setAttribute('data-brave-hub', '1');
   box.style.cssText = [
     'position:fixed', 'top:16px', 'right:16px', 'z-index:999999',
     'background:#111', 'color:#fff', 'padding:12px 18px', 'border-radius:12px',
@@ -46,8 +55,9 @@
     // Clona o documento para inlinar tudo sem mexer na página visível.
     const clone = document.documentElement.cloneNode(true);
     clone.querySelectorAll('script').forEach((s) => s.remove());
-    const cloneBox = clone.querySelector('div[style*="999999"]');
-    if (cloneBox) cloneBox.remove(); // não levar o aviso flutuante pro PDF
+    // Tira TUDO que este script injetou — o PDF é o documento oficial do Bling,
+    // nada nosso pode aparecer nele.
+    clone.querySelectorAll('#brave-hub-aviso, [data-brave-hub]').forEach((el) => el.remove());
 
     // CSS: troca <link rel=stylesheet> por <style> com o conteúdo baixado na sessão.
     const linksOrig = [...document.querySelectorAll('link[rel="stylesheet"]')];
