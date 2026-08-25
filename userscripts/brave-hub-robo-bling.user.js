@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Robô de propostas do Bling
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.2
+// @version      1.3
 // @description  Captura sozinho os PDFs oficiais das propostas pendentes, em janela invisível. Basta deixar o Bling aberto numa aba.
 // @match        https://www.bling.com.br/*
 // @grant        none
@@ -35,8 +35,8 @@
 
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
-  const VERSAO = '1.2';
-  const INTERVALO_MS = 90 * 1000;   // de quanto em quanto tempo procura pendências
+  const VERSAO = '1.3';
+  const INTERVALO_MS = 45 * 1000;   // de quanto em quanto tempo procura pendências
   const ESPERA_MAX_MS = 40 * 1000;  // tempo máximo esperando uma proposta carregar
 
   let ocupado = false;
@@ -230,6 +230,30 @@
     }
   }
 
-  setTimeout(rodar, 5000);
-  setInterval(rodar, INTERVALO_MS);
+  /* Por que um Worker em vez de setInterval:
+     o Chrome desacelera (e o Memory Saver chega a congelar) timers de abas em
+     segundo plano — por isso o robo so acordava quando a pagina era atualizada
+     na mao. Timers dentro de um Worker dedicado nao sofrem esse afrouxamento,
+     entao a ronda continua com o Bling em aba de fundo.
+     Alem disso, disparamos ao voltar para a aba: se o Chrome tiver congelado
+     tudo mesmo assim, o robo retoma no instante em que a aba e reaberta. */
+  function iniciarRonda() {
+    try {
+      const codigo = `let t=null;onmessage=e=>{if(t)clearInterval(t);t=setInterval(()=>postMessage(1),${INTERVALO_MS});postMessage(1);};`;
+      const url = URL.createObjectURL(new Blob([codigo], { type: 'application/javascript' }));
+      const w = new Worker(url);
+      w.onmessage = () => rodar();
+      w.postMessage('iniciar');
+      return true;
+    } catch (_) {
+      // Worker bloqueado: cai no timer comum (funciona com a aba em primeiro plano)
+      setInterval(rodar, INTERVALO_MS);
+      return false;
+    }
+  }
+
+  setTimeout(iniciarRonda, 3000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) rodar(); });
+  window.addEventListener('focus', rodar);
+  window.addEventListener('online', rodar);
 })();
