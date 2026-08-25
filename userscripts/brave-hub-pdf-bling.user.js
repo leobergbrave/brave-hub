@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      2.0
+// @version      2.1
 // @description  Captura a proposta oficial do Bling e envia ao Brave HUB, que gera e guarda o PDF. Sem diálogo de impressão: Salvar → Imprimir → Ok e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -48,7 +48,7 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
-  const VERSAO = '2.0';
+  const VERSAO = '2.1';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
   setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);
@@ -169,11 +169,45 @@
     }
   }
 
-  // Espera as imagens carregarem antes de capturar (o PDF precisa delas).
-  const imgs = [...document.images];
-  Promise.all(imgs.map((im) => im.complete
-    ? Promise.resolve()
-    : new Promise((res) => { im.addEventListener('load', res); im.addEventListener('error', res); })
-  )).then(() => setTimeout(enviar, 300));
+  /* ESPERAR A PROPOSTA APARECER — a parte mais importante deste script.
+     A tela do Bling nasce com "Carregando..." e só depois busca os dados. Se
+     capturarmos antes, o cliente recebe um PDF com a palavra "Carregando..."
+     e mais nada (aconteceu em produção). Então esperamos três coisas:
+       1. o texto "Carregando" sumir;
+       2. existir tabela de itens com linhas de verdade;
+       3. as imagens (logo + fotos) terminarem de baixar.
+     Só então capturamos. */
+  const conteudoPronto = () => {
+    const txt = document.body.innerText || '';
+    if (/carregando/i.test(txt)) return false;
+    if (!acharNumero()) return false;
+    const linhas = document.querySelectorAll('table tr');
+    if (linhas.length < 3) return false;
+    // "Total da proposta" / "Nº de Itens" só existem no documento montado
+    return /total\s+da\s+proposta|n[ºo°]\s*de\s+itens|itens\s+da\s+proposta/i.test(txt);
+  };
+
+  const imagensProntas = () => {
+    const imgs = [...document.images];
+    return imgs.length === 0 || imgs.every((im) => im.complete);
+  };
+
+  const LIMITE_MS = 30000;
+  const inicio = Date.now();
+  (function aguardar() {
+    const decorrido = Date.now() - inicio;
+    if (conteudoPronto() && imagensProntas()) {
+      // margem para o navegador terminar de pintar a última linha
+      setTimeout(enviar, 500);
+      return;
+    }
+    if (decorrido > LIMITE_MS) {
+      setBox(`❌ BRAVE HUB v${VERSAO}: a proposta não terminou de carregar em 30s. Recarregue a página (F5).`, '#7f1d1d');
+      devolverPrint();
+      return;
+    }
+    setBox(`⏳ BRAVE HUB v${VERSAO}: aguardando a proposta carregar (${Math.round(decorrido / 1000)}s)...`);
+    setTimeout(aguardar, 400);
+  })();
   } // fim de iniciar()
 })();

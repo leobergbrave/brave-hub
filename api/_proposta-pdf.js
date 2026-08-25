@@ -133,6 +133,19 @@ export async function uploadPdf(req, res) {
     return res.status(400).json({ ok: false, error: 'numero e html são obrigatórios.' });
   }
 
+  /* Trava contra proposta pela metade: a tela do Bling nasce com "Carregando..."
+     e um cliente já recebeu um PDF com essa única palavra. Mesmo com o
+     userscript esperando, o servidor confere antes de gravar — PDF errado
+     enviado ao cliente não tem desfazer. */
+  const semTags = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  const temItens = /total\s+da\s+proposta|n[ºo°]?\s*de\s+itens|itens\s+da\s+proposta/i.test(semTags);
+  if (/carregando/i.test(semTags) || !temItens) {
+    return res.status(200).json({
+      ok: false,
+      error: 'A página ainda não tinha carregado a proposta (documento incompleto). Recarregue a tela de impressão no Bling e tente de novo.',
+    });
+  }
+
   // 1. Achar o orçamento dono desta proposta (à vista, a prazo ou única)
   let { data: orc } = await supabaseAdmin
     .from('orcamentos_salvos')
