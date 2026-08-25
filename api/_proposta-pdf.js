@@ -49,32 +49,44 @@ async function getValidToken() {
   return tokenData.access_token;
 }
 
-/* Propostas antigas foram criadas antes de guardarmos o numero — resolve
-   consultando a API do Bling pelas propostas sem numero salvo, mais recentes
-   primeiro, até achar a que bate. Cada consulta preenche a coluna, então o
-   custo é pago uma vez só por proposta. */
+/* Cada orçamento pode ter até 3 propostas no Bling: à vista + a prazo (criadas
+   automaticamente pela edge fn sync-bling-proposal ao salvar) e a "única" (botão
+   Bling manual, via _bling-pedido.js). Cada uma tem seu par id/numero e seu PDF. */
+const TIPOS = [
+  { tipo: 'avista', idCol: 'bling_avista_id', numCol: 'bling_avista_numero', pdfCol: 'bling_avista_pdf' },
+  { tipo: 'prazo', idCol: 'bling_prazo_id', numCol: 'bling_prazo_numero', pdfCol: 'bling_prazo_pdf' },
+  { tipo: 'unica', idCol: 'bling_pedido_id', numCol: 'bling_proposta_numero', pdfCol: 'proposta_pdf_path' },
+];
+const COLS = 'id, slug, cliente, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
+
+/* Propostas criadas antes de guardarmos o numero — resolve consultando a API do
+   Bling pelos ids sem numero salvo, mais recentes primeiro, até achar a que
+   bate. Cada consulta preenche a coluna, então o custo é pago uma vez só. */
 async function backfillNumero(numeroProcurado) {
   const token = await getValidToken();
   if (!token) return null;
-  // Limite de 25 para caber com folga no maxDuration de 60s da função /api/bling
+  // Limite baixo para caber com folga no maxDuration de 60s da função /api/bling
   // (proposta recém-impressa quase sempre está no topo — early exit no match).
   const { data: rows } = await supabaseAdmin
     .from('orcamentos_salvos')
-    .select('id, slug, bling_pedido_id')
-    .not('bling_pedido_id', 'is', null)
-    .is('bling_proposta_numero', null)
+    .select(COLS)
+    .or(TIPOS.map(t => `and(${t.idCol}.not.is.null,${t.numCol}.is.null)`).join(','))
     .order('criado_em', { ascending: false })
-    .limit(25);
+    .limit(12);
   for (const row of rows || []) {
-    await sleep(350);
-    const r = await fetch(`https://api.bling.com.br/v3/propostas-comerciais/${row.bling_pedido_id}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: '1.0' },
-    });
-    if (!r.ok) continue;
-    const numero = (await r.json())?.data?.numero;
-    if (!numero) continue;
-    await supabaseAdmin.from('orcamentos_salvos').update({ bling_proposta_numero: numero }).eq('id', row.id);
-    if (Number(numero) === Number(numeroProcurado)) return row;
+    for (const t of TIPOS) {
+      if (!row[t.idCol] || row[t.numCol]) continue;
+      await sleep(350);
+      const r = await fetch(`https://api.bling.com.br/v3/propostas-comerciais/${row[t.idCol]}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: '1.0' },
+      });
+      if (!r.ok) continue;
+      const numero = (await r.json())?.data?.numero;
+      if (!numero) continue;
+      await supabaseAdmin.from('orcamentos_salvos').update({ [t.numCol]: numero }).eq('id', row.id);
+      row[t.numCol] = numero;
+      if (Number(numero) === Number(numeroProcurado)) return row;
+    }
   }
   return null;
 }
@@ -121,11 +133,11 @@ export async function uploadPdf(req, res) {
     return res.status(400).json({ ok: false, error: 'numero e html são obrigatórios.' });
   }
 
-  // 1. Achar o orçamento dono desta proposta
+  // 1. Achar o orçamento dono desta proposta (à vista, a prazo ou única)
   let { data: orc } = await supabaseAdmin
     .from('orcamentos_salvos')
-    .select('id, slug, cliente')
-    .eq('bling_proposta_numero', num)
+    .select(COLS)
+    .or(TIPOS.map(t => `${t.numCol}.eq.${num}`).join(','))
     .order('criado_em', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -133,9 +145,10 @@ export async function uploadPdf(req, res) {
   if (!orc) {
     return res.status(200).json({
       ok: false,
-      error: `Nenhum orçamento do HUB vinculado à proposta nº ${num}. Envie o orçamento ao Bling pelo HUB primeiro.`,
+      error: `Nenhum orçamento do HUB vinculado à proposta nº ${num}. Gere o orçamento pelo HUB primeiro (propostas criadas à mão no Bling não têm vínculo).`,
     });
   }
+  const tipoInfo = TIPOS.find(t => Number(orc[t.numCol]) === num) || TIPOS[2];
 
   // 2. HTML → PDF (mesmo motor do "Salvar como PDF" do Chrome)
   let pdf;
@@ -147,7 +160,7 @@ export async function uploadPdf(req, res) {
   }
 
   // 3. Guardar no Storage (bucket privado; download só pelo HUB)
-  const path = `${orc.slug}.pdf`;
+  const path = tipoInfo.tipo === 'unica' ? `${orc.slug}.pdf` : `${orc.slug}-${tipoInfo.tipo}.pdf`;
   let up = await supabaseAdmin.storage.from(BUCKET).upload(path, pdf, {
     contentType: 'application/pdf',
     upsert: true,
@@ -165,36 +178,42 @@ export async function uploadPdf(req, res) {
   }
 
   await supabaseAdmin.from('orcamentos_salvos').update({
-    proposta_pdf_path: path,
+    [tipoInfo.pdfCol]: path,
     proposta_pdf_em: new Date().toISOString(),
   }).eq('id', orc.id);
 
-  console.log('[proposta-pdf] salvo:', { numero: num, slug: orc.slug, bytes: pdf.length });
-  return res.status(200).json({ ok: true, slug: orc.slug, cliente: orc.cliente, bytes: pdf.length });
+  const rotulo = { avista: 'à vista', prazo: 'a prazo', unica: '' }[tipoInfo.tipo];
+  console.log('[proposta-pdf] salvo:', { numero: num, tipo: tipoInfo.tipo, slug: orc.slug, bytes: pdf.length });
+  return res.status(200).json({
+    ok: true, slug: orc.slug, cliente: orc.cliente, tipo: tipoInfo.tipo, rotulo, bytes: pdf.length,
+  });
 }
 
 export async function baixarPdf(req, res) {
-  const { slug } = req.query || {};
+  const { slug, tipo } = req.query || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
 
   const { data: orc } = await supabaseAdmin
     .from('orcamentos_salvos')
-    .select('cliente, bling_proposta_numero, proposta_pdf_path')
+    .select(COLS)
     .eq('slug', slug)
     .maybeSingle();
-  if (!orc?.proposta_pdf_path) {
+  // tipo explícito, senão o primeiro que tiver PDF (avista → prazo → unica)
+  const t = TIPOS.find(x => x.tipo === tipo) || TIPOS.find(x => orc?.[x.pdfCol]);
+  if (!orc || !t || !orc[t.pdfCol]) {
     return res.status(404).json({ ok: false, error: 'PDF ainda não gerado para este orçamento.' });
   }
 
   const { data: file, error } = await supabaseAdmin.storage
     .from(BUCKET)
-    .download(orc.proposta_pdf_path);
+    .download(orc[t.pdfCol]);
   if (error || !file) {
     return res.status(500).json({ ok: false, error: `Falha ao ler PDF: ${error?.message || 'vazio'}` });
   }
 
   const nomeCliente = (orc.cliente || 'Cliente').replace(/[^\p{L}\p{N} .-]/gu, '').trim();
-  const nomeArquivo = `Proposta ${orc.bling_proposta_numero || ''} - ${nomeCliente}.pdf`.replace(/\s+/g, ' ');
+  const sufixo = { avista: ' (À vista)', prazo: ' (A prazo)', unica: '' }[t.tipo];
+  const nomeArquivo = `Proposta ${orc[t.numCol] || ''} - ${nomeCliente}${sufixo}.pdf`.replace(/\s+/g, ' ');
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
   res.status(200).send(Buffer.from(await file.arrayBuffer()));

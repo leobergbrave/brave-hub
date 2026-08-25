@@ -127,7 +127,7 @@ export default function OrcamentosTab() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: orcsData }, { data: linksData }, { data: leadsData }, { count: contatoCount }, { data: dispData }] = await Promise.all([
-      supabase.from('orcamentos_salvos').select('id, slug, cliente, consultor, criado_em, aprovado_em, aberto, payload, bling_origem, bling_pedido_id, bling_proposta_numero, proposta_pdf_path, proposta_pdf_em, formulario_fiscal_token, dados_fiscais_recebidos_em').order('criado_em', { ascending: false }),
+      supabase.from('orcamentos_salvos').select('id, slug, cliente, consultor, criado_em, aprovado_em, aberto, payload, bling_origem, bling_pedido_id, bling_proposta_numero, proposta_pdf_path, proposta_pdf_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, formulario_fiscal_token, dados_fiscais_recebidos_em').order('criado_em', { ascending: false }),
       supabase.from('links_rapidos').select('*').order('criado_em', { ascending: false }),
       supabase.from('leads').select('id, nome, status, link_rapido_codigo, telefone').not('link_rapido_codigo', 'is', null),
       supabase.from('leads').select('*', { count: 'exact', head: true }).neq('status', 'novo'),
@@ -1127,20 +1127,29 @@ export default function OrcamentosTab() {
                       <button onClick={() => handleGerarBling(o)} className="flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 px-2.5 py-1.5 rounded-lg hover:bg-orange-500/10 cursor-pointer border border-orange-500/20">
                         <Send className="w-3 h-3" /> Bling
                       </button>
-                      {o.bling_pedido_id && (
-                        <a href={urlPropostaBling(o.bling_pedido_id)} target="_blank" rel="noreferrer"
-                          title="Abrir a proposta no Bling. Clique em Salvar → Imprimir → Ok e o PDF aparece aqui sozinho."
-                          className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg hover:bg-amber-500/10 cursor-pointer border border-amber-500/20">
-                          <FileText className="w-3 h-3" /> {o.proposta_pdf_path ? 'Reimprimir' : 'Gerar PDF'}
-                        </a>
-                      )}
-                      {o.proposta_pdf_path && (
-                        <a href={`/api/bling?acao=proposta_pdf&slug=${o.slug}`}
-                          title={`PDF oficial do Bling (proposta nº ${o.bling_proposta_numero || '?'}) — baixe e anexe no WhatsApp do cliente`}
-                          className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-green-500/10 cursor-pointer border border-green-500/20">
-                          <FileDown className="w-3 h-3" /> Baixar PDF
-                        </a>
-                      )}
+                      {/* PDF oficial do Bling: abrir proposta pra imprimir (âmbar) e baixar o capturado (verde) */}
+                      {[
+                        { id: o.bling_avista_id, num: o.bling_avista_numero, pdf: o.bling_avista_pdf, tipo: 'avista', rotulo: 'à vista' },
+                        { id: o.bling_prazo_id, num: o.bling_prazo_numero, pdf: o.bling_prazo_pdf, tipo: 'prazo', rotulo: 'a prazo' },
+                        { id: o.bling_pedido_id, num: o.bling_proposta_numero, pdf: o.proposta_pdf_path, tipo: 'unica', rotulo: '' },
+                      ].map(p => (
+                        <span key={p.tipo} className="contents">
+                          {p.id && (
+                            <a href={urlPropostaBling(p.id)} target="_blank" rel="noreferrer"
+                              title={`Abrir a proposta ${p.rotulo} no Bling. Clique em Salvar → Imprimir → Ok e o PDF aparece aqui sozinho.`}
+                              className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg hover:bg-amber-500/10 cursor-pointer border border-amber-500/20">
+                              <FileText className="w-3 h-3" /> {p.pdf ? `Reimprimir ${p.rotulo}` : `Gerar PDF ${p.rotulo}`}
+                            </a>
+                          )}
+                          {p.pdf && (
+                            <a href={`/api/bling?acao=proposta_pdf&slug=${o.slug}&tipo=${p.tipo}`}
+                              title={`PDF oficial do Bling (proposta nº ${p.num || '?'}) — baixe e anexe no WhatsApp do cliente. Pra reimprimir, abra a proposta no Bling de novo.`}
+                              className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-green-500/10 cursor-pointer border border-green-500/20">
+                              <FileDown className="w-3 h-3" /> PDF {p.rotulo || 'Bling'}
+                            </a>
+                          )}
+                        </span>
+                      ))}
                       {statusStr === 'Aprovado' && (
                         <button onClick={() => handleGerarLinkFiscal(o)}
                           className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 px-2.5 py-1.5 rounded-lg hover:bg-purple-500/10 cursor-pointer border border-purple-500/20">

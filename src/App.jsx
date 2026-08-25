@@ -654,9 +654,21 @@ export default function App() {
       // Envia para a Bling e notifica o resultado
       supabase.functions.invoke('sync-bling-proposal', {
         body: { cliente: nomeCliente, consultor: nomeConsultor, payload }
-      }).then(({ error: blingErr }) => {
-        if (blingErr) showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true);
-        else showToastMessage('Proposta enviada ao Bling com sucesso!');
+      }).then(({ data, error: blingErr }) => {
+        if (blingErr) { showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true); return; }
+        showToastMessage('Proposta enviada ao Bling com sucesso!');
+        // Grava o vínculo das duas propostas (à vista / a prazo). É esse vínculo
+        // que liga o PDF oficial capturado na impressão do Bling a este orçamento.
+        const av = data?.dataAvista?.data;
+        const pz = data?.dataPrazo?.data;
+        if (av?.id || pz?.id) {
+          supabase.from('orcamentos_salvos').update({
+            ...(av?.id ? { bling_avista_id: av.id, bling_avista_numero: av.numero ?? null } : {}),
+            ...(pz?.id ? { bling_prazo_id: pz.id, bling_prazo_numero: pz.numero ?? null } : {}),
+          }).eq('slug', slug).then(({ error: e }) => {
+            if (e) console.error('Falha ao gravar vínculo Bling no orçamento:', e);
+          });
+        }
       }).catch(() => showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true));
 
       // Atualiza o histórico

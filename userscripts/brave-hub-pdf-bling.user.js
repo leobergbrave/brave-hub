@@ -100,7 +100,8 @@
       });
       const j = await r.json();
       if (j.ok) {
-        setBox(`✅ BRAVE HUB: PDF da proposta nº ${numero} pronto (${j.cliente}). Pode fechar esta aba.`, '#14532d');
+        const rot = j.rotulo ? ` ${j.rotulo}` : '';
+        setBox(`✅ BRAVE HUB: PDF${rot} da proposta nº ${numero} pronto (${j.cliente}). Pode fechar esta aba.`, '#14532d');
       } else {
         setBox(`❌ BRAVE HUB: ${j.error || 'erro desconhecido'}`, '#7f1d1d');
       }
