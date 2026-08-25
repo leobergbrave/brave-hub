@@ -514,9 +514,31 @@ export default function OrcamentosTab() {
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
   };
 
-  /* Baixa os PDFs oficiais do Bling e abre a conversa do cliente no WhatsApp.
-     A diretoria proíbe mandar link ao cliente — o Léo anexa os arquivos na
-     conversa que abre pronta. (Fase 2: envio automático via BotConversa.) */
+  /* Envio automático: o servidor manda os PDFs pelo BotConversa direto no
+     WhatsApp do cliente. Se falhar (sem API-KEY, ou janela de 24h do WhatsApp
+     fechada), cai no modo manual — baixa os arquivos e abre a conversa. */
+  const [enviandoPdf, setEnviandoPdf] = useState(null);
+  const enviarPdfAuto = async (o) => {
+    if (!confirm(`Enviar os PDFs da proposta para ${o.cliente} no WhatsApp?`)) return;
+    setEnviandoPdf(o.id);
+    try {
+      const r = await fetch('/api/bling?acao=enviar_pdf_cliente', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: o.slug }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        alert(`✅ PDFs enviados ao cliente no WhatsApp (${(j.enviados || []).join(', ')}).`);
+      } else if (confirm(`Não foi possível enviar automaticamente:\n\n${j.error}\n\nQuer baixar os PDFs e abrir a conversa pra enviar manualmente?`)) {
+        enviarPdfsCliente(o);
+      }
+    } catch (err) {
+      if (confirm(`Erro de rede: ${err.message}\n\nBaixar os PDFs e abrir a conversa manualmente?`)) enviarPdfsCliente(o);
+    } finally { setEnviandoPdf(null); }
+  };
+
+  /* Modo manual: baixa os PDFs oficiais e abre a conversa do cliente no
+     WhatsApp — o Léo só anexa os arquivos. A diretoria proíbe mandar link. */
   const enviarPdfsCliente = (o) => {
     const pdfs = [
       ['avista', o.bling_avista_pdf],
@@ -1178,10 +1200,12 @@ export default function OrcamentosTab() {
                         </span>
                       ))}
                       {(o.bling_avista_pdf || o.bling_prazo_pdf || o.proposta_pdf_path) && (
-                        <button onClick={() => enviarPdfsCliente(o)}
-                          title="Baixa os PDFs oficiais e abre a conversa do cliente no WhatsApp — é só anexar os arquivos"
-                          className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg hover:bg-cyan-500/10 cursor-pointer border border-cyan-500/20">
-                          <Send className="w-3 h-3" /> Enviar ao cliente
+                        <button onClick={() => enviarPdfAuto(o)} disabled={enviandoPdf === o.id}
+                          title="Envia os PDFs oficiais no WhatsApp do cliente. Se não der, oferece o envio manual."
+                          className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg hover:bg-cyan-500/10 cursor-pointer border border-cyan-500/20 disabled:opacity-50">
+                          {enviandoPdf === o.id
+                            ? <><Loader2 className="w-3 h-3 animate-spin" /> Enviando...</>
+                            : <><Send className="w-3 h-3" /> Enviar ao cliente</>}
                         </button>
                       )}
                       {statusStr === 'Aprovado' && (

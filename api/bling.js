@@ -3,7 +3,7 @@ import enviarPedido from './_bling-pedido.js';
 import sincronizarContato from './_bling-contato.js';
 import pedidosAtendidos from './_bling-pedidos-atendidos.js';
 import { importar as importarModelos, gerarOrcamento, gerarProposta } from './_bling-modelos.js';
-import { uploadPdf, baixarPdf } from './_proposta-pdf.js';
+import { uploadPdf, baixarPdf, enviarPdfCliente } from './_proposta-pdf.js';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — API: Bling (função consolidada)
@@ -19,6 +19,7 @@ import { uploadPdf, baixarPdf } from './_proposta-pdf.js';
    POST /api/bling?acao=gerar_proposta      → proposta premium a partir de modelo
    POST /api/bling?acao=proposta_pdf_upload → userscript envia HTML oficial da impressão (body: {numero, html})
    GET  /api/bling?acao=proposta_pdf&slug=  → baixa o PDF oficial guardado
+   POST /api/bling?acao=enviar_pdf_cliente  → manda os PDFs no WhatsApp do cliente (body: {slug})
    ═══════════════════════════════════════════════ */
 
 export const config = { maxDuration: 60 };
@@ -40,6 +41,7 @@ export default async function handler(req, res) {
     case 'gerar_proposta':      return gerarProposta(req, res);
     case 'proposta_pdf_upload': return uploadPdf(req, res);
     case 'proposta_pdf':        return baixarPdf(req, res);
+    case 'enviar_pdf_cliente':  return enviarPdfCliente(req, res);
     default:
       return res.status(400).json({ ok: false, error: `Ação Bling inválida: ${acao || '(vazia)'}` });
   }

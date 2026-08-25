@@ -189,6 +189,127 @@ export async function uploadPdf(req, res) {
   });
 }
 
+/* enviarPdfCliente — POST /api/bling?acao=enviar_pdf_cliente  body: { slug }
+ *
+ * Manda os PDFs oficiais direto no WhatsApp do cliente pela API do BotConversa
+ * (POST /subscriber/{id}/send_message com type:"file" aceita URL dinâmica).
+ * As URLs são assinadas e temporárias — o bucket continua privado, e o cliente
+ * recebe o ARQUIVO no WhatsApp, nunca um link (exigência da diretoria).
+ *
+ * Limite da Meta: fora da janela de 24h desde a última mensagem do cliente, só
+ * template aprovado passa. O erro do BotConversa é repassado ao HUB nesse caso.
+ */
+const BC_BASE = 'https://backend.botconversa.com.br/api/v1/webhook';
+
+async function bcFetch(path, method, body, apiKey) {
+  const r = await fetch(`${BC_BASE}${path}`, {
+    method,
+    headers: { 'API-KEY': apiKey, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const texto = await r.text();
+  let json = null;
+  try { json = JSON.parse(texto); } catch (_) {}
+  return { ok: r.ok, status: r.status, json, texto };
+}
+
+export async function enviarPdfCliente(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+
+  const apiKey = process.env.BOTCONVERSA_API_KEY;
+  if (!apiKey) {
+    return res.status(200).json({
+      ok: false,
+      error: 'BOTCONVERSA_API_KEY não configurada na Vercel. Pegue em Configurações da companhia → Integrações → chave "Webhook Integration".',
+    });
+  }
+
+  const { slug } = req.body || {};
+  if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
+
+  const { data: orc } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(`${COLS}, payload, consultor`)
+    .eq('slug', slug)
+    .maybeSingle();
+  if (!orc) return res.status(404).json({ ok: false, error: 'Orçamento não encontrado.' });
+
+  const disponiveis = TIPOS.filter(t => orc[t.pdfCol]);
+  if (disponiveis.length === 0) {
+    return res.status(200).json({ ok: false, error: 'Nenhum PDF capturado ainda. Imprima a proposta no Bling primeiro.' });
+  }
+
+  let tel = String(orc.payload?.telefoneCliente || '').replace(/\D/g, '');
+  if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
+  if (tel.length < 12) {
+    return res.status(200).json({ ok: false, error: 'Orçamento sem telefone válido do cliente.' });
+  }
+
+  // URLs assinadas (7 dias) — a Meta baixa o arquivo no momento do envio.
+  const arquivos = [];
+  for (const t of disponiveis) {
+    const { data, error } = await supabaseAdmin.storage
+      .from(BUCKET).createSignedUrl(orc[t.pdfCol], 60 * 60 * 24 * 7);
+    if (error || !data?.signedUrl) {
+      return res.status(500).json({ ok: false, error: `Falha ao gerar link do PDF: ${error?.message || 'vazio'}` });
+    }
+    arquivos.push({ tipo: t.tipo, url: data.signedUrl });
+  }
+
+  // Contato no BotConversa (busca por telefone; cria se não existir)
+  let subscriberId = null;
+  const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
+  if (busca.ok) subscriberId = busca.json?.id ?? null;
+  if (!subscriberId) {
+    const partes = String(orc.cliente || 'Cliente').trim().split(/\s+/);
+    const criado = await bcFetch('/subscriber/', 'POST', {
+      phone: `+${tel}`,
+      first_name: partes[0] || 'Cliente',
+      last_name: partes.slice(1).join(' ') || 'BRAVE',
+    }, apiKey);
+    subscriberId = criado.json?.id ?? null;
+    if (!subscriberId) {
+      return res.status(200).json({ ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` });
+    }
+  }
+
+  const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
+
+  const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0];
+  const saudacao = await enviar({
+    type: 'text',
+    value: `Olá, ${primeiroNome}! Aqui é da BRAVE Fitness 🦁\nSegue sua proposta comercial em PDF. Qualquer dúvida, é só chamar!`,
+  });
+  if (!saudacao.ok) {
+    return res.status(200).json({
+      ok: false,
+      error: `BotConversa recusou o envio (HTTP ${saudacao.status}): ${saudacao.texto.slice(0, 250)}. Se o cliente não te manda mensagem há mais de 24h, o WhatsApp só permite template aprovado.`,
+    });
+  }
+
+  const enviados = [];
+  const falhas = [];
+  for (const a of arquivos) {
+    const r = await enviar({ type: 'file', value: a.url });
+    (r.ok ? enviados : falhas).push(a.tipo);
+    await sleep(600);
+  }
+
+  if (enviados.length > 0) {
+    await supabaseAdmin.from('orcamentos_salvos')
+      .update({ proposta_pdf_enviado_em: new Date().toISOString() })
+      .eq('id', orc.id);
+  }
+
+  console.log('[proposta-pdf] envio BotConversa:', { slug, tel, enviados, falhas });
+  return res.status(200).json({
+    ok: falhas.length === 0,
+    enviados,
+    falhas,
+    error: falhas.length ? `Falha ao enviar: ${falhas.join(', ')}` : undefined,
+  });
+}
+
 export async function baixarPdf(req, res) {
   const { slug, tipo } = req.query || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
