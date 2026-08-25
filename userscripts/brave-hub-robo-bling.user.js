@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Robô de propostas do Bling
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.1
+// @version      1.2
 // @description  Captura sozinho os PDFs oficiais das propostas pendentes, em janela invisível. Basta deixar o Bling aberto numa aba.
 // @match        https://www.bling.com.br/*
 // @grant        none
@@ -35,7 +35,7 @@
 
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
-  const VERSAO = '1.1';
+  const VERSAO = '1.2';
   const INTERVALO_MS = 90 * 1000;   // de quanto em quanto tempo procura pendências
   const ESPERA_MAX_MS = 40 * 1000;  // tempo máximo esperando uma proposta carregar
 
@@ -182,6 +182,7 @@
     try {
       const numero = p.numero || acharNumero(doc);
       if (!numero) throw new Error('não achei o nº da proposta');
+      setAviso(`🤖 ${p.cliente} (${p.tipo}) — montando documento...`);
       const html = await montarHTML(doc);
       const r = await fetch(`${HUB}/api/bling?acao=proposta_pdf_upload`, {
         method: 'POST',
@@ -200,7 +201,10 @@
 
   // ── laço principal ────────────────────────────────────────────────────
   async function rodar() {
-    if (ocupado || document.hidden) return;
+    // Sem checar document.hidden: o Chrome apenas desacelera timers em aba
+    // oculta, e exigir a aba em primeiro plano fazia o robo parecer travado
+    // enquanto o Leo trabalhava em outra aba.
+    if (ocupado) return;
     ocupado = true;
     try {
       const r = await fetch(`${HUB}/api/bling?acao=propostas_pendentes`, { headers: { 'x-hub-token': TOKEN } });
