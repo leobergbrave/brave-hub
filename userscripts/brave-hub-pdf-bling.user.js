@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.0
+// @version      1.1
 // @description  Captura a proposta oficial do Bling na tela de impressão e envia ao Brave HUB, que gera e guarda o PDF. Fluxo: Salvar → Imprimir → Ok, e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -93,7 +93,7 @@
     setBox(`⏳ BRAVE HUB: enviando proposta nº ${numero}...`);
     const html = await montarHTML();
     try {
-      const r = await fetch(`${HUB}/api/proposta-pdf-upload`, {
+      const r = await fetch(`${HUB}/api/bling?acao=proposta_pdf_upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-hub-token': TOKEN },
         body: JSON.stringify({ numero, html }),

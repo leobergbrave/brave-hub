@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   // LÉO (não o cliente) pelo webhook do vigia. Fundido aqui pra não criar mais
   // uma função serverless (limite de funções do plano da Vercel).
   if (req.body?.acao === 'orcamento-adicionado') {
-    const { slug, cliente, produto, valor, link } = req.body || {};
+    const { slug, cliente, produto, valor, link, telefone_cliente } = req.body || {};
     if (!produto) return res.status(400).json({ ok: false, error: 'produto obrigatório' });
     const urlVigia = process.env.BOTCONVERSA_WEBHOOK
       || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
@@ -22,6 +22,11 @@ export default async function handler(req, res) {
     const valorTxt = Number(valor) > 0
       ? ` (${Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
       : '';
+    // Formata o telefone do cliente para exibição amigável
+    const telClienteRaw = String(telefone_cliente || '').replace(/\D/g, '');
+    const telClienteTxt = telClienteRaw.length >= 10
+      ? `\n📱 WhatsApp: +${telClienteRaw}`
+      : '\n📱 WhatsApp: não informado';
     try {
       await fetch(urlVigia, {
         method: 'POST',
@@ -32,7 +37,7 @@ export default async function handler(req, res) {
           titulo: 'Cliente adicionou produto',
           qtd_pendentes: 1,
           link: link || '',
-          alerta: `🛒🔥 ${cliente || 'Cliente'} ADICIONOU "${produto}"${valorTxt} ao próprio orçamento (${slug || ''})! Sinal de compra — chama agora: ${link || ''}`,
+          alerta: `🛒🔥 ${cliente || 'Cliente'} ADICIONOU "${produto}"${valorTxt} ao próprio orçamento (${slug || ''})!${telClienteTxt}\nSinal de compra — chama agora: ${link || ''}`,
         }),
       });
     } catch (e) {

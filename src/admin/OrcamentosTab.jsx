@@ -1135,7 +1135,7 @@ export default function OrcamentosTab() {
                         </a>
                       )}
                       {o.proposta_pdf_path && (
-                        <a href={`/api/proposta-pdf?slug=${o.slug}`}
+                        <a href={`/api/bling?acao=proposta_pdf&slug=${o.slug}`}
                           title={`PDF oficial do Bling (proposta nº ${o.bling_proposta_numero || '?'}) — baixe e anexe no WhatsApp do cliente`}
                           className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-green-500/10 cursor-pointer border border-green-500/20">
                           <FileDown className="w-3 h-3" /> Baixar PDF

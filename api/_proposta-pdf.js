@@ -3,14 +3,19 @@ import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
 /**
- * POST /api/proposta-pdf-upload
+ * Helpers de PDF da proposta, roteados por /api/bling (limite de funções do Hobby):
+ *
+ * uploadPdf — POST /api/bling?acao=proposta_pdf_upload
  * Recebe do userscript (rodando em bling.com.br/relatorios/orcamento.impressao.php)
  * o HTML oficial da proposta já renderizado na sessão logada, converte em PDF
  * (mesmo motor do "Salvar como PDF" do Chrome) e guarda no Storage vinculado
  * ao orçamento. A diretoria exige que o cliente receba o PDF do Bling — este
  * fluxo automatiza exatamente o documento que o Bling imprime.
- *
  * Body: { numero, html }   Header: x-hub-token (env HUB_PDF_TOKEN)
+ *
+ * baixarPdf — GET /api/bling?acao=proposta_pdf&slug=...
+ * Baixa o PDF guardado (bucket privado). O arquivo é o que o Léo anexa no
+ * WhatsApp do cliente — cliente não recebe link.
  */
 
 const supabaseAdmin = createClient(
@@ -51,13 +56,15 @@ async function getValidToken() {
 async function backfillNumero(numeroProcurado) {
   const token = await getValidToken();
   if (!token) return null;
+  // Limite de 25 para caber com folga no maxDuration de 60s da função /api/bling
+  // (proposta recém-impressa quase sempre está no topo — early exit no match).
   const { data: rows } = await supabaseAdmin
     .from('orcamentos_salvos')
     .select('id, slug, bling_pedido_id')
     .not('bling_pedido_id', 'is', null)
     .is('bling_proposta_numero', null)
     .order('criado_em', { ascending: false })
-    .limit(40);
+    .limit(25);
   for (const row of rows || []) {
     await sleep(350);
     const r = await fetch(`https://api.bling.com.br/v3/propostas-comerciais/${row.bling_pedido_id}`, {
@@ -97,10 +104,7 @@ async function htmlParaPdf(html) {
   }
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type, x-hub-token');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+export async function uploadPdf(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
 
   const tokenEsperado = process.env.HUB_PDF_TOKEN;
@@ -167,4 +171,31 @@ export default async function handler(req, res) {
 
   console.log('[proposta-pdf] salvo:', { numero: num, slug: orc.slug, bytes: pdf.length });
   return res.status(200).json({ ok: true, slug: orc.slug, cliente: orc.cliente, bytes: pdf.length });
+}
+
+export async function baixarPdf(req, res) {
+  const { slug } = req.query || {};
+  if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
+
+  const { data: orc } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select('cliente, bling_proposta_numero, proposta_pdf_path')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (!orc?.proposta_pdf_path) {
+    return res.status(404).json({ ok: false, error: 'PDF ainda não gerado para este orçamento.' });
+  }
+
+  const { data: file, error } = await supabaseAdmin.storage
+    .from(BUCKET)
+    .download(orc.proposta_pdf_path);
+  if (error || !file) {
+    return res.status(500).json({ ok: false, error: `Falha ao ler PDF: ${error?.message || 'vazio'}` });
+  }
+
+  const nomeCliente = (orc.cliente || 'Cliente').replace(/[^\p{L}\p{N} .-]/gu, '').trim();
+  const nomeArquivo = `Proposta ${orc.bling_proposta_numero || ''} - ${nomeCliente}.pdf`.replace(/\s+/g, ' ');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+  res.status(200).send(Buffer.from(await file.arrayBuffer()));
 }
