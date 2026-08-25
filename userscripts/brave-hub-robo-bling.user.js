@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Robô de propostas do Bling
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.3
+// @version      1.4
 // @description  Captura sozinho os PDFs oficiais das propostas pendentes, em janela invisível. Basta deixar o Bling aberto numa aba.
 // @match        https://www.bling.com.br/*
 // @grant        none
@@ -35,9 +35,9 @@
 
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
-  const VERSAO = '1.3';
+  const VERSAO = '1.4';
   const INTERVALO_MS = 45 * 1000;   // de quanto em quanto tempo procura pendências
-  const ESPERA_MAX_MS = 40 * 1000;  // tempo máximo esperando uma proposta carregar
+  const ESPERA_MAX_MS = 75 * 1000;  // tempo máximo esperando uma proposta carregar
 
   let ocupado = false;
 
@@ -216,10 +216,23 @@
       }
       setAviso(`🤖 ${fila.length} proposta(s) para capturar...`);
       for (const p of fila) {
-        try {
-          await capturar(p);
-        } catch (e) {
-          setAviso(`⚠️ ${p.cliente} (${p.tipo}): ${e.message}`, '#7c2d12');
+        /* Duas tentativas: a segunda proposta de um mesmo orcamento costuma
+           demorar mais (o Bling fica lento logo apos a primeira impressao), e
+           uma falha isolada deixava o orcamento pela metade — sem as duas
+           propostas prontas o envio automatico nunca dispara. */
+        let ok = false;
+        for (let tentativa = 1; tentativa <= 2 && !ok; tentativa++) {
+          try {
+            await capturar(p);
+            ok = true;
+          } catch (e) {
+            if (tentativa === 2) {
+              setAviso(`⚠️ ${p.cliente} (${p.tipo}): ${e.message}`, '#7c2d12');
+            } else {
+              setAviso(`🔁 ${p.cliente} (${p.tipo}) demorou — tentando de novo...`);
+              await new Promise((res) => setTimeout(res, 6000));
+            }
+          }
         }
         await new Promise((res) => setTimeout(res, 4000)); // respiro entre capturas
       }
