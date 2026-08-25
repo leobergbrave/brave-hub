@@ -395,6 +395,35 @@ export async function propostaPorTelefone(req, res) {
   });
 }
 
+/* GET /api/bling?acao=propostas_pendentes  (header x-hub-token)
+   Lista as propostas que ja existem no Bling mas ainda nao tiveram o PDF
+   capturado. O robo do Bling consome isso para imprimir sozinho, num iframe
+   invisivel, sem o Leo clicar em nada. */
+export async function propostasPendentes(req, res) {
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  }
+  const { data: linhas } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .or(TIPOS.map(t => `and(${t.idCol}.not.is.null,${t.pdfCol}.is.null)`).join(','))
+    .order('criado_em', { ascending: false })
+    .limit(20);
+
+  const pendentes = [];
+  for (const o of linhas || []) {
+    for (const t of TIPOS) {
+      if (o[t.idCol] && !o[t.pdfCol]) {
+        pendentes.push({
+          slug: o.slug, cliente: o.cliente, tipo: t.tipo,
+          idOrcamento: String(o[t.idCol]), numero: o[t.numCol] || null,
+        });
+      }
+    }
+  }
+  return res.status(200).json({ ok: true, pendentes });
+}
+
 export async function baixarPdf(req, res) {
   const { slug, tipo } = req.query || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
