@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Robô de propostas do Bling
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.4
+// @version      1.5
 // @description  Captura sozinho os PDFs oficiais das propostas pendentes, em janela invisível. Basta deixar o Bling aberto numa aba.
 // @match        https://www.bling.com.br/*
 // @grant        none
@@ -35,7 +35,7 @@
 
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
-  const VERSAO = '1.4';
+  const VERSAO = '1.5';
   const INTERVALO_MS = 45 * 1000;   // de quanto em quanto tempo procura pendências
   const ESPERA_MAX_MS = 75 * 1000;  // tempo máximo esperando uma proposta carregar
 
@@ -67,6 +67,15 @@
       const iframe = document.createElement('iframe');
       iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:1400px;border:0;opacity:0';
       iframe.name = 'bh_captura_' + Date.now();
+      /* A trava que realmente resolve o dialogo de impressao: sem
+         "allow-modals" na sandbox, o proprio navegador impede o iframe de abrir
+         print/alert/confirm — nao importa que o Bling chame window.print().
+         Sobrescrever print era uma corrida contra o carregamento da pagina, e
+         as vezes o dialogo ganhava e congelava o robo.
+         As permissoes concedidas sao o minimo necessario: same-origin para
+         lermos o documento, scripts para a proposta carregar seus dados, forms
+         para o POST da impressao. */
+      iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms');
       document.body.appendChild(iframe);
 
       const form = document.createElement('form');
@@ -88,6 +97,12 @@
          da pagina, travando o robo no meio da captura. Como o iframe e da mesma
          origem, silenciamos o print dele assim que o documento existe; o loop
          curto cobre o intervalo entre o submit e o carregamento. */
+      // Reforco: se algo escapar para a janela principal (parent.print()),
+      // o dialogo tambem nao abre enquanto a captura acontece.
+      const printPrincipal = window.print;
+      window.print = function () {};
+      const devolverPrincipal = () => { window.print = printPrincipal; };
+
       const silenciar = setInterval(() => {
         try {
           const w = iframe.contentWindow;
@@ -109,10 +124,10 @@
           && doc.querySelectorAll('table').length >= 2
           && [...doc.images].every((im) => im.complete);
         if (pronto) {
-          clearInterval(timer); clearInterval(silenciar);
+          clearInterval(timer); clearInterval(silenciar); devolverPrincipal();
           resolve({ iframe, doc });
         } else if (Date.now() - inicio > ESPERA_MAX_MS) {
-          clearInterval(timer); clearInterval(silenciar);
+          clearInterval(timer); clearInterval(silenciar); devolverPrincipal();
           iframe.remove();
           reject(new Error('a proposta não carregou a tempo'));
         }
