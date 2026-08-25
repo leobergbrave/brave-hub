@@ -4,6 +4,7 @@
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/lp/ergo/og/(?<slug>[^/]+)\\.png", "dest": "/api/render?tipo=combo-og&slug=$slug" },
     { "src": "/lp/ergo/(?<slug>[^/]+)", "dest": "/api/render?tipo=combo&slug=$slug" },
+    { "src": "/pdf/(?<slug>[^/]+)/(?<tipo>avista|prazo|unica)/v(?<v>[0-9]+)/[^/]*", "dest": "/api/bling?acao=proposta_pdf&slug=$slug&tipo=$tipo&v=$v" },
     { "src": "/pdf/(?<slug>[^/]+)/(?<tipo>avista|prazo|unica)/[^/]*", "dest": "/api/bling?acao=proposta_pdf&slug=$slug&tipo=$tipo" },
     { "src": "/proposta/(?<slug>[^/]+)", "dest": "/api/render?tipo=share&slug=$slug" },
     { "src": "/pp/(?<slug>[^/]+)", "dest": "/api/render?tipo=pp&slug=$slug" },

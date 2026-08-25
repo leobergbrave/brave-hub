@@ -272,13 +272,18 @@ async function despacharPdfs(orc) {
      "…-avista.pdf?token=eyJraWQi…" — nome ilegível E arquivo que não abre,
      porque a extensão deixa de ser .pdf. Por isso servimos por uma rota nossa
      que TERMINA no nome do arquivo (ver a rota /pdf/ no vercel.json). */
+  /* O caminho leva um carimbo de versão (/v<epoch>/) porque WhatsApp e
+     BotConversa cacheiam mídia POR URL: ao reenviar uma proposta recapturada
+     na mesma URL, o cliente recebia de volta o arquivo antigo do cache, sem o
+     servidor ser consultado. Endereço novo a cada envio elimina isso. */
   const base = process.env.HUB_BASE_URL || 'https://brave-hub-two.vercel.app';
   const semAcento = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const versao = Date.now();
   const arquivos = disponiveis.map((t) => {
     const sufixo = { avista: ' - A vista', prazo: ' - A prazo', unica: '' }[t.tipo];
     const nome = semAcento(`Proposta ${orc[t.numCol] || ''} - ${orc.cliente || 'Cliente'}${sufixo}.pdf`)
       .replace(/[^A-Za-z0-9 .-]/g, '').replace(/\s+/g, ' ').trim();
-    return { tipo: t.tipo, url: `${base}/pdf/${orc.slug}/${t.tipo}/${encodeURIComponent(nome)}` };
+    return { tipo: t.tipo, url: `${base}/pdf/${orc.slug}/${t.tipo}/v${versao}/${encodeURIComponent(nome)}` };
   });
 
   // Contato no BotConversa (busca por telefone; cria se não existir)
@@ -408,6 +413,8 @@ export async function baixarPdf(req, res) {
   // simples leva a versao sem acento e o filename* (RFC 5987) o nome correto.
   const nomeAscii = nomeArquivo.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '');
   res.setHeader('Content-Type', 'application/pdf');
+  // O arquivo é substituído a cada recaptura: nenhum intermediário pode guardar.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader(
     'Content-Disposition',
     `attachment; filename="${nomeAscii}"; filename*=UTF-8''${encodeURIComponent(nomeArquivo)}`
