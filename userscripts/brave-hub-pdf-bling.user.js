@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.4
+// @version      1.5
 // @description  Captura a proposta oficial do Bling na tela de impressão e envia ao Brave HUB, que gera e guarda o PDF. Fluxo: Salvar → Imprimir → Ok, e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -31,7 +31,7 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
-  const VERSAO = '1.4';
+  const VERSAO = '1.5';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
   setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);
@@ -138,7 +138,10 @@
       const j = await r.json();
       if (j.ok) {
         const rot = j.rotulo ? ` ${j.rotulo}` : '';
-        setBox(`✅ BRAVE HUB v${VERSAO}: PDF${rot} da proposta nº ${numero} pronto (${j.cliente}). Pode fechar esta aba.`, '#14532d');
+        const envio = j.envioAuto === 'enviado'
+          ? ' 📲 PDFs já enviados ao cliente!'
+          : (j.envioAuto ? ` ⚠️ Envio automático ${j.envioAuto}` : '');
+        setBox(`✅ BRAVE HUB v${VERSAO}: PDF${rot} da proposta nº ${numero} pronto (${j.cliente}).${envio}`, '#14532d');
       } else {
         setBox(`❌ BRAVE HUB v${VERSAO}: ${j.error || 'erro desconhecido'}`, '#7f1d1d');
       }

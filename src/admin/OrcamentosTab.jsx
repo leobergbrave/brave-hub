@@ -529,6 +529,7 @@ export default function OrcamentosTab() {
       const j = await r.json();
       if (j.ok) {
         alert(`✅ PDFs enviados ao cliente no WhatsApp (${(j.enviados || []).join(', ')}).`);
+        load();
       } else if (confirm(`Não foi possível enviar automaticamente:\n\n${j.error}\n\nQuer baixar os PDFs e abrir a conversa pra enviar manualmente?`)) {
         enviarPdfsCliente(o);
       }
@@ -1186,14 +1187,14 @@ export default function OrcamentosTab() {
                           {p.id && (
                             <a href={urlPropostaBling(p.id)} target="_blank" rel="noreferrer"
                               title={`Abrir a proposta ${p.rotulo} no Bling. Clique em Salvar → Imprimir → Ok e o PDF aparece aqui sozinho.`}
-                              className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg hover:bg-amber-500/10 cursor-pointer border border-amber-500/20">
+                              className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-2 sm:py-1.5 rounded-lg hover:bg-amber-500/10 cursor-pointer border border-amber-500/20">
                               <FileText className="w-3 h-3" /> {p.pdf ? `Reimprimir ${p.rotulo}` : `Gerar PDF ${p.rotulo}`}
                             </a>
                           )}
                           {p.pdf && (
                             <a href={`/api/bling?acao=proposta_pdf&slug=${o.slug}&tipo=${p.tipo}`}
                               title={`PDF oficial do Bling (proposta nº ${p.num || '?'}) — baixe e anexe no WhatsApp do cliente. Pra reimprimir, abra a proposta no Bling de novo.`}
-                              className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 px-2.5 py-1.5 rounded-lg hover:bg-green-500/10 cursor-pointer border border-green-500/20">
+                              className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 px-2.5 py-2 sm:py-1.5 rounded-lg hover:bg-green-500/10 cursor-pointer border border-green-500/20">
                               <FileDown className="w-3 h-3" /> PDF {p.rotulo || 'Bling'}
                             </a>
                           )}
@@ -1202,7 +1203,7 @@ export default function OrcamentosTab() {
                       {(o.bling_avista_pdf || o.bling_prazo_pdf || o.proposta_pdf_path) && (
                         <button onClick={() => enviarPdfAuto(o)} disabled={enviandoPdf === o.id}
                           title="Envia os PDFs oficiais no WhatsApp do cliente. Se não der, oferece o envio manual."
-                          className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg hover:bg-cyan-500/10 cursor-pointer border border-cyan-500/20 disabled:opacity-50">
+                          className="flex items-center justify-center gap-1 text-xs font-semibold text-cyan-300 hover:text-cyan-200 px-3 py-2.5 sm:py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 cursor-pointer border border-cyan-500/30 disabled:opacity-50 w-full sm:w-auto order-first sm:order-none">
                           {enviandoPdf === o.id
                             ? <><Loader2 className="w-3 h-3 animate-spin" /> Enviando...</>
                             : <><Send className="w-3 h-3" /> Enviar ao cliente</>}

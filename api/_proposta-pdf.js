@@ -57,7 +57,7 @@ const TIPOS = [
   { tipo: 'prazo', idCol: 'bling_prazo_id', numCol: 'bling_prazo_numero', pdfCol: 'bling_prazo_pdf' },
   { tipo: 'unica', idCol: 'bling_pedido_id', numCol: 'bling_proposta_numero', pdfCol: 'proposta_pdf_path' },
 ];
-const COLS = 'id, slug, cliente, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
+const COLS = 'id, slug, cliente, payload, origem_lead, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
 
 /* Propostas criadas antes de guardarmos o numero — resolve consultando a API do
    Bling pelos ids sem numero salvo, mais recentes primeiro, até achar a que
@@ -184,8 +184,24 @@ export async function uploadPdf(req, res) {
 
   const rotulo = { avista: 'à vista', prazo: 'a prazo', unica: '' }[tipoInfo.tipo];
   console.log('[proposta-pdf] salvo:', { numero: num, tipo: tipoInfo.tipo, slug: orc.slug, bytes: pdf.length });
+
+  // Envio automático (lead FSS): dispara sozinho quando o ÚLTIMO PDF esperado
+  // fica pronto — assim o cliente recebe as duas condições de uma vez, e não
+  // uma proposta solta. Só vale para FSS; nos outros canais o Léo usa o botão.
+  orc[tipoInfo.pdfCol] = path;
+  let envioAuto;
+  if (String(orc.origem_lead || '').toUpperCase() === 'FSS' && !orc.proposta_pdf_enviado_em) {
+    const esperados = TIPOS.filter(t => orc[t.idCol]);
+    const prontos = esperados.filter(t => orc[t.pdfCol]);
+    if (esperados.length > 0 && prontos.length === esperados.length) {
+      envioAuto = await despacharPdfs(orc);
+      console.log('[proposta-pdf] envio automático FSS:', envioAuto);
+    }
+  }
+
   return res.status(200).json({
     ok: true, slug: orc.slug, cliente: orc.cliente, tipo: tipoInfo.tipo, rotulo, bytes: pdf.length,
+    envioAuto: envioAuto ? (envioAuto.ok ? 'enviado' : `falhou: ${envioAuto.error}`) : undefined,
   });
 }
 
@@ -213,45 +229,32 @@ async function bcFetch(path, method, body, apiKey) {
   return { ok: r.ok, status: r.status, json, texto };
 }
 
-export async function enviarPdfCliente(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
-
+/* Faz o envio de fato. Usado pelo botão do HUB e pelo disparo automático que
+   roda quando o último PDF de um orçamento FSS fica pronto. */
+async function despacharPdfs(orc) {
   const apiKey = process.env.BOTCONVERSA_API_KEY;
   if (!apiKey) {
-    return res.status(200).json({
-      ok: false,
-      error: 'BOTCONVERSA_API_KEY não configurada na Vercel. Pegue em Configurações da companhia → Integrações → chave "Webhook Integration".',
-    });
+    return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel. Pegue em Configurações da companhia → Integrações → chave "Webhook Integration".' };
   }
-
-  const { slug } = req.body || {};
-  if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
-
-  const { data: orc } = await supabaseAdmin
-    .from('orcamentos_salvos')
-    .select(`${COLS}, payload, consultor`)
-    .eq('slug', slug)
-    .maybeSingle();
-  if (!orc) return res.status(404).json({ ok: false, error: 'Orçamento não encontrado.' });
 
   const disponiveis = TIPOS.filter(t => orc[t.pdfCol]);
   if (disponiveis.length === 0) {
-    return res.status(200).json({ ok: false, error: 'Nenhum PDF capturado ainda. Imprima a proposta no Bling primeiro.' });
+    return { ok: false, error: 'Nenhum PDF capturado ainda. Imprima a proposta no Bling primeiro.' };
   }
 
   let tel = String(orc.payload?.telefoneCliente || '').replace(/\D/g, '');
   if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
   if (tel.length < 12) {
-    return res.status(200).json({ ok: false, error: 'Orçamento sem telefone válido do cliente.' });
+    return { ok: false, error: 'Orçamento sem telefone válido do cliente.' };
   }
 
-  // URLs assinadas (7 dias) — a Meta baixa o arquivo no momento do envio.
+  // URLs assinadas (7 dias) — o WhatsApp baixa o arquivo no momento do envio.
   const arquivos = [];
   for (const t of disponiveis) {
     const { data, error } = await supabaseAdmin.storage
       .from(BUCKET).createSignedUrl(orc[t.pdfCol], 60 * 60 * 24 * 7);
     if (error || !data?.signedUrl) {
-      return res.status(500).json({ ok: false, error: `Falha ao gerar link do PDF: ${error?.message || 'vazio'}` });
+      return { ok: false, error: `Falha ao gerar link do PDF: ${error?.message || 'vazio'}` };
     }
     arquivos.push({ tipo: t.tipo, url: data.signedUrl });
   }
@@ -269,7 +272,7 @@ export async function enviarPdfCliente(req, res) {
     }, apiKey);
     subscriberId = criado.json?.id ?? null;
     if (!subscriberId) {
-      return res.status(200).json({ ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` });
+      return { ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` };
     }
   }
 
@@ -281,10 +284,7 @@ export async function enviarPdfCliente(req, res) {
     value: `Olá, ${primeiroNome}! Aqui é da BRAVE Fitness 🦁\nSegue sua proposta comercial em PDF. Qualquer dúvida, é só chamar!`,
   });
   if (!saudacao.ok) {
-    return res.status(200).json({
-      ok: false,
-      error: `BotConversa recusou o envio (HTTP ${saudacao.status}): ${saudacao.texto.slice(0, 250)}. Se o cliente não te manda mensagem há mais de 24h, o WhatsApp só permite template aprovado.`,
-    });
+    return { ok: false, error: `BotConversa recusou o envio (HTTP ${saudacao.status}): ${saudacao.texto.slice(0, 250)}` };
   }
 
   const enviados = [];
@@ -301,12 +301,59 @@ export async function enviarPdfCliente(req, res) {
       .eq('id', orc.id);
   }
 
-  console.log('[proposta-pdf] envio BotConversa:', { slug, tel, enviados, falhas });
-  return res.status(200).json({
+  console.log('[proposta-pdf] envio BotConversa:', { slug: orc.slug, tel, enviados, falhas });
+  return {
     ok: falhas.length === 0,
     enviados,
     falhas,
     error: falhas.length ? `Falha ao enviar: ${falhas.join(', ')}` : undefined,
+  };
+}
+
+export async function enviarPdfCliente(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  const { slug } = req.body || {};
+  if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
+
+  const { data: orc } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .eq('slug', slug)
+    .maybeSingle();
+  if (!orc) return res.status(404).json({ ok: false, error: 'Orçamento não encontrado.' });
+
+  return res.status(200).json(await despacharPdfs(orc));
+}
+
+/* GET /api/bling?acao=proposta_por_telefone&telefone=...
+   Usado pelo botão injetado na tela do contato no FSS: diz se aquele contato
+   tem proposta com PDF pronto para enviar. */
+export async function propostaPorTelefone(req, res) {
+  const tel = String(req.query?.telefone || '').replace(/\D/g, '').replace(/^55/, '');
+  if (tel.length < 10) return res.status(400).json({ ok: false, error: 'telefone inválido' });
+
+  // O telefone do cliente vive dentro do payload do orçamento — compara pelos
+  // 8 últimos dígitos porque o nono dígito e o DDI entram e saem conforme a origem.
+  const fim = tel.slice(-8);
+  const { data: linhas } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .or(TIPOS.map(t => `${t.pdfCol}.not.is.null`).join(','))
+    .order('criado_em', { ascending: false })
+    .limit(60);
+
+  const achado = (linhas || []).find(o =>
+    String(o.payload?.telefoneCliente || '').replace(/\D/g, '').endsWith(fim));
+
+  if (!achado) return res.status(200).json({ ok: true, encontrado: false });
+
+  return res.status(200).json({
+    ok: true,
+    encontrado: true,
+    slug: achado.slug,
+    cliente: achado.cliente,
+    enviadoEm: achado.proposta_pdf_enviado_em || null,
+    pdfs: TIPOS.filter(t => achado[t.pdfCol]).map(t => t.tipo),
   });
 }
 
