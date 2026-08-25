@@ -1,0 +1,17 @@
+{
+  "name": "brave-robo-bling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Captura as propostas oficiais do Bling e devolve ao Brave HUB, sem depender do computador do consultor.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.10.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
