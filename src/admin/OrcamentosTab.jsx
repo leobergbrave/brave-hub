@@ -7,7 +7,7 @@ import {
   SlidersHorizontal, ChevronDown, ArrowDownToLine, User, Info, FileText, FileDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { urlPropostaBling } from '../lib/bling';
+import { urlPropostaBling, salvarVinculoPropostas } from '../lib/bling';
 
 /* supabase.functions.invoke devolve só "Edge Function returned a non-2xx status
    code" — a mensagem útil vem no corpo da resposta, dentro de error.context. */
@@ -234,7 +234,9 @@ export default function OrcamentosTab() {
         body: { cliente: orc.cliente, consultor: orc.consultor, payload: orc.payload },
       });
       if (error) throw new Error(await detalharErroEdge(error));
+      await salvarVinculoPropostas(orc.slug, data);
       alert(`Proposta gerada no Bling com sucesso!${data?.vendedor?.nome ? `\nVendedor: ${data.vendedor.nome}` : ''}`);
+      load();
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
   };
 
@@ -506,7 +508,9 @@ export default function OrcamentosTab() {
         body: { cliente: o.cliente, consultor: o.consultor, payload: o.payload },
       });
       if (error) throw new Error(await detalharErroEdge(error));
+      await salvarVinculoPropostas(o.slug, data);
       alert(`Proposta gerada no Bling com sucesso!${data?.vendedor?.nome ? `\nVendedor: ${data.vendedor.nome}` : ''}`);
+      load();
     } catch (err) { alert('Erro ao gerar no Bling: ' + err.message); }
   };
 
