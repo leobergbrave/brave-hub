@@ -248,16 +248,19 @@ async function despacharPdfs(orc) {
     return { ok: false, error: 'Orçamento sem telefone válido do cliente.' };
   }
 
-  // URLs assinadas (7 dias) — o WhatsApp baixa o arquivo no momento do envio.
-  const arquivos = [];
-  for (const t of disponiveis) {
-    const { data, error } = await supabaseAdmin.storage
-      .from(BUCKET).createSignedUrl(orc[t.pdfCol], 60 * 60 * 24 * 7);
-    if (error || !data?.signedUrl) {
-      return { ok: false, error: `Falha ao gerar link do PDF: ${error?.message || 'vazio'}` };
-    }
-    arquivos.push({ tipo: t.tipo, url: data.signedUrl });
-  }
+  /* O WhatsApp usa a URL como nome do arquivo. A URL assinada do Supabase traz
+     "?token=eyJ..." grudado no fim, então o cliente recebia
+     "…-avista.pdf?token=eyJraWQi…" — nome ilegível E arquivo que não abre,
+     porque a extensão deixa de ser .pdf. Por isso servimos por uma rota nossa
+     que TERMINA no nome do arquivo (ver a rota /pdf/ no vercel.json). */
+  const base = process.env.HUB_BASE_URL || 'https://brave-hub-two.vercel.app';
+  const semAcento = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const arquivos = disponiveis.map((t) => {
+    const sufixo = { avista: ' - A vista', prazo: ' - A prazo', unica: '' }[t.tipo];
+    const nome = semAcento(`Proposta ${orc[t.numCol] || ''} - ${orc.cliente || 'Cliente'}${sufixo}.pdf`)
+      .replace(/[^A-Za-z0-9 .-]/g, '').replace(/\s+/g, ' ').trim();
+    return { tipo: t.tipo, url: `${base}/pdf/${orc.slug}/${t.tipo}/${encodeURIComponent(nome)}` };
+  });
 
   // Contato no BotConversa (busca por telefone; cria se não existir)
   let subscriberId = null;
