@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Sessão do Bling para o servidor
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.0
+// @version      1.1
 // @description  Envia ao HUB os cookies da sua sessão do Bling, para o robô do servidor capturar as propostas sem depender do seu computador.
 // @match        https://www.bling.com.br/*
 // @grant        GM_cookie
@@ -28,19 +28,35 @@
   const HUB = 'https://brave-hub-two.vercel.app';
   const TOKEN = '81078d0c8ae70afe4e014d850f7245a70a20da55c9ef92e0';
   const CHAVE_ULTIMO = 'brave_hub_sessao_enviada_em';
-  const INTERVALO_MIN_MS = 60 * 60 * 1000; // no máximo 1x por hora
+  const INTERVALO_MIN_MS = 0; // enquanto validamos: envia a cada carregamento
 
-  const listarCookies = () => new Promise((resolve) => {
+  /* Buscar por URL, nao por dominio: filtrar por "bling.com.br" deixava de fora
+     os cookies gravados em www.bling.com.br — e o de autenticacao costuma ser
+     justamente o mais especifico. Na primeira tentativa vieram 8 cookies, 6
+     deles de analytics, e a sessao nao autenticou no servidor. */
+  const chamar = (api, filtro) => new Promise((resolve) => {
+    try {
+      api.list(filtro, (cookies, erro) => resolve(erro ? [] : (cookies || [])));
+    } catch (_) { resolve([]); }
+  });
+
+  const listarCookies = async () => {
     const api = (typeof GM_cookie !== 'undefined' && GM_cookie)
       || (typeof GM !== 'undefined' && GM.cookie);
-    if (!api || !api.list) return resolve(null);
-    try {
-      api.list({ domain: 'bling.com.br' }, (cookies, erro) => {
-        if (erro || !cookies) return resolve(null);
-        resolve(cookies);
-      });
-    } catch (_) { resolve(null); }
-  });
+    if (!api || !api.list) return null;
+    const listas = await Promise.all([
+      chamar(api, { url: 'https://www.bling.com.br/' }),
+      chamar(api, { domain: 'www.bling.com.br' }),
+      chamar(api, { domain: '.bling.com.br' }),
+      chamar(api, { domain: 'bling.com.br' }),
+    ]);
+    // Junta tudo sem repetir nome (o mais especifico ganha por vir primeiro)
+    const porNome = new Map();
+    for (const lista of listas) {
+      for (const c of lista) if (!porNome.has(c.name)) porNome.set(c.name, c);
+    }
+    return [...porNome.values()];
+  };
 
   function aviso(texto, cor) {
     let el = document.getElementById('brave-hub-sessao');
@@ -84,7 +100,7 @@
       const j = await r.json();
       if (j.ok) {
         localStorage.setItem(CHAVE_ULTIMO, String(Date.now()));
-        aviso(`🔑 Sessão do Bling enviada ao servidor (${j.itens} cookies)`, '#14532d');
+        aviso(`🔑 Sessão enviada ao servidor: ${j.itens} cookies (${cookies.map(c=>c.name).slice(0,6).join(', ')}…)`, '#14532d');
       } else {
         aviso(`⚠️ Sessão: ${j.error}`, '#7c2d12');
       }
