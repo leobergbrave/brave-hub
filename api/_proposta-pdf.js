@@ -76,6 +76,13 @@ function linkPdf(orc, t, versao) {
   return { tipo: t.tipo, nome, url: `${base}/pdf/${orc.slug}/${t.tipo}/v${v}/${encodeURIComponent(nome)}` };
 }
 
+/* Canais em que o cliente recebe as propostas sozinho, assim que os dois PDFs
+   ficam prontos. Nos demais (Uairox, Indicação, Personalizado) o envio continua
+   sendo decisão do consultor, pelo botão "Enviar ao cliente".
+   TIAGO é o nome antigo do canal WhatsApp BRAVE — segue aqui para os orçamentos
+   criados antes da renomeação continuarem funcionando. */
+const ORIGENS_AUTOMATICAS = ['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO'];
+
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /* Resumo em texto dos valores, para o cliente ter os números na conversa sem
@@ -269,7 +276,7 @@ export async function uploadPdf(req, res) {
   // uma proposta solta. Só vale para FSS; nos outros canais o Léo usa o botão.
   orc[tipoInfo.pdfCol] = path;
   let envioAuto;
-  if (String(orc.origem_lead || '').toUpperCase() === 'FSS' && !orc.proposta_pdf_enviado_em) {
+  if (ORIGENS_AUTOMATICAS.includes(String(orc.origem_lead || '').toUpperCase()) && !orc.proposta_pdf_enviado_em) {
     const esperados = TIPOS.filter(t => orc[t.idCol]);
     const prontos = esperados.filter(t => orc[t.pdfCol]);
     if (esperados.length > 0 && prontos.length === esperados.length) {
@@ -360,8 +367,9 @@ async function despacharPdfs(orc) {
   /* Só o lead da central (FSS) recebe apresentação: para ele esta é a primeira
      mensagem no WhatsApp do consultor, e o texto vem do fluxo do BotConversa
      que fazia esse papel (fluxo desligado por mandar o LINK do orçamento).
-     Nos demais canais — TIAGO inclusive — a conversa já está em andamento, e
-     reapresentar-se soaria automatizado: ali vão só as propostas e o fechamento. */
+     Nos demais canais — WhatsApp BRAVE e Venda Direta — a conversa já está em
+     andamento, e reapresentar-se soaria automatizado: ali vão só as propostas e
+     o fechamento com os valores. */
   const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0].toUpperCase();
   const daCentral = String(orc.origem_lead || '').toUpperCase() === 'FSS';
   const consultor = orc.consultor || 'Léo Berg';

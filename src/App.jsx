@@ -179,7 +179,8 @@ export default function App() {
         setNomeCliente(orc.cliente || '');
         setNomeConsultor(orc.consultor || 'LEO BERG');
         const orig = orc.origem_lead || '';
-        const ORIGENS_FIXAS = ['FSS', 'TIAGO', 'UAIROX', 'INDICAÇÃO'];
+        // TIAGO fica na lista so para orcamentos antigos abrirem na origem certa
+        const ORIGENS_FIXAS = ['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO', 'UAIROX', 'INDICAÇÃO'];
         if (ORIGENS_FIXAS.includes(orig)) { setOrigemLead(orig); setOrigemCustom(''); }
         else if (orig) { setOrigemLead('PERSONALIZADO'); setOrigemCustom(orig); }
         else { setOrigemLead(''); setOrigemCustom(''); }
@@ -659,7 +660,7 @@ export default function App() {
          envio dos PDFs (api/_proposta-pdf.js), que reaproveita o mesmo texto de
          abertura e anexa as propostas oficiais do Bling. */
       const semTelefone = (telefoneCliente || '').replace(/\D/g, '').length < 10;
-      if ((origemFinal === 'FSS' || origemFinal === 'TIAGO') && semTelefone) {
+      if (['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO'].includes(origemFinal) && semTelefone) {
         showToastMessage(`⚠️ Origem ${origemFinal} sem telefone do cliente — os PDFs não terão para onde ir.`, true);
       }
       
@@ -1506,8 +1507,9 @@ export default function App() {
                   <select value={origemLead} onChange={e => setOrigemLead(e.target.value)}
                     className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all">
                     <option value="">Selecione a origem...</option>
-                    <option value="FSS">FSS (dispara WhatsApp automático)</option>
-                    <option value="TIAGO">Tiago (dispara WhatsApp automático)</option>
+                    <option value="FSS">FSS — veio da central (envia PDFs + apresentação)</option>
+                    <option value="WHATSAPP">WhatsApp BRAVE — já em conversa (envia PDFs)</option>
+                    <option value="VENDA DIRETA">Venda Direta (envia PDFs)</option>
                     <option value="UAIROX">Uairox</option>
                     <option value="INDICAÇÃO">Indicação</option>
                     <option value="PERSONALIZADO">Personalizado</option>
