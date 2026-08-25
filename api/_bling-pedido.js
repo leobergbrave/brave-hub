@@ -295,11 +295,17 @@ export default async function handler(req, res) {
     propostaNumero = propostaJson.data?.numero || propostaJson.data?.numeroProposta || null;
   } catch (_) {}
 
-  // 11. Salvar bling_pedido_id e cliente_id no orçamento
+  // 11. Salvar bling_pedido_id, numero da proposta e cliente_id no orçamento.
+  // O numero é a chave que casa o PDF capturado pelo userscript (tela de
+  // impressão do Bling só mostra o numero, não o id interno).
   if (propostaId) {
     await supabaseAdmin
       .from('orcamentos_salvos')
-      .update({ bling_pedido_id: propostaId, cliente_id: clienteId })
+      .update({
+        bling_pedido_id: propostaId,
+        ...(propostaNumero ? { bling_proposta_numero: propostaNumero } : {}),
+        cliente_id: clienteId,
+      })
       .eq('id', orc.id);
   }
 
