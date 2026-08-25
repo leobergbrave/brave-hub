@@ -4,9 +4,10 @@ import { formatCurrency } from '../data';
 import {
   Loader2, Eye, Copy, Trash2, CheckCircle2, Clock, XCircle,
   Edit2, Search, Send, CopyPlus, ChevronRight, MapPin, RefreshCw, Link2, X,
-  SlidersHorizontal, ChevronDown, ArrowDownToLine, User, Info,
+  SlidersHorizontal, ChevronDown, ArrowDownToLine, User, Info, FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { urlPropostaBling } from '../lib/bling';
 
 /* supabase.functions.invoke devolve só "Edge Function returned a non-2xx status
    code" — a mensagem útil vem no corpo da resposta, dentro de error.context. */
@@ -1126,6 +1127,13 @@ export default function OrcamentosTab() {
                       <button onClick={() => handleGerarBling(o)} className="flex items-center gap-1 text-xs text-orange-400 hover:text-orange-300 px-2.5 py-1.5 rounded-lg hover:bg-orange-500/10 cursor-pointer border border-orange-500/20">
                         <Send className="w-3 h-3" /> Bling
                       </button>
+                      {o.bling_pedido_id && (
+                        <a href={urlPropostaBling(o.bling_pedido_id)} target="_blank" rel="noreferrer"
+                          title="Abrir a proposta no Bling para gerar o PDF oficial (Imprimir → PDF)"
+                          className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1.5 rounded-lg hover:bg-amber-500/10 cursor-pointer border border-amber-500/20">
+                          <FileText className="w-3 h-3" /> PDF Bling
+                        </a>
+                      )}
                       {statusStr === 'Aprovado' && (
                         <button onClick={() => handleGerarLinkFiscal(o)}
                           className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 px-2.5 py-1.5 rounded-lg hover:bg-purple-500/10 cursor-pointer border border-purple-500/20">

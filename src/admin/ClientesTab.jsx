@@ -3,9 +3,10 @@ import {
   Users, Search, Phone, Mail, MapPin, CreditCard, Building2, User,
   ChevronDown, ChevronUp, RefreshCw, Loader2, ExternalLink, Edit3,
   CheckCircle2, ShoppingBag, X, Check, MessageSquare, Download, AlertCircle, Heart,
-  Send, FileCheck, UserPlus, FileDown,
+  Send, FileCheck, UserPlus, FileDown, FileText,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { urlPropostaBling } from '../lib/bling';
 import { formatCurrency } from '../data';
 
 const TIPOS_NEGOCIO = [
@@ -897,6 +898,13 @@ export default function ClientesTab({ onNavigate }) {
                                     >
                                       <Send className="w-3 h-3" />
                                     </button>
+                                    {o.bling_pedido_id && (
+                                      <a href={urlPropostaBling(o.bling_pedido_id)} target="_blank" rel="noreferrer"
+                                        className="p-1 rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                                        title="Abrir a proposta no Bling para gerar o PDF oficial (Imprimir → PDF)">
+                                        <FileText className="w-3 h-3" />
+                                      </a>
+                                    )}
                                     <a href={`/orcamento/${o.slug}`} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-white cursor-pointer">
                                       <ExternalLink className="w-3 h-3" />
                                     </a>
