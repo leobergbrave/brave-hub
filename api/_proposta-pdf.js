@@ -517,12 +517,16 @@ export async function sessaoBling(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { cookies } = req.body || {};
+    const { cookies, armazenamento } = req.body || {};
     if (!cookies || typeof cookies !== 'string' || cookies.length < 20) {
       return res.status(400).json({ ok: false, error: 'cookies obrigatorios.' });
     }
     const { error } = await supabaseAdmin.from('bling_config')
-      .update({ sessao_cookies: cookies, sessao_atualizada_em: new Date().toISOString() })
+      .update({
+        sessao_cookies: cookies,
+        sessao_storage: armazenamento ? JSON.stringify(armazenamento) : null,
+        sessao_atualizada_em: new Date().toISOString(),
+      })
       .eq('id', 1);
     if (error) return res.status(500).json({ ok: false, error: error.message });
     console.log('[sessao-bling] cookies atualizados:', cookies.split(';').length, 'itens');
@@ -530,12 +534,15 @@ export async function sessaoBling(req, res) {
   }
 
   const { data } = await supabaseAdmin.from('bling_config')
-    .select('sessao_cookies, sessao_atualizada_em').eq('id', 1).maybeSingle();
+    .select('sessao_cookies, sessao_storage, sessao_atualizada_em').eq('id', 1).maybeSingle();
   if (!data?.sessao_cookies) {
     return res.status(200).json({ ok: false, error: 'Nenhuma sessao guardada ainda.' });
   }
   return res.status(200).json({
-    ok: true, cookies: data.sessao_cookies, atualizadaEm: data.sessao_atualizada_em,
+    ok: true,
+    cookies: data.sessao_cookies,
+    armazenamento: data.sessao_storage ? JSON.parse(data.sessao_storage) : {},
+    atualizadaEm: data.sessao_atualizada_em,
   });
 }
 

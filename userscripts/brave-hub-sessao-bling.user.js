@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Sessão do Bling para o servidor
 // @namespace    https://brave-hub-two.vercel.app
-// @version      1.1
+// @version      1.2
 // @description  Envia ao HUB os cookies da sua sessão do Bling, para o robô do servidor capturar as propostas sem depender do seu computador.
 // @match        https://www.bling.com.br/*
 // @grant        GM_cookie
@@ -89,18 +89,35 @@
       return;
     }
 
+    /* Os cookies sozinhos NAO autenticam: testado de outro IP, o Bling responde
+       "Usuario nao autenticado", e na lista nao ha cookie de sessao (DVSID e
+       identificador de dispositivo; o resto e analytics). Indicio de que a
+       autenticacao vive em token no proprio navegador — por isso levamos
+       tambem localStorage e sessionStorage. */
+    const armazenamento = {};
+    for (const [origem, store] of [['local', localStorage], ['session', sessionStorage]]) {
+      for (let i = 0; i < store.length; i++) {
+        const k = store.key(i);
+        const v = store.getItem(k) || '';
+        // so o que tem cara de credencial, e sem arrastar payload gigante
+        if (/token|auth|session|jwt|bearer|acesso|login|user/i.test(k) && v.length < 4000) {
+          armazenamento[`${origem}:${k}`] = v;
+        }
+      }
+    }
+
     // Formato "nome=valor; nome=valor" — é o que o servidor injeta no navegador.
     const texto = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     try {
       const r = await fetch(`${HUB}/api/bling?acao=sessao_bling`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-hub-token': TOKEN },
-        body: JSON.stringify({ cookies: texto }),
+        body: JSON.stringify({ cookies: texto, armazenamento }),
       });
       const j = await r.json();
       if (j.ok) {
         localStorage.setItem(CHAVE_ULTIMO, String(Date.now()));
-        aviso(`🔑 Sessão enviada ao servidor: ${j.itens} cookies (${cookies.map(c=>c.name).slice(0,6).join(', ')}…)`, '#14532d');
+        aviso(`🔑 Sessão enviada: ${j.itens} cookies + ${Object.keys(armazenamento).length} chaves de token`, '#14532d');
       } else {
         aviso(`⚠️ Sessão: ${j.error}`, '#7c2d12');
       }
