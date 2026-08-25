@@ -403,9 +403,16 @@ export async function propostasPendentes(req, res) {
   if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) {
     return res.status(401).json({ ok: false, error: 'Token invalido.' });
   }
+  /* Trava de seguranca: so orcamentos recentes. Sem isso o primeiro ciclo do
+     robo varreria o historico inteiro (21 propostas antigas na estreia) e,
+     nas de origem FSS, dispararia WhatsApp para clientes de semanas atras.
+     O uso real e sempre uma proposta recem-criada. */
+  const JANELA_HORAS = Number(process.env.ROBO_JANELA_HORAS || 72);
+  const corte = new Date(Date.now() - JANELA_HORAS * 3600 * 1000).toISOString();
   const { data: linhas } = await supabaseAdmin
     .from('orcamentos_salvos')
     .select(COLS)
+    .gte('criado_em', corte)
     .or(TIPOS.map(t => `and(${t.idCol}.not.is.null,${t.pdfCol}.is.null)`).join(','))
     .order('criado_em', { ascending: false })
     .limit(20);
