@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      2.1
+// @version      2.2
 // @description  Captura a proposta oficial do Bling e envia ao Brave HUB, que gera e guarda o PDF. Sem diálogo de impressão: Salvar → Imprimir → Ok e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -48,7 +48,7 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
-  const VERSAO = '2.1';
+  const VERSAO = '2.2';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
   setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);
@@ -178,13 +178,12 @@
        3. as imagens (logo + fotos) terminarem de baixar.
      Só então capturamos. */
   const conteudoPronto = () => {
+    // Pela PRESENÇA do documento montado, não pela ausência de "Carregando":
+    // o Bling mantém essa div escondida na página mesmo depois de carregar.
     const txt = document.body.innerText || '';
-    if (/carregando/i.test(txt)) return false;
     if (!acharNumero()) return false;
-    const linhas = document.querySelectorAll('table tr');
-    if (linhas.length < 3) return false;
-    // "Total da proposta" / "Nº de Itens" só existem no documento montado
-    return /total\s+da\s+proposta|n[ºo°]\s*de\s+itens|itens\s+da\s+proposta/i.test(txt);
+    if (document.querySelectorAll('table tr').length < 3) return false;
+    return /total\s+da\s+proposta|n[ºo°]?\s*de\s+itens|itens\s+da\s+proposta/i.test(txt);
   };
 
   const imagensProntas = () => {
