@@ -361,10 +361,28 @@ Deno.serve(async (req) => {
     }
     const dataPrazo = await blingResPrazo.json();
 
+    // O POST devolve apenas o id — nunca o numero (ver BasePostResponse na doc).
+    // Mas e o numero que aparece na tela de impressao do Bling, a unica chave
+    // disponivel para casar o PDF capturado de volta com este orcamento. Por
+    // isso buscamos logo apos criar; sem isso o vinculo nasce pela metade.
+    const buscarNumero = async (id: any) => {
+      if (!id) return null;
+      try {
+        await sleep(400);
+        const r = await fetchWithBlingAuth(`https://api.bling.com.br/v3/propostas-comerciais/${id}`, { method: 'GET' }, supabaseClient);
+        if (!r.ok) return null;
+        return (await r.json())?.data?.numero ?? null;
+      } catch (_) { return null; }
+    };
+
+    const numeroAvista = await buscarNumero(dataAvista?.data?.id);
+    const numeroPrazo = await buscarNumero(dataPrazo?.data?.id);
+
     return new Response(JSON.stringify({
       success: true,
       vendedor: { id: idVendedor ?? null, nome: vendedorNome, solicitado: nomeConsultor },
-      dataAvista, dataPrazo,
+      dataAvista: { ...dataAvista, data: { ...dataAvista?.data, numero: numeroAvista } },
+      dataPrazo: { ...dataPrazo, data: { ...dataPrazo?.data, numero: numeroPrazo } },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
     });
