@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.2
+// @version      2.3
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -108,6 +108,36 @@
     return new File([blob], nome, { type: 'application/pdf' });
   }
 
+  /* Descreve o que existe na tela agora — sem isso, "nao achei o campo de
+     anexo" nao diz se falta o botao, se o campo esta escondido ou se o FSS o
+     cria so na hora. */
+  function radiografia() {
+    const files = [...document.querySelectorAll('input[type="file"]')];
+    return {
+      files: files.length,
+      accepts: files.map((i) => i.accept || '(qualquer)').join(' | ') || '-',
+      textareas: document.querySelectorAll('textarea').length,
+      editaveis: document.querySelectorAll('[contenteditable="true"]').length,
+    };
+  }
+
+  /* O FSS cria o campo de arquivo so depois que o botao de anexo e acionado.
+     Procuramos esse botao por rotulo e por icone (clipe/mais) e clicamos antes
+     de tentar entregar o arquivo. */
+  async function abrirAnexo() {
+    const antes = document.querySelectorAll('input[type="file"]').length;
+    const candidatos = [...document.querySelectorAll('button, [role="button"], label, a, div[class*="attach" i], span[class*="attach" i]')];
+    const alvo = candidatos.find((b) => {
+      const txt = `${b.getAttribute('aria-label') || ''} ${b.getAttribute('title') || ''} ${b.className || ''} ${b.innerHTML || ''}`.toLowerCase();
+      return /attach|anexo|anexar|paperclip|clipe|upload|arquivo|file/.test(txt);
+    });
+    if (!alvo) return false;
+    alvo.click();
+    await new Promise((r) => setTimeout(r, 900));
+    return document.querySelectorAll('input[type="file"]').length > antes
+      || document.querySelectorAll('input[type="file"]').length > 0;
+  }
+
   function entregarAoChat(file) {
     // 1) campo de anexo do proprio chat (o ultimo costuma ser o da conversa aberta)
     const inputs = [...document.querySelectorAll('input[type="file"]')];
@@ -135,7 +165,8 @@
       }));
       return 'colado no campo de mensagem';
     }
-    throw new Error('nao achei o campo de anexo — abra a conversa do cliente');
+    const r = radiografia();
+    throw new Error(`sem campo de anexo (arquivos:${r.files} textareas:${r.textareas} editaveis:${r.editaveis})`);
   }
 
   async function anexarProximo() {
@@ -145,6 +176,10 @@
     status(`⏳ Anexando: ${a.nome}`);
     try {
       const file = await baixarComoArquivo(a.url, a.nome);
+      if (!document.querySelector('input[type="file"]')) {
+        status(`⏳ Abrindo o anexo do chat...`);
+        await abrirAnexo();
+      }
       const via = entregarAoChat(file);
       const restam = arquivos.length - indiceAtual - 1;
       const p = status(`✅ ${via.charAt(0).toUpperCase() + via.slice(1)}: ${a.nome}`, '#4ade80');
