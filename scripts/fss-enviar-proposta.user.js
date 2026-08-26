@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.1
+// @version      2.2
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -37,16 +37,30 @@
      cada um ate achar. */
   function acharTelefones() {
     const achados = new Set();
+    const PADRAO = /\(?\d{2}\)?[\s-]?9?\d{4}[-\s]?\d{4}/g;
+    const coletar = (texto) => {
+      for (const m of String(texto || '').matchAll(PADRAO)) {
+        const n = m[0].replace(/\D/g, '');
+        if (n.length === 10 || n.length === 11) achados.add(n);
+      }
+    };
+
     for (const a of document.querySelectorAll('a[href^="tel:"]')) {
       const n = (a.getAttribute('href') || '').replace(/\D/g, '');
       if (n.length >= 10) achados.add(n);
     }
-    const texto = document.body.innerText || '';
-    for (const m of texto.matchAll(/\(?\d{2}\)?[\s-]?9?\d{4}[-\s]?\d{4}/g)) {
-      const n = m[0].replace(/\D/g, '');
-      if (n.length === 10 || n.length === 11) achados.add(n);
+
+    /* O telefone do contato no FSS fica dentro de um CAMPO de formulario (com
+       seletor de pais ao lado), e innerText nao le valor de campo — era por
+       isso que o painel dizia "nao achei telefone" numa tela que mostrava o
+       numero. Lemos os campos tambem. */
+    for (const el of document.querySelectorAll('input, textarea')) {
+      coletar(el.value);
+      coletar(el.getAttribute('placeholder'));
     }
-    return [...achados].slice(0, 6);
+    coletar(document.body.innerText);
+
+    return [...achados].slice(0, 8);
   }
 
   function painel() {
@@ -190,7 +204,7 @@
     if (!tels.length) {
       /* Antes o painel sumia aqui, e o Leo nao tinha como saber se o script
          estava vivo. Agora ele fala. */
-      status('🦁 BRAVE: abra a conversa de um cliente (nao achei telefone nesta tela)');
+      status('🦁 BRAVE: abra a conversa de um cliente (nenhum telefone nesta tela)');
       return;
     }
 
@@ -210,7 +224,7 @@
       }
     }
     const fmt = tels.map((t) => t.slice(-8)).join(', ');
-    status(`🦁 BRAVE: este contato ainda nao tem proposta pronta (final ${fmt})`);
+    status(`🦁 BRAVE: sem proposta para os telefones desta tela (${fmt})`);
   }
 
   // O SPA troca de contato sem recarregar: revalida periodicamente.
