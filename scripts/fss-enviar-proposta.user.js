@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.4
+// @version      2.5
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -239,6 +239,46 @@
     setTimeout(montarMenu, 5000);
   }
 
+  /* Mensagens do inicio da conversa — usadas quando o contato ainda nao tem
+     orcamento. Ficam sempre a mao no painel, porque e justamente nesse momento
+     (lead novo, sem proposta) que o consultor mais digita a mesma coisa. */
+  const MENSAGENS_RAPIDAS = [
+    {
+      titulo: '👋 Abertura',
+      texto: 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?',
+    },
+    {
+      titulo: '📋 Pedir cadastro',
+      texto: 'Para realizar seu orçamento personalizado, por favor preencha esse cadastro\nhttps://brave-hub-two.vercel.app/cadastro\nMe avise quando finalizar',
+    },
+  ];
+
+  function adicionarAtalhos(painelEl) {
+    const linha = document.createElement('div');
+    linha.textContent = 'Mensagens prontas';
+    linha.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px';
+    painelEl.appendChild(linha);
+    for (const m of MENSAGENS_RAPIDAS) {
+      painelEl.appendChild(botao(m.titulo, '#334155', () => {
+        const ok = escreverMensagem(m.texto);
+        const p = status(ok ? `✅ ${m.titulo} escrita — revise e envie.` : '❌ Nao achei o campo de mensagem.',
+          ok ? '#4ade80' : '#fca5a5');
+        setTimeout(() => (dados ? montarMenu() : montarSemProposta(p)), 3500);
+      }));
+    }
+  }
+
+  /* Painel para contato sem orcamento: so os atalhos de mensagem. */
+  function montarSemProposta(texto) {
+    const p = painel();
+    p.innerHTML = '';
+    const t = document.createElement('div');
+    t.textContent = texto || '🦁 BRAVE — sem proposta para este contato';
+    t.style.cssText = 'font-weight:700;font-size:11px;color:#94a3b8;line-height:1.35';
+    p.appendChild(t);
+    adicionarAtalhos(p);
+  }
+
   function montarMenu() {
     const p = painel();
     p.innerHTML = '';
@@ -263,6 +303,7 @@
       }));
     }
     p.appendChild(botao('📲 Enviar pelo WhatsApp', '#334155', enviarPeloWhatsApp));
+    adicionarAtalhos(p);
   }
 
   async function verificar() {
@@ -273,8 +314,9 @@
 
     if (!tels.length) {
       /* Antes o painel sumia aqui, e o Leo nao tinha como saber se o script
-         estava vivo. Agora ele fala. */
-      status('🦁 BRAVE: abra a conversa de um cliente (nenhum telefone nesta tela)');
+         estava vivo. Agora ele fala — e ja oferece as mensagens de abertura. */
+      dados = null;
+      montarSemProposta('🦁 BRAVE — abra a conversa de um cliente');
       return;
     }
 
@@ -293,8 +335,8 @@
         return;
       }
     }
-    const fmt = tels.map((t) => t.slice(-8)).join(', ');
-    status(`🦁 BRAVE: sem proposta para os telefones desta tela (${fmt})`);
+    dados = null;
+    montarSemProposta('🦁 BRAVE — este contato ainda não tem proposta');
   }
 
   // O SPA troca de contato sem recarregar: revalida periodicamente.
