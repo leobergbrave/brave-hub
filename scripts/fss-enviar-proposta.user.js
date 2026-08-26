@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.3
+// @version      2.4
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -169,6 +169,29 @@
     throw new Error(`sem campo de anexo (arquivos:${r.files} textareas:${r.textareas} editaveis:${r.editaveis})`);
   }
 
+  /* Escreve no campo de mensagem do chat.
+     O FSS e feito em framework reativo: mexer no .value direto nao e percebido
+     (o campo volta ao que era ao enviar). Por isso usamos o setter nativo do
+     prototipo, que e o caminho que o framework escuta. */
+  function escreverMensagem(texto) {
+    const campo = document.querySelector('textarea')
+      || document.querySelector('[contenteditable="true"]');
+    if (!campo) return false;
+
+    if (campo.tagName === 'TEXTAREA') {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      campo.focus();
+      setter.call(campo, texto);
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+      campo.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    campo.focus();
+    campo.textContent = texto;
+    campo.dispatchEvent(new InputEvent('input', { bubbles: true, data: texto }));
+    return true;
+  }
+
   async function anexarProximo() {
     const arquivos = dados?.arquivos || [];
     if (!arquivos.length) return;
@@ -188,6 +211,10 @@
         p.appendChild(botao(`📎 Envie essa e clique para a próxima (${restam})`, '#0e7490', anexarProximo));
       } else {
         indiceAtual = 0;
+        // Ultimo anexo: ja deixa a mensagem escrita, com os valores.
+        if (dados?.mensagem && escreverMensagem(dados.mensagem)) {
+          status(`✅ Anexos e mensagem prontos — revise e envie.`, '#4ade80');
+        }
         p.appendChild(botao('📎 Anexar tudo de novo', '#334155', () => { indiceAtual = 0; anexarProximo(); }));
       }
     } catch (e) {
@@ -227,6 +254,14 @@
     }
     indiceAtual = 0;
     p.appendChild(botao('📎 Anexar aqui na conversa', '#0e7490', anexarProximo));
+    if (dados.mensagem) {
+      p.appendChild(botao('💬 Escrever a mensagem', '#1e40af', () => {
+        status(escreverMensagem(dados.mensagem)
+          ? '✅ Mensagem escrita — revise e envie.'
+          : '❌ Nao achei o campo de mensagem.', escreverMensagem ? '#4ade80' : '#fca5a5');
+        setTimeout(montarMenu, 4000);
+      }));
+    }
     p.appendChild(botao('📲 Enviar pelo WhatsApp', '#334155', enviarPeloWhatsApp));
   }
 

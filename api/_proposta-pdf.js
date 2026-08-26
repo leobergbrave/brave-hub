@@ -470,6 +470,12 @@ export async function propostaPorTelefone(req, res) {
     pdfs: TIPOS.filter(t => achado[t.pdfCol]).map(t => t.tipo),
     // arquivos prontos para o userscript do FSS anexar direto na conversa
     arquivos: TIPOS.filter(t => achado[t.pdfCol]).map(t => linkPdf(achado, t)),
+    /* Mesmo texto que vai no WhatsApp — no FSS a conversa já está em andamento,
+       então vale só o fechamento com os valores, sem a apresentação. */
+    mensagem: montarResumo(
+      achado,
+      !!(achado.bling_avista_pdf && achado.bling_prazo_pdf)
+    ),
   });
 }
 
