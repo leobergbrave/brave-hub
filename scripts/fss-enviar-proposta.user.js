@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.0
+// @version      2.1
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -31,14 +31,22 @@
   let dados = null;
   let indiceAtual = 0;
 
-  function acharTelefone() {
-    const tel = document.querySelector('a[href^="tel:"]');
-    if (tel) {
-      const n = tel.getAttribute('href').replace(/\D/g, '');
-      if (n.length >= 10) return n;
+  /* O painel de contato do FSS mostra mais de um telefone (principal e
+     adicional), e nem sempre o cadastrado no HUB e o primeiro. Em vez de
+     adivinhar, juntamos todos os candidatos da tela e perguntamos ao HUB por
+     cada um ate achar. */
+  function acharTelefones() {
+    const achados = new Set();
+    for (const a of document.querySelectorAll('a[href^="tel:"]')) {
+      const n = (a.getAttribute('href') || '').replace(/\D/g, '');
+      if (n.length >= 10) achados.add(n);
     }
-    const m = (document.body.innerText || '').match(/\+?55?\s?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}/);
-    return m ? m[0].replace(/\D/g, '') : null;
+    const texto = document.body.innerText || '';
+    for (const m of texto.matchAll(/\(?\d{2}\)?[\s-]?9?\d{4}[-\s]?\d{4}/g)) {
+      const n = m[0].replace(/\D/g, '');
+      if (n.length === 10 || n.length === 11) achados.add(n);
+    }
+    return [...achados].slice(0, 6);
   }
 
   function painel() {
@@ -174,27 +182,35 @@
   }
 
   async function verificar() {
-    const tel = acharTelefone();
-    if (!tel) {
-      document.getElementById(ID)?.remove();
-      ultimoTelefone = null;
+    const tels = acharTelefones();
+    const chave = tels.join(',');
+    if (chave === ultimoTelefone) return; // mesma tela, ja avaliada
+    ultimoTelefone = chave;
+
+    if (!tels.length) {
+      /* Antes o painel sumia aqui, e o Leo nao tinha como saber se o script
+         estava vivo. Agora ele fala. */
+      status('🦁 BRAVE: abra a conversa de um cliente (nao achei telefone nesta tela)');
       return;
     }
-    if (tel === ultimoTelefone) return;
-    ultimoTelefone = tel;
-    status('⏳ Consultando proposta...');
-    try {
-      const r = await fetch(`${HUB}/api/bling?acao=proposta_por_telefone&telefone=${tel}`);
-      const j = await r.json();
-      if (!j.encontrado) {
-        document.getElementById(ID)?.remove();
+
+    status(`⏳ BRAVE: procurando proposta (${tels.length} telefone${tels.length > 1 ? 's' : ''})...`);
+    for (const tel of tels) {
+      try {
+        const r = await fetch(`${HUB}/api/bling?acao=proposta_por_telefone&telefone=${tel}`);
+        const j = await r.json();
+        if (j.encontrado) {
+          dados = j;
+          montarMenu();
+          return;
+        }
+      } catch (e) {
+        status(`❌ BRAVE: nao consegui falar com o HUB — ${e.message}`, '#fca5a5');
         return;
       }
-      dados = j;
-      montarMenu();
-    } catch (e) {
-      status('❌ Nao consegui falar com o HUB', '#fca5a5');
     }
+    const fmt = tels.map((t) => t.slice(-8)).join(', ');
+    status(`🦁 BRAVE: este contato ainda nao tem proposta pronta (final ${fmt})`);
   }
 
   // O SPA troca de contato sem recarregar: revalida periodicamente.
