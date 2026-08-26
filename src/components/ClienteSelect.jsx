@@ -31,6 +31,7 @@ export default function ClienteSelect({ cliente, onSelect }) {
   const [aberto, setAberto] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const timer = useRef(null);
+  const toqueY = useRef(null);
 
   // Últimos cadastros: é quase sempre pra eles que o orçamento seguinte vai.
   useEffect(() => {
@@ -66,6 +67,8 @@ export default function ClienteSelect({ cliente, onSelect }) {
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
   };
+
+  const escolher = (c) => { onSelect(c); setBusca(''); setAberto(false); };
 
   const falta = cliente ? dadosFaltantes(cliente) : [];
 
@@ -115,11 +118,22 @@ export default function ClienteSelect({ cliente, onSelect }) {
               {resultados.map((c) => {
                 const f = dadosFaltantes(c);
                 return (
+                  /* No celular, tocar no resultado logo apos digitar so fechava o
+                     teclado: a tela refluia e o clique se perdia. Por isso o toque
+                     e tratado direto (e ignorado se o dedo arrastou, para rolar a
+                     lista nao selecionar quem estiver embaixo). */
                   <button key={c.id} type="button"
-                    onClick={() => { onSelect(c); setBusca(''); setAberto(false); }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-dark-700 cursor-pointer border-b border-dark-700/50 last:border-0">
+                    onPointerDown={(e) => {
+                      if (e.pointerType !== 'touch') { e.preventDefault(); escolher(c); }
+                    }}
+                    onTouchStart={(e) => { toqueY.current = e.touches[0].clientY; }}
+                    onTouchEnd={(e) => {
+                      const dy = Math.abs(e.changedTouches[0].clientY - (toqueY.current ?? e.changedTouches[0].clientY));
+                      if (dy < 8) { e.preventDefault(); escolher(c); }
+                    }}
+                    className="w-full text-left px-4 py-3 hover:bg-dark-700 active:bg-dark-600 cursor-pointer border-b border-dark-700/50 last:border-0 select-none">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-white truncate">{c.nome}</span>
+                      <span className="text-sm text-white leading-snug break-words">{c.nome}</span>
                       {f.length === 0
                         ? <span className="text-[10px] text-green-400 shrink-0">✓ completo</span>
                         : <span className="text-[10px] text-amber-400 shrink-0">falta {f.length}</span>}
@@ -145,15 +159,15 @@ export default function ClienteSelect({ cliente, onSelect }) {
               {recentes.map((c) => {
                 const f = dadosFaltantes(c);
                 return (
-                  <button key={c.id} type="button" onClick={() => onSelect(c)}
+                  <button key={c.id} type="button" onClick={() => escolher(c)}
                     title={f.length ? `Cadastro incompleto — falta: ${f.join(', ')}` : 'Cadastro completo'}
-                    className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border cursor-pointer transition-colors ${
+                    className={`flex items-center gap-1 text-[11px] px-2.5 py-2 rounded-lg border cursor-pointer transition-colors active:opacity-70 ${
                       f.length
                         ? 'text-amber-300 border-amber-500/25 hover:bg-amber-500/10'
                         : 'text-green-300 border-green-500/25 hover:bg-green-500/10'
                     }`}>
                     {f.length ? <AlertTriangle className="w-2.5 h-2.5 shrink-0" /> : <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />}
-                    <span className="max-w-[160px] truncate">{c.nome}</span>
+                    <span className="max-w-[200px] truncate">{c.nome}</span>
                   </button>
                 );
               })}

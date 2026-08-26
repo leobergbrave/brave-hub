@@ -13,6 +13,7 @@ import {
 } from './data';
 import { supabase } from './lib/supabase';
 import { salvarVinculoPropostas } from './lib/bling';
+import BuscaProduto from './components/BuscaProduto';
 import ClienteSelect, { dadosFaltantes } from './components/ClienteSelect';
 
 /* ═══════════════════════════════════════════════
@@ -1053,21 +1054,15 @@ export default function App() {
                   </div>
 
                   <div className="mt-4 flex flex-col sm:flex-row items-center gap-2 pt-4 border-t border-dark-700/50">
-                    <select 
-                      className="flex-1 w-full bg-dark-900 border border-dark-600 rounded-lg text-sm p-2.5 text-zinc-300 focus:outline-none focus:border-neon/50"
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          const prod = produtos.find(p => p.id === e.target.value);
-                          if (prod) handleResolucaoEscolha(index, prod);
-                        }
-                      }}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Ou busque manualmente no catálogo...</option>
-                      {produtos.map(p => (
-                        <option key={p.id} value={p.id}>{p.nome} - {formatCurrency(p.preco)}</option>
-                      ))}
-                    </select>
+                    {/* Era um <select> com o catalogo inteiro: no celular virava
+                        uma roleta interminavel e ainda cortava o nome. */}
+                    <div className="flex-1 w-full">
+                      <BuscaProduto
+                        produtos={produtos}
+                        placeholder="Ou busque no catálogo..."
+                        onEscolher={(prod) => handleResolucaoEscolha(index, prod)}
+                      />
+                    </div>
 
                     <button 
                       onClick={() => {
@@ -1416,7 +1411,7 @@ export default function App() {
                             }}
                             className="px-4 py-4 active:bg-dark-600 hover:bg-dark-700 cursor-pointer flex justify-between items-center border-b border-dark-700/50 last:border-0 select-none"
                           >
-                            <span className="text-sm text-white truncate pr-4">{p.nome}</span>
+                            <span className="text-sm text-white leading-snug break-words pr-3">{p.nome}</span>
                             <span className="text-sm text-neon font-medium shrink-0">{formatCurrency(p.preco)}</span>
                           </div>
                         ))}
