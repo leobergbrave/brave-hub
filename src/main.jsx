@@ -41,3 +41,12 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+/* Registro do service worker — necessario para o celular oferecer "instalar
+   app". Falha em silencio quando o navegador nao suporta: a instalacao e um
+   extra, nada do sistema depende dela. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
