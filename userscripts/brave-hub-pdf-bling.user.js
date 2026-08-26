@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — PDF Bling automático
 // @namespace    https://brave-hub-two.vercel.app
-// @version      2.3
+// @version      2.4
 // @description  Captura a proposta oficial do Bling e envia ao Brave HUB, que gera e guarda o PDF. Sem diálogo de impressão: Salvar → Imprimir → Ok e pronto.
 // @match        https://www.bling.com.br/relatorios/orcamento.impressao.php*
 // @grant        none
@@ -49,7 +49,7 @@
     'font:600 14px/1.4 system-ui,sans-serif', 'box-shadow:0 4px 20px rgba(0,0,0,.35)',
     'max-width:340px',
   ].join(';');
-  const VERSAO = '2.3';
+  const VERSAO = '2.4';
   const setBox = (msg, cor) => { box.textContent = msg; box.style.background = cor || '#111'; };
   document.body.appendChild(box);
   setBox(`⏳ BRAVE HUB v${VERSAO}: capturando proposta...`);
@@ -142,7 +142,9 @@
   async function enviar() {
     const numero = acharNumero();
     if (!numero) {
-      setBox(`❌ BRAVE HUB v${VERSAO}: não achei o nº da proposta nesta página.`, '#7f1d1d');
+      setBox(`🖨️ BRAVE HUB v${VERSAO}: não achei nº de proposta — abrindo a impressão normal...`, '#334155');
+      devolverPrint();
+      setTimeout(() => { try { window.print(); } catch (_) {} }, 400);
       return;
     }
     setBox(`⏳ BRAVE HUB v${VERSAO}: enviando proposta nº ${numero}...`);
@@ -160,6 +162,15 @@
           ? ' 📲 PDFs já enviados ao cliente!'
           : (j.envioAuto ? ` ⚠️ Envio automático ${j.envioAuto}` : '');
         setBox(`✅ BRAVE HUB v${VERSAO}: PDF${rot} da proposta nº ${numero} pronto (${j.cliente}).${envio}`, '#14532d');
+      } else if (/nenhum or[çc]amento/i.test(j.error || '')) {
+        /* Proposta criada a mao no Bling, sem vinculo com o HUB: nao ha nada a
+           capturar e o Leo so quer imprimir. Como este script desliga o dialogo
+           de impressao para trabalhar, precisamos devolve-lo E abri-lo — senao
+           ele fica sem conseguir imprimir uma proposta que nao e nossa. */
+        setBox(`🖨️ BRAVE HUB v${VERSAO}: proposta nº ${numero} não é do HUB — abrindo a impressão normal...`, '#334155');
+        devolverPrint();
+        setTimeout(() => { try { window.print(); } catch (_) {} }, 400);
+        return;
       } else {
         setBox(`❌ BRAVE HUB v${VERSAO}: ${j.error || 'erro desconhecido'}`, '#7f1d1d');
       }
