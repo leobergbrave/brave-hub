@@ -400,17 +400,13 @@ async function despacharPdfs(orc, automatico = false) {
   const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
   if (busca.ok) subscriberId = busca.json?.id ?? null;
 
-  if (!subscriberId && automatico) {
-    const origem = String(orc.origem_lead || '').toUpperCase();
-    /* Lead do FSS conversa pelo numero do FSS, nao pelo WhatsApp da BRAVE —
-       entao nao estar no BotConversa e o NORMAL, e a entrega dele e pelo painel
-       do FSS. So alertamos quando o canal e de fato WhatsApp (WHATSAPP / VENDA
-       DIRETA), onde o cliente deveria existir e um numero ausente e digito
-       errado de verdade. */
-    if (origem === 'FSS') {
-      return { ok: false, naoEnviado: 'entregar-fss',
-        error: `Cliente do FSS não está no WhatsApp da BRAVE — entregue a proposta pelo painel do FSS.` };
-    }
+  /* So bloqueia quando o canal e de fato WhatsApp (WHATSAPP / VENDA DIRETA): ali
+     o cliente ja conversou conosco no WhatsApp, entao contato ausente e digito
+     errado de verdade — e criar um contato mandaria a proposta para o vazio.
+     Para FSS (e envio manual) seguimos criando o contato e enviando: o Leo pediu
+     que FSS receba pelo WhatsApp tambem, alem do painel do FSS. */
+  const origem = String(orc.origem_lead || '').toUpperCase();
+  if (!subscriberId && automatico && ['WHATSAPP', 'VENDA DIRETA', 'TIAGO'].includes(origem)) {
     await alertarConsultor(orc, tel);
     return {
       ok: false,
