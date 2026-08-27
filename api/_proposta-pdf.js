@@ -57,7 +57,7 @@ const TIPOS = [
   { tipo: 'prazo', idCol: 'bling_prazo_id', numCol: 'bling_prazo_numero', pdfCol: 'bling_prazo_pdf' },
   { tipo: 'unica', idCol: 'bling_pedido_id', numCol: 'bling_proposta_numero', pdfCol: 'proposta_pdf_path' },
 ];
-const COLS = 'id, slug, cliente, consultor, payload, origem_lead, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
+const COLS = 'id, slug, cliente, consultor, payload, origem_lead, propostas_em, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
 
 /* Nome e URL do PDF para entrega ao cliente. O caminho leva um carimbo de
    versao (/v<epoch>/) porque WhatsApp, BotConversa e o chat do FSS cacheiam
@@ -523,10 +523,15 @@ export async function propostasPendentes(req, res) {
      O uso real e sempre uma proposta recem-criada. */
   const JANELA_HORAS = Number(process.env.ROBO_JANELA_HORAS || 72);
   const corte = new Date(Date.now() - JANELA_HORAS * 3600 * 1000).toISOString();
+  /* A janela mede quando as PROPOSTAS foram criadas, não o orçamento: um
+     orçamento de semanas atrás, regerado hoje, tem propostas novas e precisa
+     ser capturado. Usar criado_em deixava esse caso de fora (visto em
+     produção com o Forma Fit). Orçamentos antigos sem propostas_em continuam
+     protegidos pelo criado_em. */
   const { data: linhas } = await supabaseAdmin
     .from('orcamentos_salvos')
     .select(COLS)
-    .gte('criado_em', corte)
+    .or(`propostas_em.gte.${corte},and(propostas_em.is.null,criado_em.gte.${corte})`)
     .or(TIPOS.map(t => `and(${t.idCol}.not.is.null,${t.pdfCol}.is.null)`).join(','))
     .order('criado_em', { ascending: false })
     .limit(20);

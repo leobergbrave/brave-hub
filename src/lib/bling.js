@@ -18,6 +18,10 @@ export async function salvarVinculoPropostas(slug, data) {
   const { error } = await supabase.from('orcamentos_salvos').update({
     ...(av?.id ? { bling_avista_id: av.id, bling_avista_numero: av.numero ?? null } : {}),
     ...(pz?.id ? { bling_prazo_id: pz.id, bling_prazo_numero: pz.numero ?? null } : {}),
+    /* Data em que as PROPOSTAS nasceram — é o que o robô usa para decidir o que
+       capturar. Um orçamento antigo regerado hoje tem propostas novas, e usar
+       criado_em deixava esse caso invisível para ele (visto em produção). */
+    propostas_em: new Date().toISOString(),
   }).eq('slug', slug);
   if (error) console.error('Falha ao gravar vínculo Bling no orçamento:', error);
 }
