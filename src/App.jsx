@@ -27,7 +27,7 @@ function Skeleton({ className = '' }) {
   );
 }
 
-export default /* Aplica a condicao padrao a UM item.
+/* Aplica a condicao padrao a UM item.
    Preco a vista/prazo cadastrado no produto tem prioridade (a excecao que o Leo
    pediu); quem nao tem preco proprio herda o desconto padrao do orcamento.
    Antes, item sem preco proprio entrava com 0%: o padrao de 10% aparecia no
@@ -51,7 +51,7 @@ function aplicarCondicaoItem(item, gAvista, gCartao) {
   return item;
 }
 
-function App() {
+export default function App() {
   // ── Supabase Data ──
   const [produtos, setProdutos] = useState([]);
   const [regrasFrete, setRegrasFrete] = useState([]);
