@@ -530,6 +530,11 @@ export default function OrcamentosTab() {
       if (j.ok) {
         alert(`✅ PDFs enviados ao cliente no WhatsApp (${(j.enviados || []).join(', ')}).`);
         load();
+      } else if (j.naoEnviado === 'contato-inexistente') {
+        /* Telefone que não existe no WhatsApp: oferecer o envio manual só faria
+           o consultor mandar para o mesmo número errado. O caminho aqui é
+           corrigir o cadastro do cliente e gerar de novo. */
+        alert(`⚠️ ${j.error}`);
       } else if (confirm(`Não foi possível enviar automaticamente:\n\n${j.error}\n\nQuer baixar os PDFs e abrir a conversa pra enviar manualmente?`)) {
         enviarPdfsCliente(o);
       }
