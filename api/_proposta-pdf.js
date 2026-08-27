@@ -323,7 +323,7 @@ export async function uploadPdf(req, res) {
     const esperados = TIPOS.filter(t => orc[t.idCol]);
     const prontos = esperados.filter(t => orc[t.pdfCol]);
     if (esperados.length > 0 && prontos.length === esperados.length) {
-      envioAuto = await despacharPdfs(orc);
+      envioAuto = await despacharPdfs(orc, true);
       console.log('[proposta-pdf] envio automático FSS:', envioAuto);
     }
   }
@@ -360,7 +360,7 @@ async function bcFetch(path, method, body, apiKey) {
 
 /* Faz o envio de fato. Usado pelo botão do HUB e pelo disparo automático que
    roda quando o último PDF de um orçamento FSS fica pronto. */
-async function despacharPdfs(orc) {
+async function despacharPdfs(orc, automatico = false) {
   const apiKey = process.env.BOTCONVERSA_API_KEY;
   if (!apiKey) {
     return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel. Pegue em Configurações da companhia → Integrações → chave "Webhook Integration".' };
@@ -388,10 +388,27 @@ async function despacharPdfs(orc) {
      servidor ser consultado. Endereço novo a cada envio elimina isso. */
   const arquivos = disponiveis.map((t) => linkPdf(orc, t));
 
-  // Contato no BotConversa (busca por telefone; cria se não existir)
+  /* Contato no BotConversa.
+     Um contato inexistente e o sintoma tipico de telefone digitado errado: nos
+     canais automaticos (FSS, WhatsApp, Venda Direta) o cliente JA conversou com
+     o consultor, entao ele existe. Criar um contato novo nesse caso mandava a
+     proposta para um numero que nao atende — aconteceu com um digito trocado, e
+     o sistema reportou sucesso porque o envio foi aceito.
+     No envio automatico paramos e avisamos; no envio manual (o consultor
+     conferiu o numero) seguimos criando. */
   let subscriberId = null;
   const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
   if (busca.ok) subscriberId = busca.json?.id ?? null;
+
+  if (!subscriberId && automatico) {
+    await alertarConsultor(orc, tel);
+    return {
+      ok: false,
+      naoEnviado: 'contato-inexistente',
+      error: `O telefone ${tel} não existe no WhatsApp da BRAVE — provável dígito errado. Confira o número do cliente e gere de novo.`,
+    };
+  }
+
   if (!subscriberId) {
     const partes = String(orc.cliente || 'Cliente').trim().split(/\s+/);
     const criado = await bcFetch('/subscriber/', 'POST', {
@@ -459,6 +476,29 @@ async function despacharPdfs(orc) {
     falhas,
     error: falhas.length ? `Falha ao enviar: ${falhas.join(', ')}` : undefined,
   };
+}
+
+/* Avisa o consultor no WhatsApp dele quando a proposta NAO foi entregue.
+   Sem isso a falha e silenciosa: o orcamento fica marcado como nao enviado e
+   ninguem percebe ate o cliente cobrar. Usa o mesmo webhook do vigia de leads. */
+async function alertarConsultor(orc, tel) {
+  const url = process.env.BOTCONVERSA_WEBHOOK
+    || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
+  const telConsultor = process.env.ALERTA_TELEFONE || '5548996459791';
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telefone: telConsultor,
+        nome: orc.cliente || 'Cliente',
+        titulo: 'Proposta NAO enviada',
+        qtd_pendentes: 1,
+        link: '',
+        alerta: `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: o telefone ${tel} não existe no WhatsApp da BRAVE (provável dígito errado). Confira o número no cadastro e gere o orçamento de novo.`,
+      }),
+    });
+  } catch (_) { /* o aviso e melhor-esforco; nao pode derrubar o fluxo */ }
 }
 
 export async function enviarPdfCliente(req, res) {
