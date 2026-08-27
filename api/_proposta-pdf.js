@@ -101,7 +101,7 @@ function calcularTotais(orc) {
   const frete = Number(p.frete) || 0;
   const descAvista = Number(p.condicoes?.descontoAvista) || 0;
   const descPrazo = Number(p.condicoes?.descontoCartao) || 0;
-  const parcelas = Number(p.condicoes?.parcelas) || 12;
+  const parcelas = Number(p.condicoes?.parcelas) || 10;
 
   const soma = (campo, descPct) => itens.reduce((acc, i) => {
     const tabela = Number(i.preco) || 0;

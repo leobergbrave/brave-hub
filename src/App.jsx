@@ -72,9 +72,14 @@ export default function App() {
   const [editImageUrl, setEditImageUrl] = useState('');
 
   // ── Payment Conditions State ──
-  const [descontoAvista, setDescontoAvista] = useState(0);
+  /* Condicao padrao dos orcamentos: 10% a vista, cartao sem desconto em 10x.
+     Produto com preco_avista/preco_prazo proprio ignora esses percentuais — o
+     calculo usa o preco do produto quando ele existe (ver montarResumo na API e
+     a edge fn sync-bling-proposal), entao o padrao so vale para quem nao tem
+     preco definido. */
+  const [descontoAvista, setDescontoAvista] = useState(10);
   const [descontoCartao, setDescontoCartao] = useState(0);
-  const [parcelasCartao, setParcelasCartao] = useState(12);
+  const [parcelasCartao, setParcelasCartao] = useState(10);
 
   // ── IA State ──
   const [iaTexto, setIaTexto] = useState('');
@@ -199,9 +204,10 @@ export default function App() {
 
         // Payment conditions
         const c = p.condicoes || {};
-        setDescontoAvista(c.descontoAvista || 0);
-        setDescontoCartao(c.descontoCartao || 0);
-        setParcelasCartao(c.parcelas || 12);
+        // ?? em vez de ||: um orcamento salvo com 0% deve abrir com 0%, nao com o padrao
+        setDescontoAvista(c.descontoAvista ?? 10);
+        setDescontoCartao(c.descontoCartao ?? 0);
+        setParcelasCartao(c.parcelas || 10);
 
         // Items — merge with current product data
         const itensCarregados = (p.itens || []).map(itemSalvo => {
