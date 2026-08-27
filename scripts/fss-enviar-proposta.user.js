@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.6
+// @version      2.7
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -29,7 +29,6 @@
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
-  let indiceAtual = 0;
 
   /* O painel de contato do FSS mostra mais de um telefone (principal e
      adicional), e nem sempre o cadastrado no HUB e o primeiro. Em vez de
@@ -138,6 +137,23 @@
       || document.querySelectorAll('input[type="file"]').length > 0;
   }
 
+  const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* Depois de enviar uma mensagem, o FSS desmonta e remonta a area de escrita —
+     por instantes nao existe campo de arquivo NEM de texto (a radiografia
+     mostrou arquivos:0 textareas:0). Insistir por alguns segundos evita o falso
+     "sem campo de anexo" quando o usuario anexa a segunda proposta logo apos
+     enviar a primeira. */
+  async function esperarCampoAnexo(limiteMs = 8000) {
+    const inicio = Date.now();
+    while (Date.now() - inicio < limiteMs) {
+      if (document.querySelector('input[type="file"]')) return true;
+      await abrirAnexo();
+      await dormir(600);
+    }
+    return !!document.querySelector('input[type="file"]');
+  }
+
   function entregarAoChat(file) {
     // 1) campo de anexo do proprio chat (o ultimo costuma ser o da conversa aberta)
     const inputs = [...document.querySelectorAll('input[type="file"]')];
@@ -174,8 +190,11 @@
      (o campo volta ao que era ao enviar). Por isso usamos o setter nativo do
      prototipo, que e o caminho que o framework escuta. */
   function escreverMensagem(texto) {
+    /* O FSS pode usar textarea, contenteditable ou um editor proprio; e logo
+       apos enviar, nenhum deles existe por um instante. */
     const campo = document.querySelector('textarea')
-      || document.querySelector('[contenteditable="true"]');
+      || document.querySelector('[contenteditable="true"]')
+      || document.querySelector('.ql-editor, [role="textbox"], div[class*="editor" i][contenteditable]');
     if (!campo) return false;
 
     if (campo.tagName === 'TEXTAREA') {
@@ -192,40 +211,29 @@
     return true;
   }
 
-  async function anexarProximo() {
-    const arquivos = dados?.arquivos || [];
-    if (!arquivos.length) return;
-    const a = arquivos[indiceAtual];
-    status(`⏳ Anexando: ${a.nome}`);
+  /* Uma proposta por vez, ESCOLHIDA no painel — antes era uma fila fixa
+     (a vista, depois a prazo) e, se a segunda falhasse, nao havia como pedir so
+     ela de novo sem repetir a primeira. */
+  async function anexarUm(arquivo) {
+    status(`⏳ Anexando ${rotuloDe(arquivo)}...`);
     try {
-      const file = await baixarComoArquivo(a.url, a.nome);
+      const file = await baixarComoArquivo(arquivo.url, arquivo.nome);
       if (!document.querySelector('input[type="file"]')) {
-        status(`⏳ Abrindo o anexo do chat...`);
-        await abrirAnexo();
+        status('⏳ Abrindo o anexo do chat...');
+        await esperarCampoAnexo();
       }
-      const via = entregarAoChat(file);
-
-      /* Cada anexo leva SO a sua condicao. Antes ia o resumo completo junto de
-         cada PDF, e o cliente lia os mesmos dois valores duas vezes — uma no
-         anexo a vista e outra no a prazo. */
-      if (a.mensagem) escreverMensagem(a.mensagem);
-
-      const restam = arquivos.length - indiceAtual - 1;
-      const rotulo = { avista: 'à vista', prazo: 'a prazo' }[a.tipo] || '';
-      const p = status(`✅ Anexo ${rotulo} + mensagem prontos — revise e envie.`, '#4ade80');
-      if (restam > 0) {
-        indiceAtual += 1;
-        const prox = { avista: 'à vista', prazo: 'a prazo' }[arquivos[indiceAtual].tipo] || 'próxima';
-        p.appendChild(botao(`📎 Envie essa e clique para a ${prox}`, '#0e7490', anexarProximo));
-      } else {
-        indiceAtual = 0;
-        p.appendChild(botao('📎 Anexar tudo de novo', '#334155', () => { indiceAtual = 0; anexarProximo(); }));
-      }
+      entregarAoChat(file);
+      if (arquivo.mensagem) escreverMensagem(arquivo.mensagem);
+      const p = status(`✅ ${rotuloDe(arquivo)} anexada com a mensagem — revise e envie.`, '#4ade80');
+      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', montarMenu));
     } catch (e) {
       const p = status(`❌ ${e.message}`, '#fca5a5');
-      p.appendChild(botao('Tentar de novo', '#0e7490', anexarProximo));
+      p.appendChild(botao('Tentar de novo', '#0e7490', () => anexarUm(arquivo)));
+      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', montarMenu));
     }
   }
+
+  const rotuloDe = (a) => ({ avista: 'proposta à vista', prazo: 'proposta a prazo' }[a.tipo] || 'proposta');
 
   async function enviarPeloWhatsApp() {
     status('⏳ Enviando pelo WhatsApp...');
@@ -296,8 +304,10 @@
       s.style.cssText = 'font-size:11px;color:#94a3b8;font-weight:500';
       p.appendChild(s);
     }
-    indiceAtual = 0;
-    p.appendChild(botao('📎 Anexar aqui na conversa', '#0e7490', anexarProximo));
+    for (const arquivo of dados.arquivos || []) {
+      const rot = { avista: '💰 Anexar À VISTA', prazo: '💳 Anexar A PRAZO' }[arquivo.tipo] || '📎 Anexar proposta';
+      p.appendChild(botao(rot, '#0e7490', () => anexarUm(arquivo)));
+    }
     if (dados.mensagem) {
       p.appendChild(botao('💬 Escrever resumo completo', '#1e40af', () => {
         status(escreverMensagem(dados.mensagem)
