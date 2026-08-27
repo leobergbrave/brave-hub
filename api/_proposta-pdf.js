@@ -401,6 +401,16 @@ async function despacharPdfs(orc, automatico = false) {
   if (busca.ok) subscriberId = busca.json?.id ?? null;
 
   if (!subscriberId && automatico) {
+    const origem = String(orc.origem_lead || '').toUpperCase();
+    /* Lead do FSS conversa pelo numero do FSS, nao pelo WhatsApp da BRAVE —
+       entao nao estar no BotConversa e o NORMAL, e a entrega dele e pelo painel
+       do FSS. So alertamos quando o canal e de fato WhatsApp (WHATSAPP / VENDA
+       DIRETA), onde o cliente deveria existir e um numero ausente e digito
+       errado de verdade. */
+    if (origem === 'FSS') {
+      return { ok: false, naoEnviado: 'entregar-fss',
+        error: `Cliente do FSS não está no WhatsApp da BRAVE — entregue a proposta pelo painel do FSS.` };
+    }
     await alertarConsultor(orc, tel);
     return {
       ok: false,
