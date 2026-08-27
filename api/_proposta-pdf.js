@@ -95,7 +95,7 @@ const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', c
    precisar abrir o PDF. Repete a mesma conta da edge fn sync-bling-proposal
    (preço do item, senão preço de tabela com o desconto da condição) para que o
    texto e o documento do Bling nunca divirjam. */
-function montarResumo(orc, temDuas) {
+function calcularTotais(orc) {
   const p = orc.payload || {};
   const itens = p.itens || [];
   const frete = Number(p.frete) || 0;
@@ -111,7 +111,36 @@ function montarResumo(orc, temDuas) {
 
   const totalAvista = soma('preco_avista', descAvista) + frete;
   const totalPrazo = soma('preco_prazo', descPrazo) + frete;
-  const valorParcela = parcelas > 0 ? totalPrazo / parcelas : totalPrazo;
+  return {
+    temItens: itens.length > 0,
+    parcelas,
+    totalAvista,
+    totalPrazo,
+    valorParcela: parcelas > 0 ? totalPrazo / parcelas : totalPrazo,
+  };
+}
+
+/* Mensagem de UM anexo. No FSS cada PDF vai numa mensagem separada, entao
+   repetir o resumo completo em cada uma fazia o cliente ler os mesmos dois
+   valores duas vezes. Aqui cada arquivo leva so a condicao que ele representa. */
+function mensagemDoTipo(orc, tipo) {
+  const t = calcularTotais(orc);
+  if (!t.temItens) return '✅ Segue sua proposta em anexo!';
+  if (tipo === 'avista') {
+    return `💰 *PROPOSTA À VISTA: ${brl(t.totalAvista)}*
+(melhor desconto, frete já incluso)`;
+  }
+  if (tipo === 'prazo') {
+    return `💳 *PROPOSTA A PRAZO: ${brl(t.totalPrazo)}*
+em até ${t.parcelas}x de ${brl(t.valorParcela)}`;
+  }
+  return `✅ *Sua proposta: ${brl(t.totalAvista)}*
+(frete já incluso)`;
+}
+
+function montarResumo(orc, temDuas) {
+  const itens = orc.payload?.itens || [];
+  const { parcelas, totalAvista, totalPrazo, valorParcela } = calcularTotais(orc);
 
   if (!itens.length) {
     return '✅ Sua proposta está pronta! Qualquer dúvida é só me chamar por aqui!';
@@ -469,7 +498,8 @@ export async function propostaPorTelefone(req, res) {
     enviadoEm: achado.proposta_pdf_enviado_em || null,
     pdfs: TIPOS.filter(t => achado[t.pdfCol]).map(t => t.tipo),
     // arquivos prontos para o userscript do FSS anexar direto na conversa
-    arquivos: TIPOS.filter(t => achado[t.pdfCol]).map(t => linkPdf(achado, t)),
+    arquivos: TIPOS.filter(t => achado[t.pdfCol])
+      .map(t => ({ ...linkPdf(achado, t), mensagem: mensagemDoTipo(achado, t.tipo) })),
     /* Mesmo texto que vai no WhatsApp — no FSS a conversa já está em andamento,
        então vale só o fechamento com os valores, sem a apresentação. */
     mensagem: montarResumo(

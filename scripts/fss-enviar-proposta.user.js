@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.5
+// @version      2.6
 // @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -204,17 +204,21 @@
         await abrirAnexo();
       }
       const via = entregarAoChat(file);
+
+      /* Cada anexo leva SO a sua condicao. Antes ia o resumo completo junto de
+         cada PDF, e o cliente lia os mesmos dois valores duas vezes — uma no
+         anexo a vista e outra no a prazo. */
+      if (a.mensagem) escreverMensagem(a.mensagem);
+
       const restam = arquivos.length - indiceAtual - 1;
-      const p = status(`✅ ${via.charAt(0).toUpperCase() + via.slice(1)}: ${a.nome}`, '#4ade80');
+      const rotulo = { avista: 'à vista', prazo: 'a prazo' }[a.tipo] || '';
+      const p = status(`✅ Anexo ${rotulo} + mensagem prontos — revise e envie.`, '#4ade80');
       if (restam > 0) {
         indiceAtual += 1;
-        p.appendChild(botao(`📎 Envie essa e clique para a próxima (${restam})`, '#0e7490', anexarProximo));
+        const prox = { avista: 'à vista', prazo: 'a prazo' }[arquivos[indiceAtual].tipo] || 'próxima';
+        p.appendChild(botao(`📎 Envie essa e clique para a ${prox}`, '#0e7490', anexarProximo));
       } else {
         indiceAtual = 0;
-        // Ultimo anexo: ja deixa a mensagem escrita, com os valores.
-        if (dados?.mensagem && escreverMensagem(dados.mensagem)) {
-          status(`✅ Anexos e mensagem prontos — revise e envie.`, '#4ade80');
-        }
         p.appendChild(botao('📎 Anexar tudo de novo', '#334155', () => { indiceAtual = 0; anexarProximo(); }));
       }
     } catch (e) {
@@ -295,7 +299,7 @@
     indiceAtual = 0;
     p.appendChild(botao('📎 Anexar aqui na conversa', '#0e7490', anexarProximo));
     if (dados.mensagem) {
-      p.appendChild(botao('💬 Escrever a mensagem', '#1e40af', () => {
+      p.appendChild(botao('💬 Escrever resumo completo', '#1e40af', () => {
         status(escreverMensagem(dados.mensagem)
           ? '✅ Mensagem escrita — revise e envie.'
           : '❌ Nao achei o campo de mensagem.', escreverMensagem ? '#4ade80' : '#fca5a5');
