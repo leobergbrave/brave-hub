@@ -27,7 +27,31 @@ function Skeleton({ className = '' }) {
   );
 }
 
-export default function App() {
+export default /* Aplica a condicao padrao a UM item.
+   Preco a vista/prazo cadastrado no produto tem prioridade (a excecao que o Leo
+   pediu); quem nao tem preco proprio herda o desconto padrao do orcamento.
+   Antes, item sem preco proprio entrava com 0%: o padrao de 10% aparecia no
+   campo global mas nunca era empurrado para os itens. */
+function aplicarCondicaoItem(item, gAvista, gCartao) {
+  const base = Number(item.preco) || 0;
+  if (item.preco_avista != null && base > 0) {
+    item.descontoAvistaItem = parseFloat((((base - item.preco_avista) / base) * 100).toFixed(2));
+    item._precoAvistaFixo = true;
+  } else {
+    item.descontoAvistaItem = gAvista;
+    item.preco_avista = base > 0 ? base * (1 - gAvista / 100) : null;
+  }
+  if (item.preco_prazo != null && base > 0) {
+    item.descontoCartaoItem = parseFloat((((base - item.preco_prazo) / base) * 100).toFixed(2));
+    item._precoPrazoFixo = true;
+  } else {
+    item.descontoCartaoItem = gCartao;
+    item.preco_prazo = base > 0 ? base * (1 - gCartao / 100) : null;
+  }
+  return item;
+}
+
+function App() {
   // ── Supabase Data ──
   const [produtos, setProdutos] = useState([]);
   const [regrasFrete, setRegrasFrete] = useState([]);
@@ -354,27 +378,10 @@ export default function App() {
           i.id === produto.id ? { ...i, quantidade: i.quantidade + qtd } : i
         );
       }
-      const item = { ...produto, quantidade: qtd };
-
-      // Pre-fill preco_avista from DB and calculate reverse discount %
-      if (produto.preco_avista != null && produto.preco > 0) {
-        item.descontoAvistaItem = parseFloat((((produto.preco - produto.preco_avista) / produto.preco) * 100).toFixed(2));
-        item._precoAvistaFixo = true;
-      } else {
-        item.descontoAvistaItem = 0;
-      }
-
-      // Pre-fill preco_prazo from DB and calculate reverse discount %
-      if (produto.preco_prazo != null && produto.preco > 0) {
-        item.descontoCartaoItem = parseFloat((((produto.preco - produto.preco_prazo) / produto.preco) * 100).toFixed(2));
-        item._precoPrazoFixo = true;
-      } else {
-        item.descontoCartaoItem = 0;
-      }
-
+      const item = aplicarCondicaoItem({ ...produto, quantidade: qtd }, descontoAvista, descontoCartao);
       return [...prev, item];
     });
-  }, []);
+  }, [descontoAvista, descontoCartao]);
 
   // ── Mapa de capitais estaduais (para detectar zona CAPITAL) ──
   const CAPITAIS = {
@@ -695,21 +702,7 @@ export default function App() {
       const prodDb = produtos.find(p => p.id === (itemModelo.produto_id || itemModelo.id));
       if (!prodDb) return null;
 
-      const item = { ...prodDb, quantidade: itemModelo.quantidade || 1 };
-
-      if (prodDb.preco_avista != null && prodDb.preco > 0) {
-        item.descontoAvistaItem = parseFloat((((prodDb.preco - prodDb.preco_avista) / prodDb.preco) * 100).toFixed(2));
-        item._precoAvistaFixo = true;
-      } else {
-        item.descontoAvistaItem = 0;
-      }
-      if (prodDb.preco_prazo != null && prodDb.preco > 0) {
-        item.descontoCartaoItem = parseFloat((((prodDb.preco - prodDb.preco_prazo) / prodDb.preco) * 100).toFixed(2));
-        item._precoPrazoFixo = true;
-      } else {
-        item.descontoCartaoItem = 0;
-      }
-
+      const item = aplicarCondicaoItem({ ...prodDb, quantidade: itemModelo.quantidade || 1 }, descontoAvista, descontoCartao);
       return item;
     }).filter(Boolean);
 
@@ -721,7 +714,7 @@ export default function App() {
     setItens(itensCarregados);
     if (modelo.consultor) setNomeConsultor(modelo.consultor);
     showToastMessage(`Modelo "${modelo.nome}" carregado com ${itensCarregados.length} itens!`);
-  }, [produtos, showToastMessage]);
+  }, [produtos, descontoAvista, descontoCartao, showToastMessage]);
 
   const handleSalvarModelo = useCallback(async () => {
     if (!nomeModelo.trim() || itens.length === 0) return;
