@@ -16,8 +16,12 @@ export async function salvarVinculoPropostas(slug, data) {
   const pz = data?.dataPrazo?.data;
   if (!av?.id && !pz?.id) return;
   const { error } = await supabase.from('orcamentos_salvos').update({
-    ...(av?.id ? { bling_avista_id: av.id, bling_avista_numero: av.numero ?? null } : {}),
-    ...(pz?.id ? { bling_prazo_id: pz.id, bling_prazo_numero: pz.numero ?? null } : {}),
+    /* Editar o orçamento cria propostas NOVAS no Bling. Os PDFs guardados são
+       da proposta anterior, com os valores antigos — precisam ser descartados,
+       senão o robô veria "já tem PDF", não recapturaria, e o cliente receberia
+       o documento errado. Zerar aqui obriga a recaptura. */
+    ...(av?.id ? { bling_avista_id: av.id, bling_avista_numero: av.numero ?? null, bling_avista_pdf: null } : {}),
+    ...(pz?.id ? { bling_prazo_id: pz.id, bling_prazo_numero: pz.numero ?? null, bling_prazo_pdf: null } : {}),
     /* Data em que as PROPOSTAS nasceram — é o que o robô usa para decidir o que
        capturar. Um orçamento antigo regerado hoje tem propostas novas, e usar
        criado_em deixava esse caso invisível para ele (visto em produção). */

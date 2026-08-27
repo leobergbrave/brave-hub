@@ -311,7 +311,15 @@ export async function uploadPdf(req, res) {
   // uma proposta solta. Só vale para FSS; nos outros canais o Léo usa o botão.
   orc[tipoInfo.pdfCol] = path;
   let envioAuto;
-  if (ORIGENS_AUTOMATICAS.includes(String(orc.origem_lead || '').toUpperCase()) && !orc.proposta_pdf_enviado_em) {
+  /* Reenviar quando o orçamento é editado: as propostas passam a ser mais
+     novas que o último envio, e o cliente precisa receber os valores atuais.
+     Sem isso, editar não reenviava nada. Reimprimir a MESMA proposta continua
+     não reenviando — o que muda é a data das propostas, não a da captura. */
+  const enviadoEm = orc.proposta_pdf_enviado_em;
+  const propostasMaisNovas = !!(orc.propostas_em && enviadoEm
+    && new Date(orc.propostas_em) > new Date(enviadoEm));
+  if (ORIGENS_AUTOMATICAS.includes(String(orc.origem_lead || '').toUpperCase())
+      && (!enviadoEm || propostasMaisNovas)) {
     const esperados = TIPOS.filter(t => orc[t.idCol]);
     const prontos = esperados.filter(t => orc[t.pdfCol]);
     if (esperados.length > 0 && prontos.length === esperados.length) {
