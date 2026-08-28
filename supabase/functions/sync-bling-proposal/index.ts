@@ -195,6 +195,26 @@ Deno.serve(async (req) => {
       } catch (_) { return []; }
     };
 
+    // Payload do contato — montado antes da busca para servir tanto a criacao
+    // quanto a ATUALIZACAO de um contato ja existente (o que faltava: cliente ja
+    // cadastrado no Bling ficava sem CNPJ e sem numero do endereco porque a
+    // funcao so preenchia esses campos ao CRIAR).
+    const contatoMinimo = {
+      nome: nomeCliente,
+      tipo: tipoCli,
+      situacao: 'A',
+      contribuinte: 9, // 9 = Nao contribuinte
+    };
+    const contatoCompleto = {
+      ...contatoMinimo,
+      ...(cpfCli ? { numeroDocumento: cpfCli } : {}),
+      ...(cliLocal?.email ? { email: cliLocal.email, emailNotaFiscal: cliLocal.email } : {}),
+      ...(cliLocal?.telefone ? { telefone: cliLocal.telefone, celular: cliLocal.telefone } : {}),
+      ...(isPJCli && dfCli.nomeFantasia ? { fantasia: dfCli.nomeFantasia } : {}),
+      ...(isPJCli && dfCli.inscricaoEstadual ? { ie: dfCli.inscricaoEstadual } : {}),
+      ...(endCli.endereco || endCli.cep ? { endereco: { geral: endCli, cobranca: endCli } } : {}),
+    };
+
     let idContato = null;
     if (cpfCli) {
       for (const q of [`numeroDocumento=${cpfCli}`, `pesquisa=${cpfCli}`]) {
@@ -217,26 +237,23 @@ Deno.serve(async (req) => {
 
     await sleep(400);
 
-    if (!idContato) {
-      // Criar Contato. O enriquecimento (documento, contato, endereco) e
-      // best-effort: se o Bling recusar o cadastro completo por validacao, cria
-      // o minimo e segue — a proposta nao pode morrer por causa disso.
-      const contatoMinimo = {
-        nome: nomeCliente,
-        tipo: tipoCli,
-        situacao: 'A',
-        contribuinte: 9, // 9 = Não contribuinte
-      };
-      const contatoCompleto = {
-        ...contatoMinimo,
-        ...(cpfCli ? { numeroDocumento: cpfCli } : {}),
-        ...(cliLocal?.email ? { email: cliLocal.email, emailNotaFiscal: cliLocal.email } : {}),
-        ...(cliLocal?.telefone ? { telefone: cliLocal.telefone, celular: cliLocal.telefone } : {}),
-        ...(isPJCli && dfCli.nomeFantasia ? { fantasia: dfCli.nomeFantasia } : {}),
-        ...(isPJCli && dfCli.inscricaoEstadual ? { ie: dfCli.inscricaoEstadual } : {}),
-        ...(endCli.endereco || endCli.cep ? { endereco: { geral: endCli } } : {}),
-      };
-
+    if (idContato) {
+      // Contato JA existe: atualiza com os dados completos (CNPJ, endereco com
+      // numero, fantasia, IE). Sem isso, um cliente ja cadastrado no Bling
+      // continuava sem CNPJ e sem numero — os dados do cadastro nao chegavam.
+      const upRes = await fetchWithBlingAuth(`https://api.bling.com.br/v3/contatos/${idContato}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contatoCompleto),
+      }, supabaseClient);
+      if (!upRes.ok) {
+        const errText = await upRes.text();
+        console.warn('[sync-bling-proposal] update do contato falhou:', errText.slice(0, 300));
+      }
+      await sleep(400);
+    } else {
+      // Criar Contato. O enriquecimento e best-effort: se o Bling recusar o
+      // cadastro completo por validacao, cria o minimo e segue.
       const criarContato = async (corpo: any) => fetchWithBlingAuth('https://api.bling.com.br/v3/contatos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
