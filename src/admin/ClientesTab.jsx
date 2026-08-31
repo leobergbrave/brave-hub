@@ -499,7 +499,35 @@ export default function ClientesTab({ onNavigate }) {
 
   const iniciarEdicao = (c) => {
     setEditandoId(c.id);
-    setEditForm({ nome: c.nome || '', telefone: c.telefone || '', email: c.email || '', tipo_negocio: c.tipo_negocio || '', cpf_cnpj: c.cpf_cnpj || '', numero_endereco: c.dados_fiscais?.numero || '', complemento_endereco: c.dados_fiscais?.complemento || '', _dados_fiscais: c.dados_fiscais || {} });
+    const df0 = c.dados_fiscais || {};
+    setEditForm({
+      nome: c.nome || '', telefone: c.telefone || '', email: c.email || '',
+      tipo_negocio: c.tipo_negocio || '', cpf_cnpj: c.cpf_cnpj || '',
+      cep: df0.cep || '', logradouro: df0.logradouro || '', bairro: df0.bairro || '',
+      cidade: df0.cidade || '', estado: df0.estado || '',
+      numero_endereco: df0.numero || '', complemento_endereco: df0.complemento || '',
+      _dados_fiscais: df0,
+    });
+  };
+
+  // Busca o CEP no ViaCEP e preenche logradouro/bairro/cidade/estado — sem isso o
+  // consultor teria que digitar tudo a mao, e o endereco e o que faltava chegar
+  // ao Bling.
+  const buscarCepEdicao = async (valor) => {
+    const cep = (valor || '').replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const d = await r.json();
+      if (d.erro) return;
+      setEditForm((p) => ({
+        ...p,
+        logradouro: d.logradouro || p.logradouro,
+        bairro: d.bairro || p.bairro,
+        cidade: d.localidade || p.cidade,
+        estado: d.uf || p.estado,
+      }));
+    } catch (_) { /* mantem o que ja tem */ }
   };
 
   const salvarEdicao = async (id) => {
@@ -511,7 +539,16 @@ export default function ClientesTab({ onNavigate }) {
       email: editForm.email,
       tipo_negocio: editForm.tipo_negocio,
       ...(cpfLimpo !== undefined ? { cpf_cnpj: cpfLimpo } : {}),
-      dados_fiscais: { ...editForm._dados_fiscais, numero: editForm.numero_endereco || editForm._dados_fiscais?.numero || '', complemento: editForm.complemento_endereco ?? editForm._dados_fiscais?.complemento ?? '' },
+      dados_fiscais: {
+        ...editForm._dados_fiscais,
+        cep: (editForm.cep || '').replace(/\D/g, ''),
+        logradouro: editForm.logradouro ?? editForm._dados_fiscais?.logradouro ?? '',
+        bairro: editForm.bairro ?? editForm._dados_fiscais?.bairro ?? '',
+        cidade: editForm.cidade ?? editForm._dados_fiscais?.cidade ?? '',
+        estado: editForm.estado ?? editForm._dados_fiscais?.estado ?? '',
+        numero: editForm.numero_endereco || editForm._dados_fiscais?.numero || '',
+        complemento: editForm.complemento_endereco ?? editForm._dados_fiscais?.complemento ?? '',
+      },
       atualizado_em: new Date().toISOString(),
     }).eq('id', id);
     setSalvando(false);
@@ -804,6 +841,34 @@ export default function ClientesTab({ onNavigate }) {
                           <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Complemento</label>
                           <input value={editForm.complemento_endereco} onChange={e => setEditForm(p => ({ ...p, complemento_endereco: e.target.value }))}
                             className={inputCls} placeholder="Apto, sala..." />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">CEP</label>
+                          <input value={editForm.cep}
+                            onChange={e => setEditForm(p => ({ ...p, cep: e.target.value }))}
+                            onBlur={e => buscarCepEdicao(e.target.value)}
+                            className={inputCls} placeholder="00000-000" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Logradouro</label>
+                          <input value={editForm.logradouro} onChange={e => setEditForm(p => ({ ...p, logradouro: e.target.value }))}
+                            className={inputCls} placeholder="Rua / Avenida" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Bairro</label>
+                          <input value={editForm.bairro} onChange={e => setEditForm(p => ({ ...p, bairro: e.target.value }))}
+                            className={inputCls} placeholder="Bairro" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Cidade</label>
+                          <input value={editForm.cidade} onChange={e => setEditForm(p => ({ ...p, cidade: e.target.value }))}
+                            className={inputCls} placeholder="Cidade" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Estado (UF)</label>
+                          <input value={editForm.estado} maxLength={2}
+                            onChange={e => setEditForm(p => ({ ...p, estado: e.target.value.toUpperCase() }))}
+                            className={inputCls} placeholder="SP" />
                         </div>
                       </div>
                     )}
