@@ -36,6 +36,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/lp/crossfit"   element={<LpCrossfit />} />
         <Route path="/central"       element={<CentralRespostasPage />} />
         <Route path="/enviar"        element={<EnviarPropostaPage />} />
+        <Route path="/atendimento"   element={<EnviarPropostaPage />} />
         <Route path="/compara/:slug" element={<ComparacaoPage />} />
       </Routes>
     </BrowserRouter>

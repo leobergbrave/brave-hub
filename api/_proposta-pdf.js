@@ -346,7 +346,7 @@ export async function uploadPdf(req, res) {
  */
 const BC_BASE = 'https://backend.botconversa.com.br/api/v1/webhook';
 
-async function bcFetch(path, method, body, apiKey) {
+export async function bcFetch(path, method, body, apiKey) {
   const r = await fetch(`${BC_BASE}${path}`, {
     method,
     headers: { 'API-KEY': apiKey, 'Content-Type': 'application/json' },
