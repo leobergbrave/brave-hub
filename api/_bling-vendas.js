@@ -57,6 +57,23 @@ export async function vendasPeriodo(req, res) {
   const token = await getValidToken();
   if (!token) return res.status(500).json({ ok: false, error: 'Sem token Bling.' });
 
+  // Filtro opcional por vendedor: "37 ganhas" costuma ser de UM consultor, e o
+  // Bling sem filtro traz a empresa inteira. Resolve o id pelo nome (sem acento).
+  const semAcento = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  let idVendedor = null; let vendedorNome = null;
+  const alvoVend = semAcento(req.query?.vendedor || '');
+  if (alvoVend) {
+    const rv = await blingGet('https://api.bling.com.br/v3/vendedores', token);
+    if (rv.ok) {
+      const lista = ((await rv.json())?.data || []).filter((v) => (v?.contato?.nome || '').trim());
+      let m = lista.find((v) => semAcento(v.contato.nome) === alvoVend)
+        || lista.find((v) => semAcento(v.contato.nome).includes(alvoVend));
+      if (m) { idVendedor = m.id; vendedorNome = m.contato.nome; }
+    }
+    if (!idVendedor) return res.status(200).json({ ok: false, error: `Vendedor "${req.query.vendedor}" nao encontrado no Bling.` });
+    await sleep(400);
+  }
+
   // Nomes de situacao pelo id (o pedido traz situacao.id, nem sempre o texto)
   let nomeSituacao = {};
   try {
@@ -78,7 +95,7 @@ export async function vendasPeriodo(req, res) {
   let pagina = 1;
   const MAX_PAG = 60;
   for (; pagina <= MAX_PAG; pagina++) {
-    const url = `https://api.bling.com.br/v3/pedidos/vendas?dataInicial=${ini}&dataFinal=${fim}&pagina=${pagina}&limite=100`;
+    const url = `https://api.bling.com.br/v3/pedidos/vendas?dataInicial=${ini}&dataFinal=${fim}&pagina=${pagina}&limite=100${idVendedor ? `&idVendedor=${idVendedor}` : ''}`;
     const r = await blingGet(url, token);
     if (!r.ok) {
       // Falha em QUALQUER pagina interrompe com aviso — nao devolvemos soma
@@ -107,7 +124,7 @@ export async function vendasPeriodo(req, res) {
     .sort((a, b) => b.total - a.total);
 
   return res.status(200).json({
-    ok: true, periodo: { ini, fim },
+    ok: true, periodo: { ini, fim }, vendedor: vendedorNome || 'TODOS',
     total_geral: total, total_geral_fmt: brl(total), qtd_geral: qtd,
     por_situacao: quebra,
     paginas_lidas: pagina,
