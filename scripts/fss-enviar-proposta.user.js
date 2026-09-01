@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.7
-// @description  Anexa os PDFs oficiais da proposta direto na conversa do FSS, sem baixar arquivo no computador.
+// @version      2.8
+// @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
 // @grant        none
@@ -100,11 +100,11 @@
     return p;
   }
 
-  async function baixarComoArquivo(url, nome) {
+  async function baixarComoArquivo(url, nome, tipo = 'application/pdf') {
     const r = await fetch(url, { credentials: 'omit' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
-    return new File([blob], nome, { type: 'application/pdf' });
+    return new File([blob], nome, { type: tipo });
   }
 
   /* Descreve o que existe na tela agora — sem isso, "nao achei o campo de
@@ -157,9 +157,13 @@
   function entregarAoChat(file) {
     // 1) campo de anexo do proprio chat (o ultimo costuma ser o da conversa aberta)
     const inputs = [...document.querySelectorAll('input[type="file"]')];
+    /* O filtro de accept vale para qualquer tipo que anexamos (PDF ou vídeo):
+       comparamos com o grupo MIME e a extensão do arquivo em mãos. */
+    const grupo = (file.type || '').split('/')[0];
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
     const aceita = (i) => {
       const a = (i.accept || '').toLowerCase();
-      return !a || a.includes('pdf') || a.includes('application') || a.includes('*');
+      return !a || a.includes('*') || a.includes(grupo) || a.includes(ext);
     };
     const alvo = inputs.filter(aceita).pop();
     if (alvo) {
@@ -235,6 +239,70 @@
 
   const rotuloDe = (a) => ({ avista: 'proposta à vista', prazo: 'proposta a prazo' }[a.tipo] || 'proposta');
 
+  const voltar = () => (dados ? montarMenu() : montarSemProposta());
+
+  /* ── Produtos: vídeo + texto pronto ──────────────────────────────
+     O HUB monta as mensagens (acao=produtos_fss) com preços ao vivo do
+     catálogo; aqui só listamos, baixamos o vídeo e escrevemos o texto.
+     Cache por sessão da aba: o catálogo muda pouco durante o expediente. */
+  let produtosCache = null;
+
+  async function carregarProdutos() {
+    if (produtosCache) return produtosCache;
+    const r = await fetch(`${HUB}/api/bling?acao=produtos_fss`);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'catálogo indisponível');
+    produtosCache = j.itens || [];
+    return produtosCache;
+  }
+
+  async function montarProdutos() {
+    status('⏳ Carregando produtos...');
+    let itens;
+    try { itens = await carregarProdutos(); }
+    catch (e) {
+      const p = status(`❌ ${e.message}`, '#fca5a5');
+      p.appendChild(botao('↩︎ Voltar', '#334155', voltar));
+      return;
+    }
+    const p = painel();
+    p.innerHTML = '';
+    const t = document.createElement('div');
+    t.textContent = '🎬 Produtos — vídeo + texto pronto';
+    t.style.cssText = 'font-weight:700;font-size:12px;color:#e2e8f0';
+    p.appendChild(t);
+    for (const item of itens) {
+      p.appendChild(botao(item.titulo, '#334155', () => enviarProduto(item)));
+    }
+    p.appendChild(botao('↩︎ Voltar ao painel', '#0e7490', voltar));
+  }
+
+  async function enviarProduto(item) {
+    status(`⏳ Preparando ${item.titulo}...`);
+    try {
+      if (item.video) {
+        const file = await baixarComoArquivo(item.video, `${item.id}.mp4`, 'video/mp4');
+        if (!document.querySelector('input[type="file"]')) {
+          status('⏳ Abrindo o anexo do chat...');
+          await esperarCampoAnexo();
+        }
+        entregarAoChat(file);
+        await dormir(600); // o FSS remonta o editor logo após o anexo
+      }
+      const ok = escreverMensagem(item.texto);
+      const p = status(item.video
+        ? (ok ? '✅ Vídeo anexado e texto escrito — revise e envie.' : '⚠️ Vídeo anexado, mas não achei o campo de mensagem.')
+        : (ok ? '✅ Texto escrito (produto sem vídeo) — revise e envie.' : '❌ Não achei o campo de mensagem.'),
+        ok ? '#4ade80' : '#fca5a5');
+      p.appendChild(botao('🎬 Outros produtos', '#334155', montarProdutos));
+      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', voltar));
+    } catch (e) {
+      const p = status(`❌ ${e.message}`, '#fca5a5');
+      p.appendChild(botao('Tentar de novo', '#0e7490', () => enviarProduto(item)));
+      p.appendChild(botao('↩︎ Voltar', '#334155', voltar));
+    }
+  }
+
   async function enviarPeloWhatsApp() {
     status('⏳ Enviando pelo WhatsApp...');
     try {
@@ -273,11 +341,12 @@
     for (const m of MENSAGENS_RAPIDAS) {
       painelEl.appendChild(botao(m.titulo, '#334155', () => {
         const ok = escreverMensagem(m.texto);
-        const p = status(ok ? `✅ ${m.titulo} escrita — revise e envie.` : '❌ Nao achei o campo de mensagem.',
+        status(ok ? `✅ ${m.titulo} escrita — revise e envie.` : '❌ Nao achei o campo de mensagem.',
           ok ? '#4ade80' : '#fca5a5');
-        setTimeout(() => (dados ? montarMenu() : montarSemProposta(p)), 3500);
+        setTimeout(voltar, 3500);
       }));
     }
+    painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
   }
 
   /* Painel para contato sem orcamento: so os atalhos de mensagem. */
