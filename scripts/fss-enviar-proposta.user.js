@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.9
+// @version      3.0
 // @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -26,6 +26,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
+  const VERSAO = '3.0'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -320,15 +321,40 @@
   }
 
   /* Nome do contato, lido da tela de detalhes do FSS na hora do clique.
-     Os campos aparecem no texto da pagina como "Nome" numa linha e o valor na
-     seguinte — mesmo principio da leitura de telefone. Se nao achar (tela
-     diferente, campo vazio, "--"), devolve null e a abertura sai generica. */
-  function acharPrimeiroNome() {
-    const m = document.body.innerText.match(/(?:^|\n)\s*Nome\s*\n\s*([^\n]{2,40})/);
-    let n = m ? m[1].trim() : '';
-    if (!n || n === '--' || /^(sobrenome|e-?mail|telefone|data)/i.test(n)) return null;
-    n = n.split(/\s+/)[0].replace(/[^\p{L}'-]/gu, '');
+     Como no telefone, o valor vive dentro de um INPUT — e innerText nao le
+     valor de campo. Entao procuramos o input cujo container tem o rotulo
+     "Nome" na primeira linha; o innerText fica so de fallback (telas antigas
+     ou campos exibidos como texto). Sem nome, a abertura sai generica. */
+  function primeiroNomeDe(valor) {
+    const n = String(valor || '').trim().split(/\s+/)[0].replace(/[^\p{L}'-]/gu, '');
     return n.length >= 2 ? n.toUpperCase() : null;
+  }
+
+  function acharPrimeiroNome() {
+    for (const campo of document.querySelectorAll('input, textarea')) {
+      const valor = String(campo.value || '').trim();
+      if (!valor || valor === '--' || /\d/.test(valor)) continue;
+      // placeholder/aria costumam nomear o campo direto
+      const meta = `${campo.getAttribute('placeholder') || ''} ${campo.getAttribute('aria-label') || ''} ${campo.name || ''}`;
+      if (/^\s*(first[_ ]?name|nome)\s*$/i.test(meta.trim())) return primeiroNomeDe(valor);
+      // senao, sobe ate 3 niveis procurando o container rotulado "Nome"
+      let el = campo;
+      for (let i = 0; i < 3 && el.parentElement; i++) {
+        el = el.parentElement;
+        const rotulo = (el.innerText || '').trim().split('\n')[0].trim();
+        if (/^nome$/i.test(rotulo)) return primeiroNomeDe(valor);
+        if (rotulo.length > 25) break; // container grande demais: subiu alem do campo
+      }
+    }
+    /* Varre TODAS as linhas "Nome": a primeira pode ser um rotulo seguido de
+       outro rotulo (Nome/Sobrenome lado a lado), e o valor real vir depois. */
+    for (const m of document.body.innerText.matchAll(/(?:^|\n)\s*Nome\s*\n\s*([^\n]{2,40})/g)) {
+      const n = m[1].trim();
+      if (!n || n === '--' || /\d/.test(n) || /^(sobrenome|e-?mail|telefone|data)/i.test(n)) continue;
+      const nome = primeiroNomeDe(n);
+      if (nome) return nome;
+    }
+    return null;
   }
 
   /* Mensagens do inicio da conversa — usadas quando o contato ainda nao tem
@@ -372,7 +398,7 @@
     const p = painel();
     p.innerHTML = '';
     const t = document.createElement('div');
-    t.textContent = texto || '🦁 BRAVE — sem proposta para este contato';
+    t.textContent = (texto || '🦁 BRAVE — sem proposta para este contato') + `  · v${VERSAO}`;
     t.style.cssText = 'font-weight:700;font-size:11px;color:#94a3b8;line-height:1.35';
     p.appendChild(t);
     adicionarAtalhos(p);
