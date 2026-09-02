@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.1
+// @version      3.2
 // @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -26,10 +26,11 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.1'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.2'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
+  let ultimoNomeAchado = null; // preenchido pela Abertura, mostrado no status
 
   /* O painel de contato do FSS mostra mais de um telefone (principal e
      adicional), e nem sempre o cadastrado no HUB e o primeiro. Em vez de
@@ -330,17 +331,18 @@
     return n.length >= 2 ? n.toUpperCase() : null;
   }
 
-  /* Valor de um input pelo rotulo do container (Nome, Sobrenome, E-mail...). */
+  /* Valor de um input pelo rotulo do container (Nome, Sobrenome, E-mail...).
+     Sobe ate 5 niveis: no FSS o input costuma vir embrulhado em wrappers. */
   function valorDoCampo(rotuloRegex) {
     for (const campo of document.querySelectorAll('input, textarea')) {
       const valor = String(campo.value || '').trim();
       if (!valor || valor === '--') continue;
       let el = campo;
-      for (let i = 0; i < 3 && el.parentElement; i++) {
+      for (let i = 0; i < 5 && el.parentElement; i++) {
         el = el.parentElement;
         const rotulo = (el.innerText || '').trim().split('\n')[0].trim();
         if (rotuloRegex.test(rotulo)) return valor;
-        if (rotulo.length > 25) break;
+        if (rotulo.length > 40) break;
       }
     }
     return '';
@@ -358,30 +360,72 @@
   }
 
   function acharPrimeiroNome() {
+    // 1) input rotulado "Nome" (aceita "Nome ⊕" e afins: \b em vez de $)
+    const porRotulo = valorDoCampo(/^nome\b/i);
+    if (porRotulo && !/\d/.test(porRotulo)) {
+      const n = primeiroNomeDe(porRotulo);
+      if (n) return n;
+    }
+    // 2) placeholder/aria/name do proprio input
     for (const campo of document.querySelectorAll('input, textarea')) {
       const valor = String(campo.value || '').trim();
       if (!valor || valor === '--' || /\d/.test(valor)) continue;
-      // placeholder/aria costumam nomear o campo direto
       const meta = `${campo.getAttribute('placeholder') || ''} ${campo.getAttribute('aria-label') || ''} ${campo.name || ''}`;
-      if (/^\s*(first[_ ]?name|nome)\s*$/i.test(meta.trim())) return primeiroNomeDe(valor);
-      // senao, sobe ate 3 niveis procurando o container rotulado "Nome"
-      let el = campo;
-      for (let i = 0; i < 3 && el.parentElement; i++) {
-        el = el.parentElement;
-        const rotulo = (el.innerText || '').trim().split('\n')[0].trim();
-        if (/^nome$/i.test(rotulo)) return primeiroNomeDe(valor);
-        if (rotulo.length > 25) break; // container grande demais: subiu alem do campo
+      if (/first[_ ]?name|(^|\s)nome(\s|$)/i.test(meta)) {
+        const n = primeiroNomeDe(valor);
+        if (n) return n;
       }
     }
-    /* Varre TODAS as linhas "Nome": a primeira pode ser um rotulo seguido de
-       outro rotulo (Nome/Sobrenome lado a lado), e o valor real vir depois. */
-    for (const m of document.body.innerText.matchAll(/(?:^|\n)\s*Nome\s*\n\s*([^\n]{2,40})/g)) {
+    /* 3) valor exibido como TEXTO na linha seguinte ao rotulo. Varre TODAS as
+       linhas "Nome" (a primeira pode ser rotulo seguido de outro rotulo) e
+       tolera ate 6 caracteres depois de "Nome" na mesma linha (icone de +). */
+    for (const m of document.body.innerText.matchAll(/(?:^|\n)[^\S\n]*Nome\b[^\n]{0,6}\n\s*([^\n]{2,40})/g)) {
       const n = m[1].trim();
       if (!n || n === '--' || /\d/.test(n) || /^(sobrenome|e-?mail|telefone|data)/i.test(n)) continue;
       const nome = primeiroNomeDe(n);
       if (nome) return nome;
     }
     return null;
+  }
+
+  /* Raio-X da tela para depurar a leitura do nome SEM DevTools (o FSS trava o
+     console). Mostra rotulos e formato dos valores — mascarados: 3 letras no
+     maximo, nunca o dado inteiro. O texto e selecionavel e vai ao clipboard. */
+  function diagnosticoNome() {
+    const L = ['DIAGNOSTICO NOME — v' + VERSAO];
+    let i = 0;
+    for (const campo of document.querySelectorAll('input, textarea')) {
+      if (++i > 25) break;
+      const v = String(campo.value || '').trim();
+      const vv = !v ? 'vazio' : (/\d/.test(v) ? `digitos(${v.length})` : `${v.slice(0, 3)}…(${v.length})`);
+      const rot = [];
+      let el = campo;
+      for (let k = 0; k < 5 && el.parentElement; k++) {
+        el = el.parentElement;
+        rot.push(((el.innerText || '').trim().split('\n')[0] || '·').trim().slice(0, 18));
+      }
+      L.push(`in${i} [${vv}] ph"${(campo.getAttribute('placeholder') || '').slice(0, 14)}" ← ${rot.join(' | ')}`);
+    }
+    const txt = document.body.innerText;
+    const idx = txt.indexOf('Nome');
+    L.push(idx < 0 ? 'texto: sem "Nome" na pagina' : 'texto: ' + JSON.stringify(txt.slice(Math.max(0, idx - 20), idx + 60)));
+    L.push('nomeDetectado: ' + (acharPrimeiroNome() || '(nenhum)'));
+    return L.join('\n');
+  }
+
+  function mostrarDiagnostico() {
+    const p = painel();
+    p.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.textContent = diagnosticoNome();
+    pre.style.cssText = 'font:10px/1.45 monospace;color:#cbd5e1;white-space:pre-wrap;max-height:320px;overflow:auto;user-select:text;margin:0';
+    p.appendChild(pre);
+    try { navigator.clipboard.writeText(pre.textContent); } catch (_) { /* melhor-esforco */ }
+    const dica = document.createElement('div');
+    dica.textContent = 'Copiado — cole aqui no chat para eu analisar.';
+    dica.style.cssText = 'font-size:10px;color:#64748b';
+    p.appendChild(dica);
+    p.appendChild(botao('↩︎ Voltar ao painel', '#0e7490', voltar));
   }
 
   /* Mensagens do inicio da conversa — usadas quando o contato ainda nao tem
@@ -393,6 +437,7 @@
       titulo: '👋 Abertura',
       texto: () => {
         const nome = acharPrimeiroNome();
+        ultimoNomeAchado = nome; // o status conta se achou — visibilidade sem DevTools
         return nome
           ? `Fala ${nome}, tudo bem? Aqui é o Léo Berg da BRAVE 👊 Quais equipamentos você busca?`
           : 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?';
@@ -431,14 +476,18 @@
     for (const m of MENSAGENS_RAPIDAS) {
       painelEl.appendChild(botao(m.titulo, '#334155', async () => {
         status(`⏳ Preparando ${m.titulo}...`);
+        ultimoNomeAchado = null;
         const texto = typeof m.texto === 'function' ? await m.texto() : m.texto;
         const ok = escreverMensagem(texto);
-        status(ok ? `✅ ${m.titulo} escrita — revise e envie.` : '❌ Nao achei o campo de mensagem.',
+        const extra = m.titulo.includes('Abertura')
+          ? (ultimoNomeAchado ? ` para ${ultimoNomeAchado}` : ' (sem nome na tela)') : '';
+        status(ok ? `✅ ${m.titulo} escrita${extra} — revise e envie.` : '❌ Nao achei o campo de mensagem.',
           ok ? '#4ade80' : '#fca5a5');
-        setTimeout(voltar, 3500);
+        setTimeout(voltar, 4000);
       }));
     }
     painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
+    painelEl.appendChild(botao('🔍 Diagnóstico do nome', '#1f2937', mostrarDiagnostico));
   }
 
   /* Painel para contato sem orcamento: so os atalhos de mensagem. */
