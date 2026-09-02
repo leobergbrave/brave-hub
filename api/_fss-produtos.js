@@ -63,22 +63,39 @@ function mensagemErgo(p) {
   ].join('\n');
 }
 
-// Familias com variacoes (importado/nacional, metragens): uma mensagem so,
-// apresentando o produto e listando as opcoes com preco ao final.
-function mensagemSled(imp, nac) {
-  const l = [
-    '🛷 *Sled Brave — Medidas Oficiais HYROX*',
+// Familias com variacoes (metragens): uma mensagem so, apresentando o produto
+// e listando as opcoes com preco ao final. Sleds sao itens separados: cada um
+// tem video proprio, e video + texto devem casar (pedido do Leo em 2026-09-02).
+function mensagemSledImportado(p) {
+  return [
+    '🛷 *Sled Importado — Medidas Oficiais HYROX 50kg*',
     'Push e Pull: as estações 2 e 3 da prova, dentro do seu box.',
     '',
     '✅ Medidas oficiais de competição HYROX',
     '✅ Serve para empurrar e puxar — 2 estações em 1',
+    '✅ Tubo central em inox e grip nos tubos',
     '✅ Tubos removíveis para transporte fácil',
     '✅ Compatível com anilhas para carga extra',
     '✅ Adaptável ao Turf',
-  ];
-  if (imp) l.push('', '🏆 *Importado 50kg* — tubo central inox e grip nos tubos', linhaPreco(imp.preco_avista, imp.preco));
-  if (nac) l.push('', '🇧🇷 *Nacional 25kg* — pintura eletrostática (fabricação em 20 dias)', linhaPreco(nac.preco_avista, nac.preco));
-  return l.join('\n');
+    '',
+    linhaPreco(p.preco_avista, p.preco),
+  ].join('\n');
+}
+
+function mensagemSledNacional(p) {
+  return [
+    '🛷 *Sled Nacional — Medidas Oficiais HYROX 25kg*',
+    'O sled da prova em versão nacional — mesma pegada, preço mais acessível.',
+    '',
+    '✅ Medidas oficiais de competição HYROX',
+    '✅ Serve para empurrar e puxar — 2 estações em 1',
+    '✅ Pintura eletrostática de alta resistência',
+    '✅ Tubos removíveis para transporte fácil',
+    '✅ Compatível com anilhas para carga extra',
+    '✅ Fabricação em 20 dias',
+    '',
+    linhaPreco(p.preco_avista, p.preco),
+  ].join('\n');
 }
 
 function mensagemTurf(cheio, lanes, base) {
@@ -125,11 +142,18 @@ async function montarItens() {
       itens.push({ id: alias, titulo: `${p.emoji} ${p.nome}`, texto: mensagemErgo(p), video: p.video || '' });
   }
 
-  if (por.sledimp || por.slednac) {
+  if (por.sledimp) {
       itens.push({
-        id: 'sled', titulo: '🛷 Sled (importado e nacional)',
-        texto: mensagemSled(por.sledimp, por.slednac),
-        video: por.sledimp?.video || por.slednac?.video || '',
+        id: 'sledimp', titulo: '🛷 Sled Importado 50kg',
+        texto: mensagemSledImportado(por.sledimp),
+        video: por.sledimp.video || '',
+      });
+  }
+  if (por.slednac) {
+      itens.push({
+        id: 'slednac', titulo: '🛷 Sled Nacional 25kg',
+        texto: mensagemSledNacional(por.slednac),
+        video: por.slednac.video || '',
       });
   }
   if (por.turf || por.turflanes) {
