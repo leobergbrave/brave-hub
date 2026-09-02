@@ -100,11 +100,10 @@ function mensagemSledNacional(p) {
 
 function mensagemTurf(cheio, lanes, base) {
   const l = [
-    '🏟️ *TURF Oficial 16mm — Piso Oficial HYROX*',
+    '🏟️ *TURF Oficial — Piso Oficial HYROX*',
     'O mesmo piso que o atleta encontra na prova: seu box pronto para treinos de sled, lunges e carries.',
     '',
-    '✅ Piso oficial das provas de HYROX',
-    '✅ 16mm de espessura — atrito real de competição',
+    '✅ O mesmo piso das provas oficiais de HYROX',
     "✅ Ideal para sled push/pull, lunges e farmer's carry",
     '✅ Transforma qualquer corredor em estação de treino',
   ];
