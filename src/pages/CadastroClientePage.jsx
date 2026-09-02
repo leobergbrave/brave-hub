@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle2, Loader2, AlertCircle, Building2, User, MapPin, Phone, CreditCard, Search, Shield } from 'lucide-react';
 import { InstitutionalFooter } from '../components/BraveCredentials';
 import LogoBrave from '../components/LogoBrave';
@@ -72,6 +72,28 @@ export default function CadastroClientePage() {
     setForm(prev => ({ ...prev, [field]: value }));
     if (erros[field]) setErros(prev => { const n = { ...prev }; delete n[field]; return n; });
   };
+
+  /* Link vindo do atendimento (?p=token): o consultor já capturou nome,
+     telefone e e-mail na conversa — buscamos pelo token e preenchemos, para o
+     cliente completar só CPF e endereço. Falhou ou expirou? Formulário vazio,
+     como sempre foi. */
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('p');
+    if (!p) return;
+    fetch(`/api/bling?acao=cadastro_prefill&p=${encodeURIComponent(p)}`)
+      .then(r => r.json())
+      .then(j => {
+        if (!j.ok || !j.dados) return;
+        const tel = String(j.dados.telefone || '').replace(/^55(?=\d{10,11}$)/, '');
+        setForm(prev => ({
+          ...prev,
+          nomeCompleto: j.dados.nome || prev.nomeCompleto,
+          email: j.dados.email || prev.email,
+          telefone: tel ? formatTel(tel) : prev.telefone,
+        }));
+      })
+      .catch(() => {});
+  }, []);
 
   async function buscarCep(cep) {
     const c = cep.replace(/\D/g, '');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.0
+// @version      3.1
 // @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -26,7 +26,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.0'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.1'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -330,6 +330,33 @@
     return n.length >= 2 ? n.toUpperCase() : null;
   }
 
+  /* Valor de um input pelo rotulo do container (Nome, Sobrenome, E-mail...). */
+  function valorDoCampo(rotuloRegex) {
+    for (const campo of document.querySelectorAll('input, textarea')) {
+      const valor = String(campo.value || '').trim();
+      if (!valor || valor === '--') continue;
+      let el = campo;
+      for (let i = 0; i < 3 && el.parentElement; i++) {
+        el = el.parentElement;
+        const rotulo = (el.innerText || '').trim().split('\n')[0].trim();
+        if (rotuloRegex.test(rotulo)) return valor;
+        if (rotulo.length > 25) break;
+      }
+    }
+    return '';
+  }
+
+  const capitalizar = (s) => String(s || '').trim().toLowerCase()
+    .replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase());
+
+  /* Tudo que a tela do contato oferece para pre-preencher o cadastro. */
+  function acharDadosContato() {
+    const nome = capitalizar(`${valorDoCampo(/^nome$/i)} ${valorDoCampo(/^sobrenome$/i)}`.trim());
+    let email = valorDoCampo(/^e-?mail$/i);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) email = '';
+    return { nome, email, telefone: acharTelefones()[0] || '' };
+  }
+
   function acharPrimeiroNome() {
     for (const campo of document.querySelectorAll('input, textarea')) {
       const valor = String(campo.value || '').trim();
@@ -373,7 +400,26 @@
     },
     {
       titulo: '📋 Pedir cadastro',
-      texto: 'Para realizar seu orçamento personalizado, por favor preencha esse cadastro\nhttps://brave-hub-two.vercel.app/cadastro\nMe avise quando finalizar',
+      /* Gera um link com token: a pagina /cadastro busca nome/telefone/e-mail
+         pelo token e preenche sozinha — o cliente completa so CPF e endereco.
+         Sem dados na tela ou HUB fora do ar, cai no link generico de sempre. */
+      texto: async () => {
+        const d = acharDadosContato();
+        if (d.nome || d.email || d.telefone) {
+          try {
+            const r = await fetch(`${HUB}/api/bling?acao=cadastro_prefill_criar`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(d),
+            });
+            const j = await r.json();
+            if (j.ok) {
+              const oi = d.nome ? `${primeiroNomeDe(d.nome)}, para` : 'Para';
+              return `${oi} realizar seu orçamento personalizado é só confirmar seu cadastro nesse link — seus dados já estão preenchidos, falta só completar 😉\n${j.url}\nMe avise quando finalizar`;
+            }
+          } catch (_) { /* cai no generico */ }
+        }
+        return 'Para realizar seu orçamento personalizado, por favor preencha esse cadastro\nhttps://brave-hub-two.vercel.app/cadastro\nMe avise quando finalizar';
+      },
     },
   ];
 
@@ -383,8 +429,10 @@
     linha.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px';
     painelEl.appendChild(linha);
     for (const m of MENSAGENS_RAPIDAS) {
-      painelEl.appendChild(botao(m.titulo, '#334155', () => {
-        const ok = escreverMensagem(typeof m.texto === 'function' ? m.texto() : m.texto);
+      painelEl.appendChild(botao(m.titulo, '#334155', async () => {
+        status(`⏳ Preparando ${m.titulo}...`);
+        const texto = typeof m.texto === 'function' ? await m.texto() : m.texto;
+        const ok = escreverMensagem(texto);
         status(ok ? `✅ ${m.titulo} escrita — revise e envie.` : '❌ Nao achei o campo de mensagem.',
           ok ? '#4ade80' : '#fca5a5');
         setTimeout(voltar, 3500);

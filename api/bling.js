@@ -6,6 +6,7 @@ import { importar as importarModelos, gerarOrcamento, gerarProposta } from './_b
 import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, propostasPendentes, sessaoBling } from './_proposta-pdf.js';
 import { vendasPeriodo } from './_bling-vendas.js';
 import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
+import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — API: Bling (função consolidada)
@@ -50,6 +51,8 @@ export default async function handler(req, res) {
     case 'vendas_periodo':      return vendasPeriodo(req, res);
     case 'produtos_fss':        return produtosFss(req, res);
     case 'enviar_produto_cliente': return enviarProdutoCliente(req, res);
+    case 'cadastro_prefill_criar': return criarPrefill(req, res);
+    case 'cadastro_prefill':       return lerPrefill(req, res);
     default:
       return res.status(400).json({ ok: false, error: `Ação Bling inválida: ${acao || '(vazia)'}` });
   }
