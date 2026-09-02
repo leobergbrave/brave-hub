@@ -98,7 +98,7 @@ export default function MarketingTab({ onBadgeUpdate }) {
           cleanPhone = '55' + cleanPhone;
         }
 
-        await fetch(webhookUrl, {
+        const r = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -110,6 +110,9 @@ export default function MarketingTab({ onBadgeUpdate }) {
             media_url: d.template.media_url || ''
           })
         });
+        // BotConversa recusou = NAO enviado: sem isso o disparo era marcado
+        // como feito e a falha ficava invisivel (mensagem nunca chegava).
+        if (!r.ok) throw new Error(`BotConversa HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
         // Save progress to avoid sending again tomorrow
         const sent = d.orcamento.payload.marketing_sent || [];
@@ -198,7 +201,7 @@ export default function MarketingTab({ onBadgeUpdate }) {
         cleanPhone = '55' + cleanPhone;
       }
 
-      await fetch(webhookUrl, {
+      const r = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,6 +213,7 @@ export default function MarketingTab({ onBadgeUpdate }) {
           media_url: d.template.media_url || ''
         })
       });
+      if (!r.ok) throw new Error(`BotConversa HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
       const sent = d.orcamento.payload.marketing_sent || [];
       const newPayload = { ...d.orcamento.payload, marketing_sent: [...sent, d.template.id] };
@@ -244,7 +248,7 @@ export default function MarketingTab({ onBadgeUpdate }) {
         cleanPhone = '55' + cleanPhone;
       }
 
-      await fetch(webhookUrl, {
+      const r = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -256,6 +260,7 @@ export default function MarketingTab({ onBadgeUpdate }) {
           media_url: template.media_url || ''
         })
       });
+      if (!r.ok) throw new Error(`BotConversa HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
       alert("✅ Teste enviado com sucesso! Verifique seu WhatsApp em alguns instantes.");
     } catch (err) {

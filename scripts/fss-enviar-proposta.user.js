@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.3
+// @version      3.4
 // @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -26,7 +26,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.3'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.4'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -390,48 +390,6 @@
     return null;
   }
 
-  /* Raio-X da tela para depurar a leitura do nome SEM DevTools (o FSS trava o
-     console). Mostra rotulos e formato dos valores — mascarados: 3 letras no
-     maximo, nunca o dado inteiro. O texto e selecionavel e vai ao clipboard. */
-  function diagnosticoNome() {
-    const L = ['DIAGNOSTICO NOME — v' + VERSAO];
-    let i = 0;
-    for (const campo of document.querySelectorAll('input, textarea')) {
-      if (++i > 25) break;
-      const v = String(campo.value || '').trim();
-      const vv = !v ? 'vazio' : (/\d/.test(v) ? `digitos(${v.length})` : `${v.slice(0, 3)}…(${v.length})`);
-      const rot = [];
-      let el = campo;
-      for (let k = 0; k < 5 && el.parentElement; k++) {
-        el = el.parentElement;
-        rot.push(((el.innerText || '').trim().split('\n')[0] || '·').trim().slice(0, 18));
-      }
-      L.push(`in${i} [${vv}] ph"${(campo.getAttribute('placeholder') || '').slice(0, 14)}" ← ${rot.join(' | ')}`);
-    }
-    const txt = document.body.innerText;
-    const idx = txt.indexOf('Nome');
-    L.push(idx < 0 ? 'texto: sem "Nome" na pagina' : 'texto: ' + JSON.stringify(txt.slice(Math.max(0, idx - 20), idx + 60)));
-    const masc = (v) => (v ? `${v.slice(0, 3)}…(${v.length})` : '(vazio)');
-    L.push(`pareamento: nome=${masc(valorDoCampo(/^nome\b.{0,4}$/i))} sobrenome=${masc(valorDoCampo(/^sobrenome\b.{0,4}$/i))} email=${masc(valorDoCampo(/^e-?mail\b.{0,4}$/i))}`);
-    L.push('nomeDetectado: ' + (acharPrimeiroNome() || '(nenhum)'));
-    return L.join('\n');
-  }
-
-  function mostrarDiagnostico() {
-    const p = painel();
-    p.innerHTML = '';
-    const pre = document.createElement('pre');
-    pre.textContent = diagnosticoNome();
-    pre.style.cssText = 'font:10px/1.45 monospace;color:#cbd5e1;white-space:pre-wrap;max-height:320px;overflow:auto;user-select:text;margin:0';
-    p.appendChild(pre);
-    try { navigator.clipboard.writeText(pre.textContent); } catch (_) { /* melhor-esforco */ }
-    const dica = document.createElement('div');
-    dica.textContent = 'Copiado — cole aqui no chat para eu analisar.';
-    dica.style.cssText = 'font-size:10px;color:#64748b';
-    p.appendChild(dica);
-    p.appendChild(botao('↩︎ Voltar ao painel', '#0e7490', voltar));
-  }
-
   /* Mensagens do inicio da conversa — usadas quando o contato ainda nao tem
      orcamento. Ficam sempre a mao no painel, porque e justamente nesse momento
      (lead novo, sem proposta) que o consultor mais digita a mesma coisa.
@@ -491,7 +449,6 @@
       }));
     }
     painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
-    painelEl.appendChild(botao('🔍 Diagnóstico do nome', '#1f2937', mostrarDiagnostico));
   }
 
   /* Painel para contato sem orcamento: so os atalhos de mensagem. */
