@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      2.8
+// @version      2.9
 // @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -319,13 +319,31 @@
     setTimeout(montarMenu, 5000);
   }
 
+  /* Nome do contato, lido da tela de detalhes do FSS na hora do clique.
+     Os campos aparecem no texto da pagina como "Nome" numa linha e o valor na
+     seguinte — mesmo principio da leitura de telefone. Se nao achar (tela
+     diferente, campo vazio, "--"), devolve null e a abertura sai generica. */
+  function acharPrimeiroNome() {
+    const m = document.body.innerText.match(/(?:^|\n)\s*Nome\s*\n\s*([^\n]{2,40})/);
+    let n = m ? m[1].trim() : '';
+    if (!n || n === '--' || /^(sobrenome|e-?mail|telefone|data)/i.test(n)) return null;
+    n = n.split(/\s+/)[0].replace(/[^\p{L}'-]/gu, '');
+    return n.length >= 2 ? n.toUpperCase() : null;
+  }
+
   /* Mensagens do inicio da conversa — usadas quando o contato ainda nao tem
      orcamento. Ficam sempre a mao no painel, porque e justamente nesse momento
-     (lead novo, sem proposta) que o consultor mais digita a mesma coisa. */
+     (lead novo, sem proposta) que o consultor mais digita a mesma coisa.
+     texto pode ser funcao: avaliada no clique, com o contato aberto na tela. */
   const MENSAGENS_RAPIDAS = [
     {
       titulo: '👋 Abertura',
-      texto: 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?',
+      texto: () => {
+        const nome = acharPrimeiroNome();
+        return nome
+          ? `Fala ${nome}, tudo bem? Aqui é o Léo Berg da BRAVE 👊 Quais equipamentos você busca?`
+          : 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?';
+      },
     },
     {
       titulo: '📋 Pedir cadastro',
@@ -340,7 +358,7 @@
     painelEl.appendChild(linha);
     for (const m of MENSAGENS_RAPIDAS) {
       painelEl.appendChild(botao(m.titulo, '#334155', () => {
-        const ok = escreverMensagem(m.texto);
+        const ok = escreverMensagem(typeof m.texto === 'function' ? m.texto() : m.texto);
         status(ok ? `✅ ${m.titulo} escrita — revise e envie.` : '❌ Nao achei o campo de mensagem.',
           ok ? '#4ade80' : '#fca5a5');
         setTimeout(voltar, 3500);
