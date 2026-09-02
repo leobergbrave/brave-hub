@@ -63,7 +63,7 @@ const normNome = (s) => String(s || '')
   .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/\s*\(copia\)\s*$/, '').replace(/\s+/g, ' ').trim();
 
-export async function sincronizarVendas(req, res) {
+export async function executarSyncVendas() {
   try {
     const agora = Date.now();
     try {
@@ -71,7 +71,7 @@ export async function sincronizarVendas(req, res) {
       if (!dl.error) {
         const st = JSON.parse(await dl.data.text());
         if (agora - (st.em || 0) < 10 * 60 * 1000) {
-          return res.status(200).json({ ok: true, pulado: true, ultimaEm: st.em, aprovados: st.aprovados || [] });
+          return { ok: true, pulado: true, ultimaEm: st.em, aprovados: st.aprovados || [] };
         }
       }
     } catch (_) { /* sem estado: primeira execucao */ }
@@ -90,11 +90,11 @@ export async function sincronizarVendas(req, res) {
     const pendentes = (linhas || []).filter((o) => (o.payload?.status || 'Pendente') === 'Pendente');
     if (!pendentes.length) {
       await salvarEstado([]);
-      return res.status(200).json({ ok: true, aprovados: [], verificados: 0 });
+      return { ok: true, aprovados: [], verificados: 0 };
     }
 
     const token = await getValidToken();
-    if (!token) return res.status(500).json({ ok: false, error: 'Sem token Bling.' });
+    if (!token) return { ok: false, error: 'Sem token Bling.' };
 
     const iso = (d) => d.toISOString().slice(0, 10);
     const ini = iso(new Date(agora - 40 * 24 * 3600 * 1000));
@@ -133,10 +133,15 @@ export async function sincronizarVendas(req, res) {
 
     await salvarEstado(aprovados);
     console.log('[sync-vendas]', { verificados: pendentes.length, pedidos: porNome.size, aprovados: aprovados.length });
-    return res.status(200).json({ ok: true, aprovados, verificados: pendentes.length });
+    return { ok: true, aprovados, verificados: pendentes.length };
   } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message });
+    return { ok: false, error: e.message };
   }
+}
+
+export async function sincronizarVendas(req, res) {
+  const r = await executarSyncVendas();
+  return res.status(r.ok ? 200 : 500).json(r);
 }
 
 export async function vendasPeriodo(req, res) {

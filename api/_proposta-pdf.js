@@ -492,16 +492,14 @@ async function despacharPdfs(orc, automatico = false) {
    entrega para quem nunca conversou no numero BotConversa (leads vindos do
    FSS, que tem numero proprio) e falha sem aviso. A API cria o contato e
    envia — o mesmo caminho ja comprovado do envio de propostas. */
-export async function enviarMensagemCliente(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+export async function enviarMensagemCore({ telefone, mensagem, media_url, cliente }) {
   const apiKey = process.env.BOTCONVERSA_API_KEY;
-  if (!apiKey) return res.status(500).json({ ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel.' });
+  if (!apiKey) return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel.' };
 
-  const { telefone, mensagem, media_url, cliente } = req.body || {};
   let tel = String(telefone || '').replace(/\D/g, '');
   if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
-  if (tel.length < 12) return res.status(400).json({ ok: false, error: 'Telefone inválido.' });
-  if (!String(mensagem || '').trim()) return res.status(400).json({ ok: false, error: 'Mensagem vazia.' });
+  if (tel.length < 12) return { ok: false, error: 'Telefone inválido.' };
+  if (!String(mensagem || '').trim()) return { ok: false, error: 'Mensagem vazia.' };
 
   let subscriberId = null;
   const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
@@ -515,25 +513,31 @@ export async function enviarMensagemCliente(req, res) {
     }, apiKey);
     subscriberId = criado.json?.id ?? null;
     if (!subscriberId) {
-      return res.status(502).json({ ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` });
+      return { ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` };
     }
   }
 
   const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
   const rt = await enviar({ type: 'text', value: String(mensagem) });
   if (!rt.ok) {
-    return res.status(502).json({ ok: false, error: `BotConversa recusou o envio (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` });
+    return { ok: false, error: `BotConversa recusou o envio (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` };
   }
   if (String(media_url || '').trim()) {
     await sleep(600);
     const rf = await enviar({ type: 'file', value: String(media_url).trim() });
     if (!rf.ok) {
-      return res.status(502).json({ ok: false, error: `Texto foi, mas a mídia falhou (HTTP ${rf.status}): ${rf.texto.slice(0, 250)}` });
+      return { ok: false, error: `Texto foi, mas a mídia falhou (HTTP ${rf.status}): ${rf.texto.slice(0, 250)}` };
     }
   }
 
   console.log('[followup] envio BotConversa:', { tel, cliente: cliente || '?', media: !!media_url });
-  return res.status(200).json({ ok: true });
+  return { ok: true };
+}
+
+export async function enviarMensagemCliente(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  const r = await enviarMensagemCore(req.body || {});
+  return res.status(r.ok ? 200 : 502).json(r);
 }
 
 /* Avisa o consultor no WhatsApp dele quando a proposta NAO foi entregue.

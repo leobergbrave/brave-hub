@@ -113,8 +113,26 @@ async function run(req) {
     headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
+  /* Follow-up automatico de leads pega carona no mesmo tique do agendador.
+     O endpoint decide sozinho se envia algo (janela, limite diario, intervalo
+     aleatorio) — na maioria dos tiques ele so responde "aguardando". Falha
+     aqui nao pode derrubar os disparos. */
+  let followup = null;
+  try {
+    const base = new URL(req.url).origin;
+    const fr = await fetch(`${base}/api/bling?acao=processar_followups`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': req.headers.get('x-cron-secret') || '' },
+    });
+    followup = await fr.json();
+  } catch (e) {
+    followup = { ok: false, error: e.message };
+  }
+
+  const respondCom = (data) => respond({ ...data, followup });
+
   const cfgArr = await dbSelect('disparo_config', 'limit=1');
-  if (!cfgArr?.length) return respond({ ok: true, skipped: 'configuração não encontrada' });
+  if (!cfgArr?.length) return respondCom({ ok: true, skipped: 'configuração não encontrada' });
   const cfg = cfgArr[0];
 
   // Sem bloqueio global de janela horária — campanhas começam imediatamente ao serem
@@ -125,7 +143,7 @@ async function run(req) {
   const today  = todayBRT();
 
   const campanhas = await dbSelect('disparo_campanhas', 'status=eq.ativa');
-  if (!campanhas?.length) return respond({ ok: true, skipped: 'nenhuma campanha ativa' });
+  if (!campanhas?.length) return respondCom({ ok: true, skipped: 'nenhuma campanha ativa' });
 
   const results = [];
 
@@ -245,7 +263,5 @@ async function run(req) {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, processed: results.length, results }), {
-    headers: { ...cors, 'Content-Type': 'application/json' },
-  });
+  return respondCom({ ok: true, processed: results.length, results });
 }
