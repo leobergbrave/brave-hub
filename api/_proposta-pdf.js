@@ -400,19 +400,15 @@ async function despacharPdfs(orc, automatico = false) {
   const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
   if (busca.ok) subscriberId = busca.json?.id ?? null;
 
-  /* So bloqueia quando o canal e de fato WhatsApp (WHATSAPP / VENDA DIRETA): ali
-     o cliente ja conversou conosco no WhatsApp, entao contato ausente e digito
-     errado de verdade — e criar um contato mandaria a proposta para o vazio.
-     Para FSS (e envio manual) seguimos criando o contato e enviando: o Leo pediu
-     que FSS receba pelo WhatsApp tambem, alem do painel do FSS. */
-  const origem = String(orc.origem_lead || '').toUpperCase();
-  if (!subscriberId && automatico && ['WHATSAPP', 'VENDA DIRETA', 'TIAGO'].includes(origem)) {
-    await alertarConsultor(orc, tel);
-    return {
-      ok: false,
-      naoEnviado: 'contato-inexistente',
-      error: `O telefone ${tel} não existe no WhatsApp da BRAVE — provável dígito errado. Confira o número do cliente e gere de novo.`,
-    };
+  /* Contato inexistente em canal de WhatsApp BLOQUEAVA o envio automatico
+     (protecao contra digito trocado, apos incidente real). Em 2026-09-02 o Leo
+     pediu para retirar a trava: agora criamos o contato e enviamos sempre, e o
+     alerta vira AVISO — "contato criado agora, confira o numero" — para o
+     digito errado continuar visivel sem segurar a proposta. */
+  if (!subscriberId && automatico) {
+    alertarConsultor(orc, tel,
+      `ℹ️ A proposta de ${orc.cliente || 'cliente'} FOI enviada para ${tel}, mas esse número não existia no WhatsApp da BRAVE — o contato foi criado agora. Se o número estiver errado, corrija o cadastro e reenvie.`)
+      .catch(() => { /* aviso e melhor-esforco */ });
   }
 
   if (!subscriberId) {
@@ -543,7 +539,7 @@ export async function enviarMensagemCliente(req, res) {
 /* Avisa o consultor no WhatsApp dele quando a proposta NAO foi entregue.
    Sem isso a falha e silenciosa: o orcamento fica marcado como nao enviado e
    ninguem percebe ate o cliente cobrar. Usa o mesmo webhook do vigia de leads. */
-async function alertarConsultor(orc, tel) {
+async function alertarConsultor(orc, tel, alertaCustom) {
   const url = process.env.BOTCONVERSA_WEBHOOK
     || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
   const telConsultor = process.env.ALERTA_TELEFONE || '5548996459791';
@@ -554,10 +550,10 @@ async function alertarConsultor(orc, tel) {
       body: JSON.stringify({
         telefone: telConsultor,
         nome: orc.cliente || 'Cliente',
-        titulo: 'Proposta NAO enviada',
+        titulo: alertaCustom ? 'Aviso de envio' : 'Proposta NAO enviada',
         qtd_pendentes: 1,
         link: '',
-        alerta: `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: o telefone ${tel} não existe no WhatsApp da BRAVE (provável dígito errado). Confira o número no cadastro e gere o orçamento de novo.`,
+        alerta: alertaCustom || `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: o telefone ${tel} não existe no WhatsApp da BRAVE (provável dígito errado). Confira o número no cadastro e gere o orçamento de novo.`,
       }),
     });
   } catch (_) { /* o aviso e melhor-esforco; nao pode derrubar o fluxo */ }
