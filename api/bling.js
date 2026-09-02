@@ -4,7 +4,7 @@ import sincronizarContato from './_bling-contato.js';
 import pedidosAtendidos from './_bling-pedidos-atendidos.js';
 import { importar as importarModelos, gerarOrcamento, gerarProposta } from './_bling-modelos.js';
 import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, propostasPendentes, sessaoBling, enviarMensagemCliente } from './_proposta-pdf.js';
-import { vendasPeriodo } from './_bling-vendas.js';
+import { vendasPeriodo, sincronizarVendas } from './_bling-vendas.js';
 import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
 import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
 
@@ -53,6 +53,7 @@ export default async function handler(req, res) {
     case 'enviar_produto_cliente': return enviarProdutoCliente(req, res);
     case 'cadastro_prefill_criar': return criarPrefill(req, res);
     case 'enviar_mensagem_cliente': return enviarMensagemCliente(req, res);
+    case 'sincronizar_vendas':  return sincronizarVendas(req, res);
     case 'cadastro_prefill':       return lerPrefill(req, res);
     default:
       return res.status(400).json({ ok: false, error: `Ação Bling inválida: ${acao || '(vazia)'}` });

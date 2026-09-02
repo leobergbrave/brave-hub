@@ -12,6 +12,10 @@ export default function MarketingTab({ onBadgeUpdate }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    /* Antes de montar a fila, o HUB casa os pedidos de venda do Bling com os
+       orcamentos e marca Aprovado sozinho — lead que comprou nao pode receber
+       cobranca. Melhor-esforco: falha aqui nao trava a lista. */
+    try { await fetch('/api/bling?acao=sincronizar_vendas', { method: 'POST' }); } catch (_) { /* segue */ }
     const { data: tData, error } = await supabase.from('marketing_templates').select('*').order('dias_delay', { ascending: true });
     
     if (!error && tData) {
