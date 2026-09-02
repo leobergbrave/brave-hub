@@ -57,7 +57,7 @@ const TIPOS = [
   { tipo: 'prazo', idCol: 'bling_prazo_id', numCol: 'bling_prazo_numero', pdfCol: 'bling_prazo_pdf' },
   { tipo: 'unica', idCol: 'bling_pedido_id', numCol: 'bling_proposta_numero', pdfCol: 'proposta_pdf_path' },
 ];
-const COLS = 'id, slug, cliente, consultor, payload, origem_lead, propostas_em, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
+const COLS = 'id, slug, cliente, consultor, payload, origem_lead, criado_em, propostas_em, proposta_pdf_enviado_em, bling_avista_id, bling_avista_numero, bling_avista_pdf, bling_prazo_id, bling_prazo_numero, bling_prazo_pdf, bling_pedido_id, bling_proposta_numero, proposta_pdf_path';
 
 /* Nome e URL do PDF para entrega ao cliente. O caminho leva um carimbo de
    versao (/v<epoch>/) porque WhatsApp, BotConversa e o chat do FSS cacheiam
@@ -539,8 +539,15 @@ export async function propostaPorTelefone(req, res) {
     .order('criado_em', { ascending: false })
     .limit(60);
 
-  const achado = (linhas || []).find(o =>
-    String(o.payload?.telefoneCliente || '').replace(/\D/g, '').endsWith(fim));
+  /* O cliente pode ter mais de um orcamento (revisado, regerado). Vale o que
+     tem as PROPOSTAS mais recentes — propostas_em, nao criado_em: regerar as
+     propostas de um orcamento o torna o atual, mesmo que outro orcamento tenha
+     sido criado depois (mesma licao do propostasPendentes, vista em producao
+     com o Alexandre Bloemer: dois orcamentos do mesmo minuto, e o painel
+     puxava o de propostas velhas). */
+  const achado = (linhas || [])
+    .filter(o => String(o.payload?.telefoneCliente || '').replace(/\D/g, '').endsWith(fim))
+    .sort((a, b) => new Date(b.propostas_em || b.criado_em || 0) - new Date(a.propostas_em || a.criado_em || 0))[0];
 
   if (!achado) return res.status(200).json({ ok: true, encontrado: false });
 
