@@ -24,9 +24,28 @@ export default function MarketingTab({ onBadgeUpdate }) {
       const disparos = [];
       const telefonesVistos = new Set(); // 1-A: deduplicar por telefone
 
+      /* Cliente que JA comprou sai do follow-up inteiro: a venda vive em OUTRO
+         orcamento (o aprovado), enquanto copias e versoes antigas continuam
+         "Pendente" — e era por elas que lead vendido seguia recebendo cobranca.
+         Compara por telefone (8 ultimos digitos, DDI/nono digito variam) e por
+         nome normalizado; pedido no Bling tambem conta como venda. */
+      const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+      const compraramTel = new Set();
+      const compraramNome = new Set();
+      for (const o of (orcs || [])) {
+        if (o.payload?.status === 'Aprovado' || o.bling_pedido_id) {
+          const tel8 = String(o.payload?.telefoneCliente || '').replace(/\D/g, '').slice(-8);
+          if (tel8.length === 8) compraramTel.add(tel8);
+          const nome = norm(o.cliente).replace(/\s*\(copia\)\s*$/, '');
+          if (nome) compraramNome.add(nome);
+        }
+      }
+
       for (const o of (orcs || [])) {
         if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
         if (!o.payload?.telefoneCliente) continue;
+        const tel8 = String(o.payload.telefoneCliente).replace(/\D/g, '').slice(-8);
+        if (compraramTel.has(tel8) || compraramNome.has(norm(o.cliente).replace(/\s*\(copia\)\s*$/, ''))) continue;
 
         // Pula orçamentos adiados que ainda não chegaram na data
         if (o.payload?.follow_up_adiado_ate && new Date(o.payload.follow_up_adiado_ate) > now) continue;
