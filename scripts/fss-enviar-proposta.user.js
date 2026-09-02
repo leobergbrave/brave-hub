@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.2
+// @version      3.3
 // @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @run-at       document-idle
@@ -26,7 +26,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.2'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.3'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -331,19 +331,21 @@
     return n.length >= 2 ? n.toUpperCase() : null;
   }
 
-  /* Valor de um input pelo rotulo do container (Nome, Sobrenome, E-mail...).
-     Sobe ate 5 niveis: no FSS o input costuma vir embrulhado em wrappers. */
-  function valorDoCampo(rotuloRegex) {
-    for (const campo of document.querySelectorAll('input, textarea')) {
-      const valor = String(campo.value || '').trim();
-      if (!valor || valor === '--') continue;
-      let el = campo;
-      for (let i = 0; i < 5 && el.parentElement; i++) {
-        el = el.parentElement;
-        const rotulo = (el.innerText || '').trim().split('\n')[0].trim();
-        if (rotuloRegex.test(rotulo)) return valor;
-        if (rotulo.length > 40) break;
-      }
+  /* Valor do campo pelo rotulo, pareado por ORDEM DO DOCUMENTO.
+     O diagnostico na tela real mostrou que o rotulo ("Nome") nao e ancestral
+     do input — vive num elemento separado da arvore. O que o DOM garante e a
+     ordem visual: rotulo → seu campo → proximo rotulo. Entao achamos a folha
+     cujo texto e exatamente o rotulo e pegamos o primeiro input que vem depois
+     dela na pagina. */
+  function valorDoCampo(rotuloExatoRegex) {
+    const campos = [...document.querySelectorAll('input, textarea')];
+    const folhas = [...document.querySelectorAll('div, span, label, p')]
+      .filter((e) => e.children.length === 0 && rotuloExatoRegex.test((e.textContent || '').trim()));
+    for (const folha of folhas) {
+      const campo = campos.find((c) =>
+        folha.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const valor = String(campo?.value || '').trim();
+      if (valor && valor !== '--') return valor;
     }
     return '';
   }
@@ -353,15 +355,15 @@
 
   /* Tudo que a tela do contato oferece para pre-preencher o cadastro. */
   function acharDadosContato() {
-    const nome = capitalizar(`${valorDoCampo(/^nome$/i)} ${valorDoCampo(/^sobrenome$/i)}`.trim());
-    let email = valorDoCampo(/^e-?mail$/i);
+    const nome = capitalizar(`${valorDoCampo(/^nome\b.{0,4}$/i)} ${valorDoCampo(/^sobrenome\b.{0,4}$/i)}`.trim());
+    let email = valorDoCampo(/^e-?mail\b.{0,4}$/i);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) email = '';
     return { nome, email, telefone: acharTelefones()[0] || '' };
   }
 
   function acharPrimeiroNome() {
-    // 1) input rotulado "Nome" (aceita "Nome ⊕" e afins: \b em vez de $)
-    const porRotulo = valorDoCampo(/^nome\b/i);
+    // 1) input pareado ao rotulo "Nome" pela ordem do documento
+    const porRotulo = valorDoCampo(/^nome\b.{0,4}$/i);
     if (porRotulo && !/\d/.test(porRotulo)) {
       const n = primeiroNomeDe(porRotulo);
       if (n) return n;
@@ -409,6 +411,8 @@
     const txt = document.body.innerText;
     const idx = txt.indexOf('Nome');
     L.push(idx < 0 ? 'texto: sem "Nome" na pagina' : 'texto: ' + JSON.stringify(txt.slice(Math.max(0, idx - 20), idx + 60)));
+    const masc = (v) => (v ? `${v.slice(0, 3)}…(${v.length})` : '(vazio)');
+    L.push(`pareamento: nome=${masc(valorDoCampo(/^nome\b.{0,4}$/i))} sobrenome=${masc(valorDoCampo(/^sobrenome\b.{0,4}$/i))} email=${masc(valorDoCampo(/^e-?mail\b.{0,4}$/i))}`);
     L.push('nomeDetectado: ' + (acharPrimeiroNome() || '(nenhum)'));
     return L.join('\n');
   }
