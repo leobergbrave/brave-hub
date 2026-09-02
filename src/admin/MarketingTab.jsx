@@ -79,12 +79,20 @@ export default function MarketingTab({ onBadgeUpdate }) {
     setTimeout(() => setSaving(null), 1000);
   };
 
+  /* Envio pela API do BotConversa via HUB (enviar_mensagem_cliente), NAO pelo
+     webhook de automacao: o fluxo nao entregava para leads que nunca falaram
+     no numero BotConversa (ex.: vindos do FSS) e falhava sem aviso. */
+  const enviarViaHub = async ({ cliente, telefone, mensagem, media_url }) => {
+    const r = await fetch('/api/bling?acao=enviar_mensagem_cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cliente, telefone, mensagem, media_url: media_url || '' }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  };
+
   const handleDisparar = async () => {
-    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
-    if (!webhookUrl) {
-      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada na Vercel!");
-      return;
-    }
 
     setSending(true);
     let successCount = 0;
@@ -98,21 +106,12 @@ export default function MarketingTab({ onBadgeUpdate }) {
           cleanPhone = '55' + cleanPhone;
         }
 
-        const r = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            cliente: d.orcamento.cliente,
-            telefone: cleanPhone,
-            consultor: d.orcamento.consultor,
-            campanha: d.template.nome,
-            mensagem_formatada: mensagemFormatada,
-            media_url: d.template.media_url || ''
-          })
+        await enviarViaHub({
+          cliente: d.orcamento.cliente,
+          telefone: cleanPhone,
+          mensagem: mensagemFormatada,
+          media_url: d.template.media_url,
         });
-        // BotConversa recusou = NAO enviado: sem isso o disparo era marcado
-        // como feito e a falha ficava invisivel (mensagem nunca chegava).
-        if (!r.ok) throw new Error(`BotConversa HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
         // Save progress to avoid sending again tomorrow
         const sent = d.orcamento.payload.marketing_sent || [];
@@ -188,12 +187,6 @@ export default function MarketingTab({ onBadgeUpdate }) {
   };
 
   const handleSendIndividual = async (d, customMessage) => {
-    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
-    if (!webhookUrl) {
-      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada na Vercel!");
-      return;
-    }
-
     setSending(true);
     try {
       let cleanPhone = (d.orcamento.payload.telefoneCliente || '').replace(/\D/g, '');
@@ -201,19 +194,12 @@ export default function MarketingTab({ onBadgeUpdate }) {
         cleanPhone = '55' + cleanPhone;
       }
 
-      const r = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente: d.orcamento.cliente,
-          telefone: cleanPhone,
-          consultor: d.orcamento.consultor,
-          campanha: d.template.nome,
-          mensagem_formatada: customMessage || d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente),
-          media_url: d.template.media_url || ''
-        })
+      await enviarViaHub({
+        cliente: d.orcamento.cliente,
+        telefone: cleanPhone,
+        mensagem: customMessage || d.template.mensagem.replace(/{cliente}/g, d.orcamento.cliente),
+        media_url: d.template.media_url,
       });
-      if (!r.ok) throw new Error(`BotConversa HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
       const sent = d.orcamento.payload.marketing_sent || [];
       const newPayload = { ...d.orcamento.payload, marketing_sent: [...sent, d.template.id] };
@@ -230,11 +216,6 @@ export default function MarketingTab({ onBadgeUpdate }) {
   };
 
   const handleTestar = async (template) => {
-    const webhookUrl = import.meta.env.VITE_BOTCONVERSA_WEBHOOK;
-    if (!webhookUrl) {
-      alert("⚠️ A URL do Webhook do BotConversa (VITE_BOTCONVERSA_WEBHOOK) não está configurada!");
-      return;
-    }
 
     const telefone = window.prompt("Digite o número do seu WhatsApp com DDD para receber o teste (ex: 11999999999):");
     if (!telefone) return;
@@ -248,19 +229,12 @@ export default function MarketingTab({ onBadgeUpdate }) {
         cleanPhone = '55' + cleanPhone;
       }
 
-      const r = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente: "BOX TESTE BRAVE",
-          telefone: cleanPhone,
-          consultor: "Consultor de Teste",
-          campanha: `[TESTE] ${template.nome}`,
-          mensagem_formatada: mensagemFormatada,
-          media_url: template.media_url || ''
-        })
+      await enviarViaHub({
+        cliente: "BOX TESTE BRAVE",
+        telefone: cleanPhone,
+        mensagem: mensagemFormatada,
+        media_url: template.media_url,
       });
-      if (!r.ok) throw new Error(`BotConversa HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
       alert("✅ Teste enviado com sucesso! Verifique seu WhatsApp em alguns instantes.");
     } catch (err) {
