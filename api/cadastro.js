@@ -212,7 +212,10 @@ export default async function handler(req, res) {
   // 2. GET: Renderizar HTML de cadastro e redirecionar
   if (req.method === 'GET') {
     const baseUrl = `https://${req.headers.host}`;
-    const redirectUrl = `${baseUrl}/formulario-cadastro`;
+    /* ?p=<token> e o pre-preenchimento vindo do atendimento (cadastro_prefill):
+       precisa sobreviver ao redirect, senao o formulario abre vazio. */
+    const p = String(req.query?.p || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24);
+    const redirectUrl = `${baseUrl}/formulario-cadastro${p ? `?p=${p}` : ''}`;
     const ogImageUrl = `${baseUrl}/og.png`;
 
     const html = `
