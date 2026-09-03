@@ -8,6 +8,7 @@ import { vendasPeriodo, sincronizarVendas } from './_bling-vendas.js';
 import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
 import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
 import { processarFollowups } from './_followup-auto.js';
+import exportarContatos from './_bling-contatos-export.js';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — API: Bling (função consolidada)
@@ -23,6 +24,7 @@ import { processarFollowups } from './_followup-auto.js';
    POST /api/bling?acao=gerar_proposta      → proposta premium a partir de modelo
    POST /api/bling?acao=proposta_pdf_upload → userscript envia HTML oficial da impressão (body: {numero, html})
    GET  /api/bling?acao=proposta_pdf&slug=  → baixa o PDF oficial guardado
+   GET  /api/bling?acao=exportar_contatos    → base de contatos para o motor Always Profit (x-hub-token)
    POST /api/bling?acao=enviar_pdf_cliente  → manda os PDFs no WhatsApp do cliente (body: {slug})
    ═══════════════════════════════════════════════ */
 
@@ -57,6 +59,7 @@ export default async function handler(req, res) {
     case 'sincronizar_vendas':  return sincronizarVendas(req, res);
     case 'processar_followups': return processarFollowups(req, res);
     case 'cadastro_prefill':       return lerPrefill(req, res);
+    case 'exportar_contatos':      return exportarContatos(req, res);
     default:
       return res.status(400).json({ ok: false, error: `Ação Bling inválida: ${acao || '(vazia)'}` });
   }
