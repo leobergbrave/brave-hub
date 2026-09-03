@@ -272,6 +272,10 @@ export async function criarSlotPdf(req, res) {
       body: JSON.stringify({ id: BUCKET, name: BUCKET, public: false, file_size_limit: 52428800 }),
     }).catch(() => {});
 
+    // Apaga arquivo anterior nesse caminho: o endpoint de assinatura recusa (409)
+    // assinar sobre um objeto ja existente (recaptura/edicao gera novo PDF).
+    await supabaseAdmin.storage.from(BUCKET).remove([r.path]).catch(() => {});
+
     /* URL assinada de upload via REST — nao depende da versao do SDK ter
        createSignedUploadUrl (a da Vercel nao tinha, e a funcao crashava). */
     const signRes = await fetch(`${base}/storage/v1/object/upload/sign/${BUCKET}/${r.path}`, {
