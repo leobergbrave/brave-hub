@@ -239,27 +239,43 @@ async function capturarProposta(idOrcamento) {
      a dezenas de MB — o que estourou a memoria do Chromium, o corpo da Vercel e
      o limite do Storage. Num orcamento a foto do produto e miniatura, entao
      700px de largura e qualidade 0.72 bastam e derrubam o tamanho para <2MB. */
-  await pagina.evaluate(async () => {
+  const diag = await pagina.evaluate(async () => {
+    const info = { total: document.images.length, grandes: 0, reduzidas: 0, falhas: [], fundos: 0 };
+    const pendentes = [];
     for (const img of [...document.images]) {
       try {
         if (!img.naturalWidth || img.naturalWidth <= 700) continue;
+        info.grandes++;
         /* Buscar os bytes por fetch e desenhar a partir de um BLOB — imagem
            cross-origin desenhada direto do <img> tainta o canvas e o toDataURL
            lanca. Do blob (mesma origem) nao tainta, e a sessao do Bling
            autoriza o fetch. */
         const resp = await fetch(img.currentSrc || img.src, { credentials: 'include' });
-        if (!resp.ok) continue;
+        if (!resp.ok) { info.falhas.push(`http ${resp.status} ${img.naturalWidth}px`); continue; }
         const bitmap = await createImageBitmap(await resp.blob());
         const escala = 700 / bitmap.width;
         const c = document.createElement('canvas');
         c.width = 700;
         c.height = Math.round(bitmap.height * escala);
         c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
-        img.src = c.toDataURL('image/jpeg', 0.72);
         img.removeAttribute('srcset');
-      } catch (_) { /* mantem a original */ }
+        img.removeAttribute('sizes');
+        const durl = c.toDataURL('image/jpeg', 0.72);
+        // Espera o novo src decodificar antes do page.pdf (senao embute o original).
+        pendentes.push(new Promise((res) => { img.onload = img.onerror = res; img.src = durl; }));
+        info.reduzidas++;
+      } catch (e) { info.falhas.push(String(e).slice(0, 60)); }
     }
+    // Imagens de fundo via CSS (background-image) tambem incham o PDF.
+    for (const el of document.querySelectorAll('*')) {
+      const bg = getComputedStyle(el).backgroundImage;
+      if (bg && bg.startsWith('url(') && !bg.includes('data:')) info.fundos++;
+    }
+    await Promise.all(pendentes);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return info;
   });
+  log(`  imagens: ${diag.total} total, ${diag.grandes} grandes, ${diag.reduzidas} reduzidas, ${diag.fundos} fundos-css, falhas=${JSON.stringify(diag.falhas).slice(0, 200)}`);
   await sleep(300);
 
   /* PDF gerado AQUI, na propria pagina ja logada e renderizada. O container do
