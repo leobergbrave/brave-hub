@@ -1,13 +1,24 @@
-# Imagem oficial do Puppeteer: ja traz o Chrome e todas as bibliotecas de
-# sistema que ele exige. Montar isso a mao no Nixpacks costuma quebrar a cada
-# atualizacao do Chrome.
+# Imagem oficial do Puppeteer: ja traz todas as bibliotecas de sistema que o
+# Chrome exige no Linux (montar isso a mao quebra a cada atualizacao).
 FROM ghcr.io/puppeteer/puppeteer:24.10.0
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+# Ghostscript recomprime o PDF pronto (as fotos de produto do Bling saem em
+# resolucao cheia e estouram 55MB). Precisa de root para o apt; a imagem roda
+# como pptruser, entao troca-se de usuario so para instalar e volta em seguida.
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ghostscript \
+  && rm -rf /var/lib/apt/lists/*
+USER pptruser
 
 WORKDIR /app
-COPY package.json ./
+
+# Nao apontamos PUPPETEER_EXECUTABLE_PATH: a primeira tentativa fixou
+# /usr/bin/google-chrome-stable, que NAO existe nesta imagem — o Chrome dela
+# fica no cache do usuario pptruser. Deixando o proprio Puppeteer resolver o
+# caminho, a versao do navegador sempre bate com a da biblioteca.
+COPY --chown=pptruser:pptruser package.json ./
 RUN npm install --omit=dev
-COPY . .
+COPY --chown=pptruser:pptruser . .
+
 CMD ["node", "index.js"]

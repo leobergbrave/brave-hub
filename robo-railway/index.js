@@ -25,6 +25,50 @@
  */
 
 import puppeteer from 'puppeteer';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const execFileAsync = promisify(execFile);
+
+/*
+ * As telas de impressão do Bling trazem a foto de cada produto em resolução
+ * cheia — 49 imagens grandes num orçamento estouram o PDF para ~55MB, acima do
+ * limite do Storage (50MB) e grande demais para o cliente abrir. Não dá para
+ * reduzir no navegador: o CDN das imagens bloqueia `fetch` cross-origin (CORS)
+ * e desenhá-las direto no canvas o "taint", travando o toDataURL. A saída
+ * robusta é recomprimir o PDF pronto com o Ghostscript, que reamostra TODAS as
+ * imagens embutidas (independe de origem/CORS/CSS) para ~120dpi. 55MB → ~1-2MB.
+ */
+async function comprimirPdf(buffer) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-'));
+  const entrada = path.join(dir, 'in.pdf');
+  const saida = path.join(dir, 'out.pdf');
+  try {
+    await fs.writeFile(entrada, buffer);
+    await execFileAsync('gs', [
+      '-sDEVICE=pdfwrite',
+      '-dCompatibilityLevel=1.4',
+      '-dPDFSETTINGS=/ebook',
+      '-dNOPAUSE', '-dQUIET', '-dBATCH',
+      '-dDetectDuplicateImages=true',
+      '-dDownsampleColorImages=true', '-dColorImageResolution=120',
+      '-dDownsampleGrayImages=true', '-dGrayImageResolution=120',
+      `-sOutputFile=${saida}`,
+      entrada,
+    ], { maxBuffer: 128 * 1024 * 1024 });
+    const out = await fs.readFile(saida);
+    // Só usa o comprimido se de fato ficou menor (garante que não pioramos nada).
+    return out.length < buffer.length ? out : buffer;
+  } catch (e) {
+    log(`  aviso: Ghostscript falhou (${e.message.slice(0, 80)}); usando PDF original`);
+    return buffer;
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 const HUB = process.env.HUB_URL || 'https://brave-hub-two.vercel.app';
 const TOKEN = process.env.HUB_PDF_TOKEN;
@@ -239,52 +283,18 @@ async function capturarProposta(idOrcamento) {
      a dezenas de MB — o que estourou a memoria do Chromium, o corpo da Vercel e
      o limite do Storage. Num orcamento a foto do produto e miniatura, entao
      700px de largura e qualidade 0.72 bastam e derrubam o tamanho para <2MB. */
-  const diag = await pagina.evaluate(async () => {
-    const info = { total: document.images.length, grandes: 0, reduzidas: 0, falhas: [], fundos: 0 };
-    const pendentes = [];
-    for (const img of [...document.images]) {
-      try {
-        if (!img.naturalWidth || img.naturalWidth <= 700) continue;
-        info.grandes++;
-        /* Buscar os bytes por fetch e desenhar a partir de um BLOB — imagem
-           cross-origin desenhada direto do <img> tainta o canvas e o toDataURL
-           lanca. Do blob (mesma origem) nao tainta, e a sessao do Bling
-           autoriza o fetch. */
-        const resp = await fetch(img.currentSrc || img.src, { credentials: 'include' });
-        if (!resp.ok) { info.falhas.push(`http ${resp.status} ${img.naturalWidth}px`); continue; }
-        const bitmap = await createImageBitmap(await resp.blob());
-        const escala = 700 / bitmap.width;
-        const c = document.createElement('canvas');
-        c.width = 700;
-        c.height = Math.round(bitmap.height * escala);
-        c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
-        img.removeAttribute('srcset');
-        img.removeAttribute('sizes');
-        const durl = c.toDataURL('image/jpeg', 0.72);
-        // Espera o novo src decodificar antes do page.pdf (senao embute o original).
-        pendentes.push(new Promise((res) => { img.onload = img.onerror = res; img.src = durl; }));
-        info.reduzidas++;
-      } catch (e) { info.falhas.push(String(e).slice(0, 60)); }
-    }
-    // Imagens de fundo via CSS (background-image) tambem incham o PDF.
-    for (const el of document.querySelectorAll('*')) {
-      const bg = getComputedStyle(el).backgroundImage;
-      if (bg && bg.startsWith('url(') && !bg.includes('data:')) info.fundos++;
-    }
-    await Promise.all(pendentes);
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    return info;
-  });
-  log(`  imagens: ${diag.total} total, ${diag.grandes} grandes, ${diag.reduzidas} reduzidas, ${diag.fundos} fundos-css, falhas=${JSON.stringify(diag.falhas).slice(0, 200)}`);
-  await sleep(300);
-
   /* PDF gerado AQUI, na propria pagina ja logada e renderizada. O container do
-     Railway tem memoria de sobra e a pagina ja esta pronta. */
-  const pdf = await pagina.pdf({
+     Railway tem memoria de sobra e a pagina ja esta pronta. As imagens do Bling
+     saem em resolucao cheia; a recompressao acontece logo abaixo (Ghostscript),
+     nao no navegador — o CDN bloqueia fetch cross-origin. */
+  const bruto = await pagina.pdf({
     format: 'A4',
     printBackground: true,
     margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
   });
+
+  const pdf = await comprimirPdf(bruto);
+  log(`  PDF ${(bruto.length / 1024 / 1024).toFixed(1)}MB → ${(pdf.length / 1024 / 1024).toFixed(1)}MB`);
 
   return { numero, pdf };
 
@@ -312,7 +322,6 @@ async function ronda() {
         const { numero, pdf } = await capturarProposta(p.idOrcamento);
         const num = p.numero || numero;
         if (!num) throw new Error('não achei o nº da proposta');
-        log(`  PDF gerado: ${(pdf.length / 1024).toFixed(0)}KB (nº ${num})`);
 
         /* Envio em 3 passos: o PDF e grande demais para o corpo da requisicao da
            Vercel (413). Pedimos uma URL assinada, subimos os bytes direto no
