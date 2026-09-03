@@ -263,8 +263,14 @@ export async function criarSlotPdf(req, res) {
 
     const base = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    // Garante o bucket (idempotente).
-    await supabaseAdmin.storage.createBucket(BUCKET, { public: false }).catch(() => {});
+    // Garante o bucket e um limite de tamanho generoso (o padrao rejeitava PDFs
+    // grandes com 413). 50MB cobre qualquer proposta.
+    await supabaseAdmin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: '50MB' }).catch(() => {});
+    await fetch(`${base}/storage/v1/bucket/${BUCKET}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${service}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: BUCKET, name: BUCKET, public: false, file_size_limit: 52428800 }),
+    }).catch(() => {});
 
     /* URL assinada de upload via REST — nao depende da versao do SDK ter
        createSignedUploadUrl (a da Vercel nao tinha, e a funcao crashava). */

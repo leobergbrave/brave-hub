@@ -243,12 +243,20 @@ async function capturarProposta(idOrcamento) {
     for (const img of [...document.images]) {
       try {
         if (!img.naturalWidth || img.naturalWidth <= 700) continue;
-        const escala = 700 / img.naturalWidth;
+        /* Buscar os bytes por fetch e desenhar a partir de um BLOB — imagem
+           cross-origin desenhada direto do <img> tainta o canvas e o toDataURL
+           lanca. Do blob (mesma origem) nao tainta, e a sessao do Bling
+           autoriza o fetch. */
+        const resp = await fetch(img.currentSrc || img.src, { credentials: 'include' });
+        if (!resp.ok) continue;
+        const bitmap = await createImageBitmap(await resp.blob());
+        const escala = 700 / bitmap.width;
         const c = document.createElement('canvas');
         c.width = 700;
-        c.height = Math.round(img.naturalHeight * escala);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        img.src = c.toDataURL('image/jpeg', 0.72); // pode lancar se a imagem for cross-origin: ignora
+        c.height = Math.round(bitmap.height * escala);
+        c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
+        img.src = c.toDataURL('image/jpeg', 0.72);
+        img.removeAttribute('srcset');
       } catch (_) { /* mantem a original */ }
     }
   });
