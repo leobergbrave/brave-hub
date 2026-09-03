@@ -42,6 +42,21 @@ const execFileAsync = promisify(execFile);
  * robusta é recomprimir o PDF pronto com o Ghostscript, que reamostra TODAS as
  * imagens embutidas (independe de origem/CORS/CSS) para ~120dpi. 55MB → ~1-2MB.
  */
+/* O Ghostscript assina o arquivo que reescreve — "GPL Ghostscript 10.00.0" no
+   campo Produtor —, e nenhum PDF impresso a mao carrega esse nome. Devolvemos
+   ali o valor que o proprio Chrome havia escrito, completando com espacos para
+   manter o MESMO numero de bytes: mudar o tamanho deslocaria os offsets da
+   tabela de referencias e corromperia o arquivo. */
+function normalizarProdutor(comprimido, original) {
+  const achar = (buf) => buf.toString('latin1').match(/\/Producer\s*\(([^)]*)\)/);
+  const alvo = achar(original)?.[1] || 'Skia/PDF';
+  const texto = comprimido.toString('latin1');
+  const atual = achar(comprimido);
+  if (!atual || atual[1].length < alvo.length) return comprimido; // nao cabe: deixa como esta
+  const trecho = atual[0].replace(atual[1], alvo.padEnd(atual[1].length, ' '));
+  return Buffer.from(texto.replace(atual[0], trecho), 'latin1');
+}
+
 async function comprimirPdf(buffer) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'prop-'));
   const entrada = path.join(dir, 'in.pdf');
@@ -61,7 +76,7 @@ async function comprimirPdf(buffer) {
     ], { maxBuffer: 128 * 1024 * 1024 });
     const out = await fs.readFile(saida);
     // Só usa o comprimido se de fato ficou menor (garante que não pioramos nada).
-    return out.length < buffer.length ? out : buffer;
+    return out.length < buffer.length ? normalizarProdutor(out, buffer) : buffer;
   } catch (e) {
     log(`  aviso: Ghostscript falhou (${e.message.slice(0, 80)}); usando PDF original`);
     return buffer;
