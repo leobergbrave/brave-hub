@@ -235,10 +235,27 @@ async function capturarProposta(idOrcamento) {
     return null;
   });
 
-  /* PDF gerado AQUI, na propria pagina ja logada e renderizada. Antes mandavamos
-     o HTML (com imagens inline) para a Vercel reconverter — e o HTML grande
-     estourava a memoria do Chromium serverless ("IO.read: Read failed"). O
-     container do Railway tem memoria de sobra e a pagina ja esta pronta. */
+  /* Reduz as imagens antes de gerar o PDF. Em resolucao cheia elas incham o PDF
+     a dezenas de MB — o que estourou a memoria do Chromium, o corpo da Vercel e
+     o limite do Storage. Num orcamento a foto do produto e miniatura, entao
+     700px de largura e qualidade 0.72 bastam e derrubam o tamanho para <2MB. */
+  await pagina.evaluate(async () => {
+    for (const img of [...document.images]) {
+      try {
+        if (!img.naturalWidth || img.naturalWidth <= 700) continue;
+        const escala = 700 / img.naturalWidth;
+        const c = document.createElement('canvas');
+        c.width = 700;
+        c.height = Math.round(img.naturalHeight * escala);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        img.src = c.toDataURL('image/jpeg', 0.72); // pode lancar se a imagem for cross-origin: ignora
+      } catch (_) { /* mantem a original */ }
+    }
+  });
+  await sleep(300);
+
+  /* PDF gerado AQUI, na propria pagina ja logada e renderizada. O container do
+     Railway tem memoria de sobra e a pagina ja esta pronta. */
   const pdf = await pagina.pdf({
     format: 'A4',
     printBackground: true,
