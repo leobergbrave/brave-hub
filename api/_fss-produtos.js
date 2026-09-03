@@ -113,6 +113,26 @@ function mensagemTurf(cheio, lanes, base) {
   return l.join('\n');
 }
 
+/* Sandbag: estacao 7 do HYROX (100m de lunges). O catalogo nao traz specs
+   para esses itens, entao os argumentos vivem aqui — mesma linha editorial
+   dos demais. Tres pesos numa mensagem so, como turf e grama. */
+function mensagemSandbag(s10, s20, s30) {
+  const l = [
+    '🎒 *Sandbag Hybrid Pro Series*',
+    'A estação 7 do HYROX: 100 metros de lunges com a carga nas costas.',
+    '',
+    '✅ Estação oficial de prova do HYROX',
+    '✅ Alças reforçadas para lunges, carries e cleans',
+    '✅ Material resistente à abrasão e ao uso diário',
+    '✅ Enchimento uniforme — carga estável durante o movimento',
+    '✅ Pronta entrega',
+  ];
+  const linha = (p, peso) => { if (p) l.push(`⚖️ *${peso}* — ${linhaPreco(p.preco_avista, p.preco)}`); };
+  if (s10 || s20 || s30) l.push('');
+  linha(s10, '10kg'); linha(s20, '20kg'); linha(s30, '30kg');
+  return l.join('\n');
+}
+
 function mensagemGrama(g10, g16) {
   const l = [
     '🌱 *Grama Sintética Premium Preta — 2 Raias*',
@@ -129,6 +149,12 @@ function mensagemGrama(g10, g16) {
 }
 
 const ERGO_ALIASES = ['esteira', 'escada', 'remo', 'skierg', 'bikeerg', 'storm'];
+
+/* Primeira foto utilizavel entre os produtos de uma familia. So serve link que
+   o WhatsApp/BotConversa consegue baixar — o Google Drive bloqueia. */
+const primeiraFoto = (...produtos) => produtos
+  .flatMap((p) => p?.fotos || [])
+  .find((u) => u && !/drive\.google\.com/.test(u)) || '';
 
 async function montarItens() {
   const catalogo = await loadCatalog();
@@ -169,6 +195,20 @@ async function montarItens() {
         video: por.gramp10?.video || por.gramp16?.video || '',
       });
   }
+  if (por.hy10p || por.hy20p || por.hy30p) {
+      itens.push({
+        id: 'sandbag', titulo: '🎒 Sandbag Hybrid Pro Series',
+        texto: mensagemSandbag(por.hy10p, por.hy20p, por.hy30p),
+        video: por.hy20p?.video || por.hy10p?.video || por.hy30p?.video || '',
+        foto: primeiraFoto(por.hy20p, por.hy10p, por.hy30p),
+      });
+  }
+
+  /* Anexo do envio: o video quando existe, senao a foto do produto. Produto
+     sem video (as sandbags, por ora) ia so com texto — e a imagem faz o
+     cliente ver o que esta comprando. `video` continua separado porque o
+     painel instalado baixa esse campo assumindo .mp4. */
+  for (const item of itens) item.midia = item.video || item.foto || '';
 
   return itens;
 }
@@ -221,21 +261,22 @@ export async function enviarProdutoCliente(req, res) {
 
     const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
 
-    // Video primeiro, texto por ultimo — o texto (com precos) fica visivel na conversa.
-    if (item.video) {
-      const rv = await enviar({ type: 'file', value: item.video });
+    /* Midia primeiro, texto por ultimo — o texto (com precos) fica visivel na
+       conversa. Midia e o video; nao havendo, a foto do produto. */
+    if (item.midia) {
+      const rv = await enviar({ type: 'file', value: item.midia });
       if (!rv.ok) {
-        return res.status(502).json({ ok: false, error: `BotConversa recusou o vídeo (HTTP ${rv.status}): ${rv.texto.slice(0, 250)}` });
+        return res.status(502).json({ ok: false, error: `BotConversa recusou a mídia (HTTP ${rv.status}): ${rv.texto.slice(0, 250)}` });
       }
       await new Promise((r) => setTimeout(r, 700));
-  }
+    }
     const rt = await enviar({ type: 'text', value: item.texto });
     if (!rt.ok) {
-      return res.status(502).json({ ok: false, error: `Vídeo foi, mas o texto falhou (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` });
-  }
+      return res.status(502).json({ ok: false, error: `A mídia foi, mas o texto falhou (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` });
+    }
 
-    console.log('[fss-produtos] envio BotConversa:', { id, tel, video: !!item.video });
-    return res.status(200).json({ ok: true, id, video: !!item.video });
+    console.log('[fss-produtos] envio BotConversa:', { id, tel, midia: !!item.midia });
+    return res.status(200).json({ ok: true, id, midia: !!item.midia });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
