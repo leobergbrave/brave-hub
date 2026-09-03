@@ -114,9 +114,14 @@ export default function CadastroClientePage() {
     } catch (_) {} finally { setBuscandoCep(false); }
   }
 
+  /* Cadastro incompleto travava o orcamento la na frente (cliente so com o
+     primeiro nome, sem endereco para o frete). Tudo que o orcamento precisa e
+     obrigatorio AQUI, onde o cliente ainda esta com o formulario aberto. */
   function validar() {
     const e = {};
+    const partesNome = form.nomeCompleto.trim().split(/\s+/);
     if (!form.nomeCompleto.trim()) e.nomeCompleto = 'Obrigatório';
+    else if (partesNome.length < 2 || partesNome[1].length < 2) e.nomeCompleto = 'Digite o nome completo (nome e sobrenome)';
     if (!form.cpfCnpj.trim()) {
       e.cpfCnpj = 'Obrigatório';
     } else if (form.tipoPessoa === 'F' && !validateCpf(form.cpfCnpj)) {
@@ -125,14 +130,25 @@ export default function CadastroClientePage() {
       e.cpfCnpj = 'CNPJ inválido';
     }
     if (!form.email.trim() || !form.email.includes('@')) e.email = 'E-mail inválido';
-    if (!form.telefone.trim()) e.telefone = 'Obrigatório';
+    const telDig = form.telefone.replace(/\D/g, '');
+    if (telDig.length < 10 || telDig.length > 11) e.telefone = 'Telefone com DDD (10 ou 11 dígitos)';
+    if (form.cep.replace(/\D/g, '').length !== 8) e.cep = 'CEP obrigatório — usamos para calcular o frete';
+    if (!form.logradouro.trim()) e.logradouro = 'Obrigatório';
+    if (!form.numero.trim()) e.numero = 'Obrigatório';
+    if (!form.bairro.trim()) e.bairro = 'Obrigatório';
+    if (!form.cidade.trim()) e.cidade = 'Obrigatório';
+    if (form.estado.trim().length !== 2) e.estado = 'UF';
     setErros(e);
     return Object.keys(e).length === 0;
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!validar()) return;
+    if (!validar()) {
+      // No celular o erro pode estar fora da tela: leva o cliente ate ele.
+      setTimeout(() => document.querySelector('.border-red-400')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+      return;
+    }
     setSubmitting(true);
     setErro('');
     try {
@@ -316,15 +332,16 @@ export default function CadastroClientePage() {
         {/* Endereço */}
         <div className={`${cardCls} space-y-4`}>
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-            <MapPin className="w-3.5 h-3.5 text-gray-400" /> Endereço <span className="text-gray-400 font-normal normal-case">(opcional)</span>
+            <MapPin className="w-3.5 h-3.5 text-gray-400" /> Endereço de entrega
           </p>
 
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className={labelCls}>CEP</label>
-              <input className={inputCls} value={form.cep}
+              <label className={labelCls}>CEP <span className="text-red-500">*</span></label>
+              <input className={`${inputCls} ${erros.cep ? 'border-red-400' : ''}`} value={form.cep}
                 onChange={e => { const v = formatCep(e.target.value); set('cep', v); if (v.replace(/\D/g, '').length === 8) buscarCep(v); }}
                 placeholder="00000-000" />
+              {erros.cep && <p className="text-red-500 text-xs mt-1">{erros.cep}</p>}
             </div>
             <div className="flex items-end pb-3">
               {buscandoCep
@@ -333,44 +350,45 @@ export default function CadastroClientePage() {
             </div>
           </div>
 
-          {(form.logradouro || form.cep) && (
-            <>
-              <div>
-                <label className={labelCls}>Logradouro</label>
-                <input className={inputCls} value={form.logradouro}
-                  onChange={e => set('logradouro', e.target.value)} placeholder="Rua, Avenida..." />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Número</label>
-                  <input className={inputCls} value={form.numero}
-                    onChange={e => set('numero', e.target.value)} placeholder="123" />
-                </div>
-                <div>
-                  <label className={labelCls}>Complemento</label>
-                  <input className={inputCls} value={form.complemento}
-                    onChange={e => set('complemento', e.target.value)} placeholder="Apto, sala..." />
-                </div>
-              </div>
-              <div>
-                <label className={labelCls}>Bairro</label>
-                <input className={inputCls} value={form.bairro}
-                  onChange={e => set('bairro', e.target.value)} placeholder="Bairro" />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <label className={labelCls}>Cidade</label>
-                  <input className={inputCls} value={form.cidade}
-                    onChange={e => set('cidade', e.target.value)} placeholder="Cidade" />
-                </div>
-                <div>
-                  <label className={labelCls}>Estado</label>
-                  <input maxLength={2} className={inputCls} value={form.estado}
-                    onChange={e => set('estado', e.target.value.toUpperCase())} placeholder="SP" />
-                </div>
-              </div>
-            </>
-          )}
+          <div>
+            <label className={labelCls}>Logradouro <span className="text-red-500">*</span></label>
+            <input className={`${inputCls} ${erros.logradouro ? 'border-red-400' : ''}`} value={form.logradouro}
+              onChange={e => set('logradouro', e.target.value)} placeholder="Rua, Avenida..." />
+            {erros.logradouro && <p className="text-red-500 text-xs mt-1">{erros.logradouro}</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Número <span className="text-red-500">*</span></label>
+              <input className={`${inputCls} ${erros.numero ? 'border-red-400' : ''}`} value={form.numero}
+                onChange={e => set('numero', e.target.value)} placeholder="123" />
+              {erros.numero && <p className="text-red-500 text-xs mt-1">{erros.numero}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>Complemento</label>
+              <input className={inputCls} value={form.complemento}
+                onChange={e => set('complemento', e.target.value)} placeholder="Apto, sala..." />
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Bairro <span className="text-red-500">*</span></label>
+            <input className={`${inputCls} ${erros.bairro ? 'border-red-400' : ''}`} value={form.bairro}
+              onChange={e => set('bairro', e.target.value)} placeholder="Bairro" />
+            {erros.bairro && <p className="text-red-500 text-xs mt-1">{erros.bairro}</p>}
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2">
+              <label className={labelCls}>Cidade <span className="text-red-500">*</span></label>
+              <input className={`${inputCls} ${erros.cidade ? 'border-red-400' : ''}`} value={form.cidade}
+                onChange={e => set('cidade', e.target.value)} placeholder="Cidade" />
+              {erros.cidade && <p className="text-red-500 text-xs mt-1">{erros.cidade}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>Estado <span className="text-red-500">*</span></label>
+              <input maxLength={2} className={`${inputCls} ${erros.estado ? 'border-red-400' : ''}`} value={form.estado}
+                onChange={e => set('estado', e.target.value.toUpperCase())} placeholder="SP" />
+              {erros.estado && <p className="text-red-500 text-xs mt-1">{erros.estado}</p>}
+            </div>
+          </div>
         </div>
 
         {/* Erro geral */}
