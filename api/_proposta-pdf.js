@@ -271,6 +271,7 @@ export async function criarSlotPdf(req, res) {
     const signRes = await fetch(`${base}/storage/v1/object/upload/sign/${BUCKET}/${r.path}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${service}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}), // o endpoint recusa corpo vazio quando o content-type e json
     });
     const signBody = await signRes.text();
     if (!signRes.ok) return res.status(200).json({ ok: false, error: `Falha ao criar slot (HTTP ${signRes.status}): ${signBody.slice(0, 160)}` });
