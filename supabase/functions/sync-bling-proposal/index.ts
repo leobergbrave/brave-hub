@@ -347,8 +347,11 @@ Deno.serve(async (req) => {
       propostaBase.vendedor = { id: idVendedor };
     }
 
-    const propostaAvista = { ...propostaBase, itens: itensAvista, observacaoInterna: 'Proposta gerada automaticamente: Valores À VISTA' };
-    const propostaPrazo = { ...propostaBase, itens: itensPrazo, observacaoInterna: `Proposta gerada automaticamente: Valores A PRAZO (${payload.condicoes?.parcelas || '12'}x)` };
+    /* O rotulo distingue as duas propostas do mesmo cliente na tela do Bling.
+       Nada aqui pode sugerir criacao automatica: o campo acompanha o documento
+       e o cliente nunca deve ler que a proposta dele saiu de um robo. */
+    const propostaAvista = { ...propostaBase, itens: itensAvista, observacaoInterna: 'Valores À VISTA' };
+    const propostaPrazo = { ...propostaBase, itens: itensPrazo, observacaoInterna: `Valores A PRAZO (${payload.condicoes?.parcelas || '12'}x)` };
 
     // Envia Proposta À Vista
     const blingResAvista = await fetchWithBlingAuth('https://api.bling.com.br/v3/propostas-comerciais', {

@@ -193,6 +193,11 @@ async function backfillNumero(numeroProcurado) {
   return null;
 }
 
+/* Identidade de um Chrome comum de Windows. O Chrome grava o proprio
+   User-Agent no campo "Criador" do PDF: sem isso o arquivo entregue ao cliente
+   se anuncia como "HeadlessChrome", denunciando geracao automatica. */
+const UA_CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+
 async function htmlParaPdf(html) {
   // Na Vercel usa o Chromium serverless; em dev local (Windows) usa o Chrome instalado.
   const local = process.platform === 'win32' || process.platform === 'darwin';
@@ -201,8 +206,13 @@ async function htmlParaPdf(html) {
       ? {
           executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
           headless: true,
+          args: [`--user-agent=${UA_CHROME}`],
         }
-      : { args: chromium.args, executablePath: await chromium.executablePath(), headless: true }
+      : {
+          args: [...chromium.args, `--user-agent=${UA_CHROME}`],
+          executablePath: await chromium.executablePath(),
+          headless: true,
+        }
   );
   try {
     const page = await browser.newPage();

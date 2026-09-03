@@ -70,6 +70,10 @@ async function comprimirPdf(buffer) {
   }
 }
 
+/* Um Chrome comum de Windows: usado no navegador (metadados do PDF) e na
+   pagina (o Bling serve tela vazia para quem se anuncia como automacao). */
+const UA_CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
+
 const HUB = process.env.HUB_URL || 'https://brave-hub-two.vercel.app';
 const TOKEN = process.env.HUB_PDF_TOKEN;
 const BLING_USUARIO = process.env.BLING_USUARIO;
@@ -101,6 +105,12 @@ async function abrirNavegador() {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--window-size=1400,1000',
+      /* Identidade do NAVEGADOR (nao so da pagina): o PDF gravado pelo Chrome
+         carrega essa string no campo "Criador", e sem ela o arquivo que chega
+         ao cliente dizia "HeadlessChrome ... X11; Linux" — assinatura de
+         geracao automatica em servidor. Com a flag, os metadados ficam
+         iguais aos de uma impressao feita a mao no Chrome. */
+      `--user-agent=${UA_CHROME}`,
     ],
   });
   pagina = await navegador.newPage();
@@ -109,7 +119,7 @@ async function abrirNavegador() {
      "HeadlessChrome". Sites que servem tela vazia para automacao olham
      exatamente isso — e a tela de login veio sem nenhum campo na primeira
      tentativa. Aqui apresentamos um Chrome comum. */
-  await pagina.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36');
+  await pagina.setUserAgent(UA_CHROME);
   await pagina.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' });
   await pagina.evaluateOnNewDocument(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });

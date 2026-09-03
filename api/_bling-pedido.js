@@ -268,7 +268,9 @@ export default async function handler(req, res) {
     vendedor: { id: idVendedor },
     itens,
     transporte: { fretePorConta: 0, frete: frete > 0 ? frete : 0 },
-    observacaoInterna: `Gerado via Brave Hub · Orçamento: ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
+    // Referencia interna para achar o orcamento a partir da proposta. Sem citar
+    // ferramenta nem automacao — o campo viaja junto do documento do cliente.
+    observacaoInterna: `Orçamento ${orcamentoSlug} · ${new Date().toLocaleString('pt-BR')}`,
   };
 
   await sleep(300);
