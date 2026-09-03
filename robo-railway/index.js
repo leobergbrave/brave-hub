@@ -296,6 +296,7 @@ async function ronda() {
         const { numero, pdf } = await capturarProposta(p.idOrcamento);
         const num = p.numero || numero;
         if (!num) throw new Error('não achei o nº da proposta');
+        log(`  PDF gerado: ${(pdf.length / 1024).toFixed(0)}KB (nº ${num})`);
 
         /* Envio em 3 passos: o PDF e grande demais para o corpo da requisicao da
            Vercel (413). Pedimos uma URL assinada, subimos os bytes direto no
