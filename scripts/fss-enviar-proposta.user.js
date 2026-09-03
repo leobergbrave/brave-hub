@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.5
+// @version      3.6
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.5'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.6'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -127,18 +127,71 @@
     return [...achados].slice(0, 8);
   }
 
+  /* Posicao: no WhatsApp o canto inferior direito e a seta de ENVIAR — o painel
+     ali cobre o botao mais usado da tela. Por isso ele flutua ACIMA do campo de
+     escrita; no FSS o canto de baixo continua livre. Em ambos da para recolher
+     numa bolinha (a escolha fica salva no navegador). */
+  const CHAVE_MIN = 'brave_hub_painel_minimizado';
+  const estaMinimizado = () => localStorage.getItem(CHAVE_MIN) === '1';
+
+  function bolinha() {
+    let b = document.getElementById(ID + '-bolha');
+    if (b) return b;
+    b = document.createElement('button');
+    b.id = ID + '-bolha';
+    b.type = 'button';
+    b.textContent = '🦁';
+    b.title = 'Abrir painel BRAVE';
+    b.style.cssText = [
+      'position:fixed', WA ? 'bottom:104px' : 'bottom:20px', 'right:16px',
+      'z-index:2147483647', 'width:40px', 'height:40px', 'border-radius:50%',
+      'border:none', 'background:#0f172a', 'color:#fff', 'font-size:18px',
+      'cursor:pointer', 'box-shadow:0 4px 14px rgba(0,0,0,.35)', 'display:none',
+    ].join(';');
+    b.onclick = () => { localStorage.setItem(CHAVE_MIN, '0'); aplicarMinimizado(); };
+    document.body.appendChild(b);
+    return b;
+  }
+
+  function aplicarMinimizado() {
+    const wrap = document.getElementById(ID + '-wrap');
+    const min = estaMinimizado();
+    if (wrap) wrap.style.display = min ? 'none' : 'flex';
+    bolinha().style.display = min ? 'block' : 'none';
+  }
+
   function painel() {
     let el = document.getElementById(ID);
     if (el) return el;
+
+    const wrap = document.createElement('div');
+    wrap.id = ID + '-wrap';
+    wrap.style.cssText = [
+      'position:fixed', WA ? 'bottom:104px' : 'bottom:20px', 'right:16px',
+      'z-index:2147483647', 'background:#0f172a', 'color:#fff', 'border-radius:12px',
+      'padding:10px 12px 12px', 'font:600 13px/1.35 system-ui,sans-serif',
+      'box-shadow:0 6px 24px rgba(0,0,0,.35)', 'max-width:330px',
+      'display:flex', 'flex-direction:column', 'gap:8px',
+    ].join(';');
+
+    const barra = document.createElement('div');
+    barra.style.cssText = 'display:flex;justify-content:flex-end;margin:-2px -2px 0 0';
+    const min = document.createElement('button');
+    min.type = 'button';
+    min.textContent = '—';
+    min.title = 'Recolher painel';
+    min.style.cssText = 'background:transparent;border:none;color:#64748b;font:700 15px/1 system-ui;cursor:pointer;padding:0 4px';
+    min.onclick = () => { localStorage.setItem(CHAVE_MIN, '1'); aplicarMinimizado(); };
+    barra.appendChild(min);
+
     el = document.createElement('div');
     el.id = ID;
-    el.style.cssText = [
-      'position:fixed', 'bottom:20px', 'right:20px', 'z-index:2147483647',
-      'background:#0f172a', 'color:#fff', 'border-radius:12px', 'padding:12px 14px',
-      'font:600 13px/1.35 system-ui,sans-serif', 'box-shadow:0 6px 24px rgba(0,0,0,.35)',
-      'max-width:330px', 'display:flex', 'flex-direction:column', 'gap:8px',
-    ].join(';');
-    document.body.appendChild(el);
+    el.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+
+    wrap.append(barra, el);
+    document.body.appendChild(wrap);
+    bolinha();
+    aplicarMinimizado();
     return el;
   }
 

@@ -304,6 +304,508 @@ export async function finalizarPdf(req, res) {
   }
 }
 
+export async function uploadPdf(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+
+  const tokenEsperado = process.env.HUB_PDF_TOKEN;
+  if (!tokenEsperado) {
+    return res.status(500).json({ ok: false, error: 'HUB_PDF_TOKEN não configurado na Vercel.' });
+  }
+  if (req.headers['x-hub-token'] !== tokenEsperado) {
+    return res.status(401).json({ ok: false, error: 'Token inválido.' });
+  }
+
+  const { numero, html, pdfBase64 } = req.body || {};
+  const num = parseInt(numero, 10);
+  if (!num) return res.status(400).json({ ok: false, error: 'numero obrigatório.' });
+  // Dois modos: o robo do Railway ja tem a pagina renderizada, entao manda o PDF
+  // pronto (pdfBase64) — evita reconverter HTML gigante na Vercel, que estourava
+  // a memoria do Chromium ("IO.read: Read failed"). O userscript ainda manda html.
+  const temPdf = typeof pdfBase64 === 'string' && pdfBase64.length > 500;
+  const temHtml = typeof html === 'string' && html.length >= 200;
+  if (!temPdf && !temHtml) {
+    return res.status(400).json({ ok: false, error: 'numero e (html ou pdfBase64) são obrigatórios.' });
+  }
+
+  /* Trava contra proposta pela metade: a tela do Bling nasce com "Carregando..."
+     e um cliente já recebeu um PDF com essa única palavra. O servidor confere
+     antes de gravar — PDF errado enviado ao cliente não tem desfazer.
+     Validamos pela PRESENÇA do que a proposta pronta tem, nunca pela ausência
+     de "Carregando": o Bling deixa essa div escondida no documento mesmo depois
+     de carregar, e checar por ela recusava proposta boa. */
+  const semTags = temHtml ? html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ') : '';
+  const marcadores = !temHtml ? 1 : [
+    /total\s+da\s+proposta/i,
+    /n[ºo°]?\s*de\s+itens/i,
+    /itens\s+da\s+proposta/i,
+  ].filter((re) => re.test(semTags)).length;
+  if (marcadores === 0) {
+    return res.status(200).json({
+      ok: false,
+      error: 'A página ainda não tinha carregado a proposta (documento incompleto). Recarregue a tela de impressão no Bling e tente de novo.',
+    });
+  }
+
+  // 1. Achar o orçamento dono desta proposta (à vista, a prazo ou única)
+  let { data: orc } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .or(TIPOS.map(t => `${t.numCol}.eq.${num}`).join(','))
+    .order('criado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!orc) orc = await backfillNumero(num);
+  if (!orc) {
+    return res.status(200).json({
+      ok: false,
+      error: `Nenhum orçamento do HUB vinculado à proposta nº ${num}. Gere o orçamento pelo HUB primeiro (propostas criadas à mão no Bling não têm vínculo).`,
+    });
+  }
+  const tipoInfo = TIPOS.find(t => Number(orc[t.numCol]) === num) || TIPOS[2];
+
+  // 2. PDF: o robo manda pronto (pdfBase64); o userscript manda html para converter.
+  let pdf;
+  try {
+    if (temPdf) {
+      pdf = Buffer.from(pdfBase64, 'base64');
+      if (pdf.length < 500 || pdf.slice(0, 5).toString() !== '%PDF-') {
+        return res.status(400).json({ ok: false, error: 'pdfBase64 não é um PDF válido.' });
+      }
+    } else {
+      pdf = await htmlParaPdf(html);
+    }
+  } catch (e) {
+    console.error('[proposta-pdf] erro no PDF:', e);
+    return res.status(500).json({ ok: false, error: `Falha no PDF: ${e.message}` });
+  }
+
+  // 3. Guardar no Storage (bucket privado; download só pelo HUB)
+  const path = tipoInfo.tipo === 'unica' ? `${orc.slug}.pdf` : `${orc.slug}-${tipoInfo.tipo}.pdf`;
+  let up = await supabaseAdmin.storage.from(BUCKET).upload(path, pdf, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+  if (up.error && /bucket.*not.*found/i.test(up.error.message || '')) {
+    await supabaseAdmin.storage.createBucket(BUCKET, { public: false });
+    up = await supabaseAdmin.storage.from(BUCKET).upload(path, pdf, {
+      contentType: 'application/pdf',
+      upsert: true,
+    });
+  }
+  if (up.error) {
+    console.error('[proposta-pdf] erro no storage:', up.error);
+    return res.status(500).json({ ok: false, error: `Falha ao salvar PDF: ${up.error.message}` });
+  }
+
+  await supabaseAdmin.from('orcamentos_salvos').update({
+    [tipoInfo.pdfCol]: path,
+    proposta_pdf_em: new Date().toISOString(),
+  }).eq('id', orc.id);
+
+  const rotulo = { avista: 'à vista', prazo: 'a prazo', unica: '' }[tipoInfo.tipo];
+  console.log('[proposta-pdf] salvo:', { numero: num, tipo: tipoInfo.tipo, slug: orc.slug, bytes: pdf.length });
+
+  // Envio automático (lead FSS): dispara sozinho quando o ÚLTIMO PDF esperado
+  // fica pronto — assim o cliente recebe as duas condições de uma vez, e não
+  // uma proposta solta. Só vale para FSS; nos outros canais o Léo usa o botão.
+  orc[tipoInfo.pdfCol] = path;
+  let envioAuto;
+  /* Reenviar quando o orçamento é editado: as propostas passam a ser mais
+     novas que o último envio, e o cliente precisa receber os valores atuais.
+     Sem isso, editar não reenviava nada. Reimprimir a MESMA proposta continua
+     não reenviando — o que muda é a data das propostas, não a da captura. */
+  const enviadoEm = orc.proposta_pdf_enviado_em;
+  const propostasMaisNovas = !!(orc.propostas_em && enviadoEm
+    && new Date(orc.propostas_em) > new Date(enviadoEm));
+  if (ORIGENS_AUTOMATICAS.includes(String(orc.origem_lead || '').toUpperCase())
+      && (!enviadoEm || propostasMaisNovas)) {
+    const esperados = TIPOS.filter(t => orc[t.idCol]);
+    const prontos = esperados.filter(t => orc[t.pdfCol]);
+    if (esperados.length > 0 && prontos.length === esperados.length) {
+      envioAuto = await despacharPdfs(orc, true);
+      console.log('[proposta-pdf] envio automático FSS:', envioAuto);
+    }
+  }
+
+  return res.status(200).json({
+    ok: true, slug: orc.slug, cliente: orc.cliente, tipo: tipoInfo.tipo, rotulo, bytes: pdf.length,
+    envioAuto: envioAuto ? (envioAuto.ok ? 'enviado' : `falhou: ${envioAuto.error}`) : undefined,
+  });
+}
+
+/* enviarPdfCliente — POST /api/bling?acao=enviar_pdf_cliente  body: { slug }
+ *
+ * Manda os PDFs oficiais direto no WhatsApp do cliente pela API do BotConversa
+ * (POST /subscriber/{id}/send_message com type:"file" aceita URL dinâmica).
+ * As URLs são assinadas e temporárias — o bucket continua privado, e o cliente
+ * recebe o ARQUIVO no WhatsApp, nunca um link (exigência da diretoria).
+ *
+ * Limite da Meta: fora da janela de 24h desde a última mensagem do cliente, só
+ * template aprovado passa. O erro do BotConversa é repassado ao HUB nesse caso.
+ */
+const BC_BASE = 'https://backend.botconversa.com.br/api/v1/webhook';
+
+export async function bcFetch(path, method, body, apiKey) {
+  const r = await fetch(`${BC_BASE}${path}`, {
+    method,
+    headers: { 'API-KEY': apiKey, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const texto = await r.text();
+  let json = null;
+  try { json = JSON.parse(texto); } catch (_) {}
+  return { ok: r.ok, status: r.status, json, texto };
+}
+
+/* Faz o envio de fato. Usado pelo botão do HUB e pelo disparo automático que
+   roda quando o último PDF de um orçamento FSS fica pronto. */
+async function despacharPdfs(orc, automatico = false) {
+  const apiKey = process.env.BOTCONVERSA_API_KEY;
+  if (!apiKey) {
+    return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel. Pegue em Configurações da companhia → Integrações → chave "Webhook Integration".' };
+  }
+
+  const disponiveis = TIPOS.filter(t => orc[t.pdfCol]);
+  if (disponiveis.length === 0) {
+    return { ok: false, error: 'Nenhum PDF capturado ainda. Imprima a proposta no Bling primeiro.' };
+  }
+
+  let tel = String(orc.payload?.telefoneCliente || '').replace(/\D/g, '');
+  if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
+  if (tel.length < 12) {
+    return { ok: false, error: 'Orçamento sem telefone válido do cliente.' };
+  }
+
+  /* O WhatsApp usa a URL como nome do arquivo. A URL assinada do Supabase traz
+     "?token=eyJ..." grudado no fim, então o cliente recebia
+     "…-avista.pdf?token=eyJraWQi…" — nome ilegível E arquivo que não abre,
+     porque a extensão deixa de ser .pdf. Por isso servimos por uma rota nossa
+     que TERMINA no nome do arquivo (ver a rota /pdf/ no vercel.json). */
+  /* O caminho leva um carimbo de versão (/v<epoch>/) porque WhatsApp e
+     BotConversa cacheiam mídia POR URL: ao reenviar uma proposta recapturada
+     na mesma URL, o cliente recebia de volta o arquivo antigo do cache, sem o
+     servidor ser consultado. Endereço novo a cada envio elimina isso. */
+  const arquivos = disponiveis.map((t) => linkPdf(orc, t));
+
+  /* Contato no BotConversa.
+     Um contato inexistente e o sintoma tipico de telefone digitado errado: nos
+     canais automaticos (FSS, WhatsApp, Venda Direta) o cliente JA conversou com
+     o consultor, entao ele existe. Criar um contato novo nesse caso mandava a
+     proposta para um numero que nao atende — aconteceu com um digito trocado, e
+     o sistema reportou sucesso porque o envio foi aceito.
+     No envio automatico paramos e avisamos; no envio manual (o consultor
+     conferiu o numero) seguimos criando. */
+  let subscriberId = null;
+  const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
+  if (busca.ok) subscriberId = busca.json?.id ?? null;
+
+  /* Contato inexistente em canal de WhatsApp BLOQUEAVA o envio automatico
+     (protecao contra digito trocado, apos incidente real). Em 2026-09-02 o Leo
+     pediu para retirar a trava: agora criamos o contato e enviamos sempre, e o
+     alerta vira AVISO — "contato criado agora, confira o numero" — para o
+     digito errado continuar visivel sem segurar a proposta. */
+  if (!subscriberId && automatico) {
+    alertarConsultor(orc, tel,
+      `ℹ️ A proposta de ${orc.cliente || 'cliente'} FOI enviada para ${tel}, mas esse número não existia no WhatsApp da BRAVE — o contato foi criado agora. Se o número estiver errado, corrija o cadastro e reenvie.`)
+      .catch(() => { /* aviso e melhor-esforco */ });
+  }
+
+  if (!subscriberId) {
+    const partes = String(orc.cliente || 'Cliente').trim().split(/\s+/);
+    const criado = await bcFetch('/subscriber/', 'POST', {
+      phone: `+${tel}`,
+      first_name: partes[0] || 'Cliente',
+      last_name: partes.slice(1).join(' ') || 'BRAVE',
+    }, apiKey);
+    subscriberId = criado.json?.id ?? null;
+    if (!subscriberId) {
+      return { ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` };
+    }
+  }
+
+  const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
+
+  /* Só o lead da central (FSS) recebe apresentação: para ele esta é a primeira
+     mensagem no WhatsApp do consultor, e o texto vem do fluxo do BotConversa
+     que fazia esse papel (fluxo desligado por mandar o LINK do orçamento).
+     Nos demais canais — WhatsApp BRAVE e Venda Direta — a conversa já está em
+     andamento, e reapresentar-se soaria automatizado: ali vão só as propostas e
+     o fechamento com os valores. */
+  const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0].toUpperCase();
+  const daCentral = String(orc.origem_lead || '').toUpperCase() === 'FSS';
+  const consultor = orc.consultor || 'Léo Berg';
+
+  const aberturas = daCentral ? [
+    `Fala ${primeiroNome} tudo bem?\n${consultor} da BRAVE aqui👍`,
+    'Estamos nos falando ali pelo número da central, mas estou te enviando o orçamento por aqui também para fazer a melhor negociação pra você',
+  ] : [];
+
+  for (const texto of aberturas) {
+    const r = await enviar({ type: 'text', value: texto });
+    if (!r.ok) {
+      return { ok: false, error: `BotConversa recusou o envio (HTTP ${r.status}): ${r.texto.slice(0, 250)}` };
+    }
+    await sleep(700);
+  }
+
+  const enviados = [];
+  const falhas = [];
+  for (const a of arquivos) {
+    const r = await enviar({ type: 'file', value: a.url });
+    (r.ok ? enviados : falhas).push(a.tipo);
+    await sleep(600);
+  }
+
+  if (enviados.length > 0) {
+    /* Fechamento com os valores por escrito: o cliente recebe dois arquivos
+       parecidos e precisa saber qual é qual — e quanto dá — sem abrir os dois.
+       Os números saem do payload do próprio orçamento (mesma conta que gerou as
+       propostas no Bling), nunca de leitura do PDF: valor errado numa proposta
+       comercial é problema sério, e cálculo não erra onde interpretação erra. */
+    const temDuas = enviados.includes('avista') && enviados.includes('prazo');
+    await sleep(700);
+    await enviar({ type: 'text', value: montarResumo(orc, temDuas) });
+    await supabaseAdmin.from('orcamentos_salvos')
+      .update({ proposta_pdf_enviado_em: new Date().toISOString() })
+      .eq('id', orc.id);
+  }
+
+  console.log('[proposta-pdf] envio BotConversa:', { slug: orc.slug, tel, enviados, falhas });
+  return {
+    ok: falhas.length === 0,
+    enviados,
+    falhas,
+    error: falhas.length ? `Falha ao enviar: ${falhas.join(', ')}` : undefined,
+  };
+}
+
+/* enviarMensagemCliente — POST /api/bling?acao=enviar_mensagem_cliente
+   body: { telefone, mensagem, media_url?, cliente? }
+
+   Envio generico (follow-up de leads) pela API do BotConversa, subscriber
+   direto — NAO pelo webhook de automacao. Motivo: o fluxo de automacao nao
+   entrega para quem nunca conversou no numero BotConversa (leads vindos do
+   FSS, que tem numero proprio) e falha sem aviso. A API cria o contato e
+   envia — o mesmo caminho ja comprovado do envio de propostas. */
+export async function enviarMensagemCore({ telefone, mensagem, media_url, cliente }) {
+  const apiKey = process.env.BOTCONVERSA_API_KEY;
+  if (!apiKey) return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel.' };
+
+  let tel = String(telefone || '').replace(/\D/g, '');
+  if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
+  if (tel.length < 12) return { ok: false, error: 'Telefone inválido.' };
+  if (!String(mensagem || '').trim()) return { ok: false, error: 'Mensagem vazia.' };
+
+  let subscriberId = null;
+  const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
+  if (busca.ok) subscriberId = busca.json?.id ?? null;
+  if (!subscriberId) {
+    const partes = String(cliente || 'Cliente').trim().split(/\s+/);
+    const criado = await bcFetch('/subscriber/', 'POST', {
+      phone: `+${tel}`,
+      first_name: partes[0] || 'Cliente',
+      last_name: partes.slice(1).join(' ') || 'BRAVE',
+    }, apiKey);
+    subscriberId = criado.json?.id ?? null;
+    if (!subscriberId) {
+      return { ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` };
+    }
+  }
+
+  const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
+  const rt = await enviar({ type: 'text', value: String(mensagem) });
+  if (!rt.ok) {
+    return { ok: false, error: `BotConversa recusou o envio (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` };
+  }
+  if (String(media_url || '').trim()) {
+    await sleep(600);
+    const rf = await enviar({ type: 'file', value: String(media_url).trim() });
+    if (!rf.ok) {
+      return { ok: false, error: `Texto foi, mas a mídia falhou (HTTP ${rf.status}): ${rf.texto.slice(0, 250)}` };
+    }
+  }
+
+  console.log('[followup] envio BotConversa:', { tel, cliente: cliente || '?', media: !!media_url });
+  return { ok: true };
+}
+
+export async function enviarMensagemCliente(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  const r = await enviarMensagemCore(req.body || {});
+  return res.status(r.ok ? 200 : 502).json(r);
+}
+
+/* Avisa o consultor no WhatsApp dele quando a proposta NAO foi entregue.
+   Sem isso a falha e silenciosa: o orcamento fica marcado como nao enviado e
+   ninguem percebe ate o cliente cobrar. Usa o mesmo webhook do vigia de leads. */
+async function alertarConsultor(orc, tel, alertaCustom) {
+  const url = process.env.BOTCONVERSA_WEBHOOK
+    || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
+  const telConsultor = process.env.ALERTA_TELEFONE || '5548996459791';
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telefone: telConsultor,
+        nome: orc.cliente || 'Cliente',
+        titulo: alertaCustom ? 'Aviso de envio' : 'Proposta NAO enviada',
+        qtd_pendentes: 1,
+        link: '',
+        alerta: alertaCustom || `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: o telefone ${tel} não existe no WhatsApp da BRAVE (provável dígito errado). Confira o número no cadastro e gere o orçamento de novo.`,
+      }),
+    });
+  } catch (_) { /* o aviso e melhor-esforco; nao pode derrubar o fluxo */ }
+}
+
+export async function enviarPdfCliente(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  const { slug } = req.body || {};
+  if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
+
+  const { data: orc } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .eq('slug', slug)
+    .maybeSingle();
+  if (!orc) return res.status(404).json({ ok: false, error: 'Orçamento não encontrado.' });
+
+  return res.status(200).json(await despacharPdfs(orc));
+}
+
+/* GET /api/bling?acao=proposta_por_telefone&telefone=...
+   Usado pelo botão injetado na tela do contato no FSS: diz se aquele contato
+   tem proposta com PDF pronto para enviar. */
+export async function propostaPorTelefone(req, res) {
+  const tel = String(req.query?.telefone || '').replace(/\D/g, '').replace(/^55/, '');
+  if (tel.length < 10) return res.status(400).json({ ok: false, error: 'telefone inválido' });
+
+  // O telefone do cliente vive dentro do payload do orçamento — compara pelos
+  // 8 últimos dígitos porque o nono dígito e o DDI entram e saem conforme a origem.
+  const fim = tel.slice(-8);
+  const { data: linhas } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .or(TIPOS.map(t => `${t.pdfCol}.not.is.null`).join(','))
+    .order('criado_em', { ascending: false })
+    .limit(60);
+
+  /* O cliente pode ter mais de um orcamento (revisado, regerado). Vale o que
+     tem as PROPOSTAS mais recentes — propostas_em, nao criado_em: regerar as
+     propostas de um orcamento o torna o atual, mesmo que outro orcamento tenha
+     sido criado depois (mesma licao do propostasPendentes, vista em producao
+     com o Alexandre Bloemer: dois orcamentos do mesmo minuto, e o painel
+     puxava o de propostas velhas). */
+  const achado = (linhas || [])
+    .filter(o => String(o.payload?.telefoneCliente || '').replace(/\D/g, '').endsWith(fim))
+    .sort((a, b) => new Date(b.propostas_em || b.criado_em || 0) - new Date(a.propostas_em || a.criado_em || 0))[0];
+
+  if (!achado) return res.status(200).json({ ok: true, encontrado: false });
+
+  return res.status(200).json({
+    ok: true,
+    encontrado: true,
+    slug: achado.slug,
+    cliente: achado.cliente,
+    enviadoEm: achado.proposta_pdf_enviado_em || null,
+    pdfs: TIPOS.filter(t => achado[t.pdfCol]).map(t => t.tipo),
+    // arquivos prontos para o userscript do FSS anexar direto na conversa
+    arquivos: TIPOS.filter(t => achado[t.pdfCol])
+      .map(t => ({ ...linkPdf(achado, t), mensagem: mensagemDoTipo(achado, t.tipo) })),
+    /* Mesmo texto que vai no WhatsApp — no FSS a conversa já está em andamento,
+       então vale só o fechamento com os valores, sem a apresentação. */
+    mensagem: montarResumo(
+      achado,
+      !!(achado.bling_avista_pdf && achado.bling_prazo_pdf)
+    ),
+  });
+}
+
+/* GET /api/bling?acao=propostas_pendentes  (header x-hub-token)
+   Lista as propostas que ja existem no Bling mas ainda nao tiveram o PDF
+   capturado. O robo do Bling consome isso para imprimir sozinho, num iframe
+   invisivel, sem o Leo clicar em nada. */
+export async function propostasPendentes(req, res) {
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  }
+  /* Trava de seguranca: so orcamentos recentes. Sem isso o primeiro ciclo do
+     robo varreria o historico inteiro (21 propostas antigas na estreia) e,
+     nas de origem FSS, dispararia WhatsApp para clientes de semanas atras.
+     O uso real e sempre uma proposta recem-criada. */
+  const JANELA_HORAS = Number(process.env.ROBO_JANELA_HORAS || 72);
+  const corte = new Date(Date.now() - JANELA_HORAS * 3600 * 1000).toISOString();
+  /* A janela mede quando as PROPOSTAS foram criadas, não o orçamento: um
+     orçamento de semanas atrás, regerado hoje, tem propostas novas e precisa
+     ser capturado. Usar criado_em deixava esse caso de fora (visto em
+     produção com o Forma Fit). Orçamentos antigos sem propostas_em continuam
+     protegidos pelo criado_em. */
+  const { data: linhas } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .or(`propostas_em.gte.${corte},and(propostas_em.is.null,criado_em.gte.${corte})`)
+    .or(TIPOS.map(t => `and(${t.idCol}.not.is.null,${t.pdfCol}.is.null)`).join(','))
+    .order('criado_em', { ascending: false })
+    .limit(20);
+
+  const pendentes = [];
+  for (const o of linhas || []) {
+    if (ORIGENS_SEM_CAPTURA.includes(String(o.origem_lead || '').toUpperCase())) continue;
+    for (const t of TIPOS) {
+      if (o[t.idCol] && !o[t.pdfCol]) {
+        pendentes.push({
+          slug: o.slug, cliente: o.cliente, tipo: t.tipo,
+          idOrcamento: String(o[t.idCol]), numero: o[t.numCol] || null,
+        });
+      }
+    }
+  }
+  return res.status(200).json({ ok: true, pendentes });
+}
+
+/* Sessao do Bling para o robo de servidor (Railway).
+   POST /api/bling?acao=sessao_bling  (header x-hub-token)  body: { cookies }
+   GET  /api/bling?acao=sessao_bling  (header x-hub-token)  -> devolve os cookies
+
+   Por que guardar cookies em vez de usuario e senha: assim o Leo nunca precisa
+   entregar a senha, e a sessao ja existente e reaproveitada. O userscript
+   renova isso sempre que ele abre o Bling. Sao credenciais de verdade — nunca
+   logar o valor, nunca devolver sem o token. */
+export async function sessaoBling(req, res) {
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  }
+
+  if (req.method === 'POST') {
+    const { cookies, armazenamento } = req.body || {};
+    if (!cookies || typeof cookies !== 'string' || cookies.length < 20) {
+      return res.status(400).json({ ok: false, error: 'cookies obrigatorios.' });
+    }
+    const { error } = await supabaseAdmin.from('bling_config')
+      .update({
+        sessao_cookies: cookies,
+        sessao_storage: armazenamento ? JSON.stringify(armazenamento) : null,
+        sessao_atualizada_em: new Date().toISOString(),
+      })
+      .eq('id', 1);
+    if (error) return res.status(500).json({ ok: false, error: error.message });
+    console.log('[sessao-bling] cookies atualizados:', cookies.split(';').length, 'itens');
+    return res.status(200).json({ ok: true, itens: cookies.split(';').length });
+  }
+
+  const { data } = await supabaseAdmin.from('bling_config')
+    .select('sessao_cookies, sessao_storage, sessao_atualizada_em').eq('id', 1).maybeSingle();
+  if (!data?.sessao_cookies) {
+    return res.status(200).json({ ok: false, error: 'Nenhuma sessao guardada ainda.' });
+  }
+  return res.status(200).json({
+    ok: true,
+    cookies: data.sessao_cookies,
+    armazenamento: data.sessao_storage ? JSON.parse(data.sessao_storage) : {},
+    atualizadaEm: data.sessao_atualizada_em,
+  });
+}
+
 export async function baixarPdf(req, res) {
   const { slug, tipo } = req.query || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });

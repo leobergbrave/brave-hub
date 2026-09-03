@@ -3,7 +3,7 @@ import enviarPedido from './_bling-pedido.js';
 import sincronizarContato from './_bling-contato.js';
 import pedidosAtendidos from './_bling-pedidos-atendidos.js';
 import { importar as importarModelos, gerarOrcamento, gerarProposta } from './_bling-modelos.js';
-import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, propostasPendentes, sessaoBling, enviarMensagemCliente } from './_proposta-pdf.js';
+import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, propostasPendentes, sessaoBling, enviarMensagemCliente, criarSlotPdf, finalizarPdf } from './_proposta-pdf.js';
 import { vendasPeriodo, sincronizarVendas } from './_bling-vendas.js';
 import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
 import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
