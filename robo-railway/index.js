@@ -245,7 +245,7 @@ async function capturarProposta(idOrcamento) {
     margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
   });
 
-  return { numero, pdfBase64: Buffer.from(pdf).toString('base64') };
+  return { numero, pdf };
 
 }
 
@@ -268,18 +268,32 @@ async function ronda() {
     for (let tentativa = 1; tentativa <= 2 && !ok; tentativa++) {
       try {
         log(`capturando ${p.cliente} (${p.tipo})${tentativa > 1 ? ' — 2ª tentativa' : ''}`);
-        const { numero, pdfBase64 } = await capturarProposta(p.idOrcamento);
+        const { numero, pdf } = await capturarProposta(p.idOrcamento);
         const num = p.numero || numero;
         if (!num) throw new Error('não achei o nº da proposta');
 
-        const env = await fetch(`${HUB}/api/bling?acao=proposta_pdf_upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-hub-token': TOKEN },
-          body: JSON.stringify({ numero: num, pdfBase64 }),
+        /* Envio em 3 passos: o PDF e grande demais para o corpo da requisicao da
+           Vercel (413). Pedimos uma URL assinada, subimos os bytes direto no
+           Storage do Supabase, e mandamos o HUB finalizar (grava + dispara). */
+        const slotR = await fetch(`${HUB}/api/bling?acao=proposta_pdf_slot&numero=${num}`, {
+          method: 'POST', headers: { 'x-hub-token': TOKEN },
         });
-        const resp = await env.json();
-        if (!resp.ok) throw new Error(resp.error || 'HUB recusou');
-        log(`  → pronta${resp.envioAuto === 'enviado' ? ' e enviada ao cliente' : ''}`);
+        const slot = await slotR.json();
+        if (!slot.ok) throw new Error(slot.error || 'slot recusado');
+
+        const up = await fetch(slot.uploadUrl, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/pdf', 'x-upsert': 'true' },
+          body: pdf,
+        });
+        if (!up.ok) throw new Error(`upload storage HTTP ${up.status}: ${(await up.text()).slice(0, 120)}`);
+
+        const finR = await fetch(`${HUB}/api/bling?acao=proposta_pdf_finalizar&numero=${num}`, {
+          method: 'POST', headers: { 'x-hub-token': TOKEN },
+        });
+        const fin = await finR.json();
+        if (!fin.ok) throw new Error(fin.error || 'finalizar recusado');
+        log(`  → pronta (${(pdf.length/1024).toFixed(0)}KB)${fin.envioAuto === 'enviado' ? ' e enviada ao cliente' : ''}`);
         ok = true;
       } catch (e) {
         log(`  falhou: ${e.message}`);

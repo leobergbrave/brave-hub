@@ -52,6 +52,8 @@ export default async function handler(req, res) {
     case 'propostas_pendentes': return propostasPendentes(req, res);
     case 'sessao_bling':        return sessaoBling(req, res);
     case 'vendas_periodo':      return vendasPeriodo(req, res);
+    case 'proposta_pdf_slot':   return criarSlotPdf(req, res);
+    case 'proposta_pdf_finalizar': return finalizarPdf(req, res);
     case 'produtos_fss':        return produtosFss(req, res);
     case 'enviar_produto_cliente': return enviarProdutoCliente(req, res);
     case 'cadastro_prefill_criar': return criarPrefill(req, res);

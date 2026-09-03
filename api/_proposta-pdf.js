@@ -218,6 +218,71 @@ async function htmlParaPdf(html) {
   }
 }
 
+/* Upload direto ao Storage por URL assinada — para o robo do Railway, cujo PDF
+   e grande demais para caber no corpo da requisicao da Vercel (limite ~4,5MB no
+   Hobby: "Request Entity Too Large"). Tres passos: pedir a vaga (slot), subir os
+   bytes direto no Supabase, e finalizar (grava a coluna + dispara o envio). */
+async function resolverOrc(num) {
+  let { data: orc } = await supabaseAdmin.from('orcamentos_salvos').select(COLS)
+    .or(TIPOS.map((t) => `${t.numCol}.eq.${num}`).join(','))
+    .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+  if (!orc) orc = await backfillNumero(num);
+  if (!orc) return null;
+  const tipoInfo = TIPOS.find((t) => Number(orc[t.numCol]) === num) || TIPOS[2];
+  const path = tipoInfo.tipo === 'unica' ? `${orc.slug}.pdf` : `${orc.slug}-${tipoInfo.tipo}.pdf`;
+  return { orc, tipoInfo, path };
+}
+
+async function finalizarNoOrc(orc, tipoInfo, path) {
+  await supabaseAdmin.from('orcamentos_salvos').update({
+    [tipoInfo.pdfCol]: path, proposta_pdf_em: new Date().toISOString(),
+  }).eq('id', orc.id);
+  orc[tipoInfo.pdfCol] = path;
+  const rotulo = { avista: 'à vista', prazo: 'a prazo', unica: '' }[tipoInfo.tipo];
+  let envioAuto;
+  const enviadoEm = orc.proposta_pdf_enviado_em;
+  const propostasMaisNovas = !!(orc.propostas_em && enviadoEm && new Date(orc.propostas_em) > new Date(enviadoEm));
+  if (ORIGENS_AUTOMATICAS.includes(String(orc.origem_lead || '').toUpperCase()) && (!enviadoEm || propostasMaisNovas)) {
+    const esperados = TIPOS.filter((t) => orc[t.idCol]);
+    const prontos = esperados.filter((t) => orc[t.pdfCol]);
+    if (esperados.length > 0 && prontos.length === esperados.length) {
+      envioAuto = await despacharPdfs(orc, true);
+    }
+  }
+  return { ok: true, slug: orc.slug, cliente: orc.cliente, tipo: tipoInfo.tipo, rotulo,
+    envioAuto: envioAuto ? (envioAuto.ok ? 'enviado' : `falhou: ${envioAuto.error}`) : undefined };
+}
+
+export async function criarSlotPdf(req, res) {
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  const num = parseInt(req.query?.numero || req.body?.numero, 10);
+  if (!num) return res.status(400).json({ ok: false, error: 'numero obrigatorio.' });
+  const r = await resolverOrc(num);
+  if (!r) return res.status(200).json({ ok: false, error: `Nenhum orçamento vinculado à proposta nº ${num}.` });
+  let { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUploadUrl(r.path, { upsert: true });
+  if (error && /bucket.*not.*found/i.test(error.message || '')) {
+    await supabaseAdmin.storage.createBucket(BUCKET, { public: false });
+    ({ data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUploadUrl(r.path, { upsert: true }));
+  }
+  if (!data?.token) return res.status(500).json({ ok: false, error: `Falha ao criar slot: ${error?.message || 'sem token'}` });
+  const base = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const uploadUrl = `${base}/storage/v1/object/upload/sign/${BUCKET}/${r.path}?token=${data.token}`;
+  return res.status(200).json({ ok: true, uploadUrl, path: r.path, numero: num });
+}
+
+export async function finalizarPdf(req, res) {
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  const num = parseInt(req.query?.numero || req.body?.numero, 10);
+  if (!num) return res.status(400).json({ ok: false, error: 'numero obrigatorio.' });
+  const r = await resolverOrc(num);
+  if (!r) return res.status(200).json({ ok: false, error: `Nenhum orçamento vinculado à proposta nº ${num}.` });
+  const { data: files } = await supabaseAdmin.storage.from(BUCKET).list('', { limit: 100, search: r.path });
+  if (!files?.some((f) => f.name === r.path)) {
+    return res.status(200).json({ ok: false, error: 'PDF ainda nao chegou ao storage.' });
+  }
+  return res.status(200).json(await finalizarNoOrc(r.orc, r.tipoInfo, r.path));
+}
+
 export async function uploadPdf(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
 
