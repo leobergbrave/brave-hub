@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.4
-// @description  Anexa os PDFs oficiais da proposta e os vídeos de produtos (com texto pronto) direto na conversa do FSS, sem baixar arquivo no computador.
+// @version      3.5
+// @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
+// @match        https://web.whatsapp.com/*
 // @run-at       document-idle
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      brave-hub-two.vercel.app
+// @connect      jisbvqrnnujqgbsfondy.supabase.co
 // ==/UserScript==
 
 /*
@@ -26,17 +29,77 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.4'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.5'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
   let ultimoNomeAchado = null; // preenchido pela Abertura, mostrado no status
+
+  /* O mesmo painel atende dois territorios: o chat do FSS e o WhatsApp Web
+     (conversas do numero BRAVE). No WhatsApp nao ha formulario de contato nem
+     campo de anexo alcancavel — la o telefone sai do cabecalho da conversa,
+     texto entra por evento de colar (o editor Lexical ignora insertText com
+     quebra de linha) e envios com arquivo vao pelo SERVIDOR (BotConversa),
+     caindo na propria conversa aberta. */
+  const WA = location.hostname === 'web.whatsapp.com';
+
+  /* O CSP do WhatsApp Web bloqueia fetch da pagina para fora (connect-src) —
+     toda conversa com o HUB e com o bucket de videos passa pelo canal
+     privilegiado do Tampermonkey (GM_xmlhttpRequest + @connect), que ignora o
+     CSP. Sem GM (ex.: rodando no FSS antigo), cai no fetch normal. */
+  function hubFetch(url, opts = {}) {
+    if (typeof GM_xmlhttpRequest === 'undefined') return fetch(url, opts);
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: opts.method || 'GET',
+        url,
+        headers: opts.headers || {},
+        data: opts.body,
+        responseType: 'blob',
+        timeout: 60_000,
+        onload: (r) => resolve({
+          ok: r.status >= 200 && r.status < 300,
+          status: r.status,
+          blob: async () => r.response,
+          text: async () => r.response.text(),
+          json: async () => JSON.parse(await r.response.text()),
+        }),
+        onerror: () => reject(new Error('falha de rede')),
+        ontimeout: () => reject(new Error('tempo esgotado')),
+      });
+    });
+  }
+
+  /* Nome do contato salvo no cabecalho do WhatsApp; numero cru vira null. */
+  function nomeContatoWA() {
+    const t = (document.querySelector('#main header span[dir="auto"]')?.textContent || '').trim();
+    if (!t || (t.match(/\d/g) || []).length >= 3) return null;
+    return t;
+  }
 
   /* O painel de contato do FSS mostra mais de um telefone (principal e
      adicional), e nem sempre o cadastrado no HUB e o primeiro. Em vez de
      adivinhar, juntamos todos os candidatos da tela e perguntamos ao HUB por
      cada um ate achar. */
   function acharTelefones() {
+    if (WA) {
+      /* No WhatsApp o numero da conversa aparece no aria-label do campo de
+         mensagem ("Digite uma mensagem para +55 37 9967-4991") e no cabecalho
+         quando o contato nao esta salvo. Contato salvo mostra so o nome —
+         nesse caso nao ha numero na tela. */
+      const achados = new Set();
+      const fontes = [
+        document.querySelector('#main footer [contenteditable="true"]')?.getAttribute('aria-label') || '',
+        document.querySelector('#main header')?.innerText || '',
+      ];
+      for (const t of fontes) {
+        for (const m of String(t).matchAll(/\+?55[\s.\-]?\(?\d{2}\)?[\s.\-]?9?\d{4}[\s.\-]?\d{4}/g)) {
+          const n = m[0].replace(/\D/g, '').replace(/^55/, '');
+          if (n.length === 10 || n.length === 11) achados.add(n);
+        }
+      }
+      return [...achados].slice(0, 4);
+    }
     const achados = new Set();
     const PADRAO = /\(?\d{2}\)?[\s-]?9?\d{4}[-\s]?\d{4}/g;
     const coletar = (texto) => {
@@ -103,7 +166,7 @@
   }
 
   async function baixarComoArquivo(url, nome, tipo = 'application/pdf') {
-    const r = await fetch(url, { credentials: 'omit' });
+    const r = await hubFetch(url, { credentials: 'omit' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
     return new File([blob], nome, { type: tipo });
@@ -196,6 +259,15 @@
      (o campo volta ao que era ao enviar). Por isso usamos o setter nativo do
      prototipo, que e o caminho que o framework escuta. */
   function escreverMensagem(texto) {
+    if (WA) {
+      const campo = document.querySelector('#main footer [contenteditable="true"]');
+      if (!campo) return false;
+      campo.focus();
+      const dt = new DataTransfer();
+      dt.setData('text/plain', texto);
+      campo.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+      return true;
+    }
     /* O FSS pode usar textarea, contenteditable ou um editor proprio; e logo
        apos enviar, nenhum deles existe por um instante. */
     const campo = document.querySelector('textarea')
@@ -251,7 +323,7 @@
 
   async function carregarProdutos() {
     if (produtosCache) return produtosCache;
-    const r = await fetch(`${HUB}/api/bling?acao=produtos_fss`);
+    const r = await hubFetch(`${HUB}/api/bling?acao=produtos_fss`);
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'catálogo indisponível');
     produtosCache = j.itens || [];
@@ -279,7 +351,39 @@
     p.appendChild(botao('↩︎ Voltar ao painel', '#0e7490', voltar));
   }
 
+  /* No WhatsApp o video nao e anexavel via DOM: o SERVIDOR envia (BotConversa)
+     e a mensagem cai NESTA conversa em instantes. Como o envio e imediato,
+     sem tela de revisao, pedimos confirmacao no painel antes. */
+  function enviarProdutoWA(item) {
+    const tel = acharTelefones()[0];
+    if (!tel) {
+      const p = status('❌ Não achei o número desta conversa (contato salvo mostra só o nome).', '#fca5a5');
+      p.appendChild(botao('↩︎ Voltar', '#334155', montarProdutos));
+      return;
+    }
+    const p = status(`Enviar ${item.titulo} (vídeo + texto) nesta conversa (${tel})?`);
+    p.appendChild(botao('✅ Enviar agora', '#16a34a', async () => {
+      status(`⏳ Enviando ${item.titulo}...`);
+      try {
+        const r = await hubFetch(`${HUB}/api/bling?acao=enviar_produto_cliente`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: tel, id: item.id }),
+        });
+        const j = await r.json();
+        const s = status(j.ok ? `✅ ${item.titulo} enviado — chega na conversa em instantes.` : `❌ ${j.error}`,
+          j.ok ? '#4ade80' : '#fca5a5');
+        s.appendChild(botao('🎬 Outros produtos', '#334155', montarProdutos));
+        s.appendChild(botao('↩︎ Voltar ao painel', '#334155', voltar));
+      } catch (e) {
+        const s = status(`❌ Falha de rede: ${e.message}`, '#fca5a5');
+        s.appendChild(botao('↩︎ Voltar', '#334155', voltar));
+      }
+    }));
+    p.appendChild(botao('↩︎ Cancelar', '#334155', montarProdutos));
+  }
+
   async function enviarProduto(item) {
+    if (WA) return enviarProdutoWA(item);
     status(`⏳ Preparando ${item.titulo}...`);
     try {
       if (item.video) {
@@ -308,7 +412,7 @@
   async function enviarPeloWhatsApp() {
     status('⏳ Enviando pelo WhatsApp...');
     try {
-      const r = await fetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
+      const r = await hubFetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: dados.slug }),
       });
@@ -355,6 +459,9 @@
 
   /* Tudo que a tela do contato oferece para pre-preencher o cadastro. */
   function acharDadosContato() {
+    if (WA) {
+      return { nome: capitalizar(nomeContatoWA() || ''), email: '', telefone: acharTelefones()[0] || '' };
+    }
     const nome = capitalizar(`${valorDoCampo(/^nome\b.{0,4}$/i)} ${valorDoCampo(/^sobrenome\b.{0,4}$/i)}`.trim());
     let email = valorDoCampo(/^e-?mail\b.{0,4}$/i);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) email = '';
@@ -362,6 +469,7 @@
   }
 
   function acharPrimeiroNome() {
+    if (WA) return primeiroNomeDe(nomeContatoWA() || '');
     // 1) input pareado ao rotulo "Nome" pela ordem do documento
     const porRotulo = valorDoCampo(/^nome\b.{0,4}$/i);
     if (porRotulo && !/\d/.test(porRotulo)) {
@@ -414,7 +522,7 @@
         const d = acharDadosContato();
         if (d.nome || d.email || d.telefone) {
           try {
-            const r = await fetch(`${HUB}/api/bling?acao=cadastro_prefill_criar`, {
+            const r = await hubFetch(`${HUB}/api/bling?acao=cadastro_prefill_criar`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(d),
             });
@@ -475,7 +583,9 @@
       s.style.cssText = 'font-size:11px;color:#94a3b8;font-weight:500';
       p.appendChild(s);
     }
-    for (const arquivo of dados.arquivos || []) {
+    // No WhatsApp nao ha campo de anexo alcancavel: o caminho e o envio pelo
+    // servidor ("Enviar pelo WhatsApp"), que cai nesta mesma conversa.
+    for (const arquivo of (WA ? [] : dados.arquivos || [])) {
       const rot = { avista: '💰 Anexar À VISTA', prazo: '💳 Anexar A PRAZO' }[arquivo.tipo] || '📎 Anexar proposta';
       p.appendChild(botao(rot, '#0e7490', () => anexarUm(arquivo)));
     }
@@ -508,7 +618,7 @@
     status(`⏳ BRAVE: procurando proposta (${tels.length} telefone${tels.length > 1 ? 's' : ''})...`);
     for (const tel of tels) {
       try {
-        const r = await fetch(`${HUB}/api/bling?acao=proposta_por_telefone&telefone=${tel}`);
+        const r = await hubFetch(`${HUB}/api/bling?acao=proposta_por_telefone&telefone=${tel}`);
         const j = await r.json();
         if (j.encontrado) {
           dados = j;
