@@ -61,6 +61,17 @@ async function abrirNavegador() {
   });
   pagina = await navegador.newPage();
   await pagina.setViewport({ width: 1400, height: 1000 });
+  /* Chrome headless anuncia navigator.webdriver=true e usa User-Agent
+     "HeadlessChrome". Sites que servem tela vazia para automacao olham
+     exatamente isso — e a tela de login veio sem nenhum campo na primeira
+     tentativa. Aqui apresentamos um Chrome comum. */
+  await pagina.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36');
+  await pagina.setExtraHTTPHeaders({ 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' });
+  await pagina.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en'] });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+  });
   // Sem allow-modals equivalente aqui: fechamos qualquer diálogo que apareça.
   pagina.on('dialog', async (d) => { try { await d.dismiss(); } catch (_) {} });
   await pagina.evaluateOnNewDocument(() => {
@@ -89,21 +100,63 @@ async function login() {
   log('fazendo login no Bling...');
   await pagina.goto('https://www.bling.com.br/login', { waitUntil: 'networkidle2', timeout: 60_000 });
 
-  // Seletores defensivos: o Bling muda o layout de tempos em tempos.
-  const campoUsuario = await pagina.$('input[type="email"], input[name*="user" i], input[name*="login" i], input[type="text"]');
-  const campoSenha = await pagina.$('input[type="password"]');
-  if (!campoUsuario || !campoSenha) {
-    log('ERRO: não achei os campos de login (layout mudou?)');
+  /* A tela de login e montada por JavaScript: na primeira tentativa os campos
+     ainda nao existiam quando fomos procura-los. Esperamos ate 20s por
+     qualquer input aparecer antes de desistir. */
+  await pagina.waitForSelector('input:not([type="hidden"])', { timeout: 20_000 }).catch(() => {});
+  await sleep(1500);
+
+  const diag = await pagina.evaluate(() => ({
+    url: location.href,
+    titulo: document.title,
+    texto: (document.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 250),
+    campos: [...document.querySelectorAll('input')]
+      .filter((i) => i.type !== 'hidden')
+      .map((i) => `${i.type}[name=${i.name || '-'} id=${i.id || '-'}]`),
+    iframes: document.querySelectorAll('iframe').length,
+  }));
+  log('tela de login → url:', diag.url, '| titulo:', diag.titulo);
+  log('  campos:', diag.campos.join(' | ') || '(nenhum)', '| iframes:', diag.iframes);
+  log('  texto:', diag.texto || '(vazio)');
+
+  /* Preencher sem depender de clique: os campos existem (#username e o de
+     senha) mas o Puppeteer recusa clicar — "Node is either not clickable",
+     tipico de campo coberto por outro elemento. Focamos via JS e digitamos
+     pelo teclado, que e o caminho que o site enxerga como digitacao real. */
+  const preencher = async (seletor, valor) => {
+    const existe = await pagina.$(seletor);
+    if (!existe) return false;
+    await pagina.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); el.value = ''; }
+    }, seletor);
+    await pagina.keyboard.type(valor, { delay: 60 });
+    // Confere se entrou (sem revelar o conteudo)
+    return pagina.evaluate((sel) => (document.querySelector(sel)?.value || '').length > 0, seletor);
+  };
+
+  if (!(await preencher('#username, input[type="text"]', BLING_USUARIO))) {
+    log('ERRO: nao consegui preencher o usuario');
     return false;
   }
+  if (!(await preencher('input[type="password"]', BLING_SENHA))) {
+    log('ERRO: nao consegui preencher a senha');
+    return false;
+  }
+  log('campos preenchidos, enviando...');
 
-  await campoUsuario.type(BLING_USUARIO, { delay: 40 });
-  await campoSenha.type(BLING_SENHA, { delay: 40 });
-  await Promise.all([
-    pagina.keyboard.press('Enter'),
-    pagina.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60_000 }).catch(() => {}),
-  ]);
-  await sleep(3000);
+  // Botao "Entrar" pelo texto; se nao achar, Enter no teclado.
+  const clicouBotao = await pagina.evaluate(() => {
+    const alvo = [...document.querySelectorAll('button, input[type="submit"], a')]
+      .find((b) => /^\s*entrar\s*$/i.test(b.innerText || b.value || ''));
+    if (alvo) { alvo.click(); return true; }
+    return false;
+  });
+  if (!clicouBotao) await pagina.keyboard.press('Enter');
+
+  await pagina.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60_000 }).catch(() => {});
+  await sleep(5000);
+  log('apos enviar login — URL:', pagina.url());
 
   const texto = await pagina.evaluate(() => document.body.innerText || '');
   /* Se o Bling pedir verificação, PARAMOS. Repetir login com desafio pendente é
@@ -124,7 +177,9 @@ async function login() {
   }
 
   falhasLogin += 1;
-  log(`login falhou (${falhasLogin}/${MAX_FALHAS_LOGIN})`);
+  const pista = (await pagina.evaluate(() => document.body.innerText || ''))
+    .replace(/\s+/g, ' ').slice(0, 300);
+  log(`login falhou (${falhasLogin}/${MAX_FALHAS_LOGIN}) — tela diz: ${pista}`);
   if (falhasLogin >= MAX_FALHAS_LOGIN) {
     pausado = true;
     log('PARADO: três falhas de login seguidas. Confira usuário e senha nas variáveis.');
@@ -165,60 +220,33 @@ async function capturarProposta(idOrcamento) {
       && [...document.images].every((im) => im.complete);
   }, { timeout: ESPERA_PROPOSTA_MS, polling: 500 });
 
-  return pagina.evaluate(async () => {
-    const paraDataURL = async (url) => {
-      try {
-        const r = await fetch(url, { credentials: 'include' });
-        if (!r.ok) return null;
-        const blob = await r.blob();
-        return await new Promise((res, rej) => {
-          const fr = new FileReader();
-          fr.onload = () => res(fr.result);
-          fr.onerror = rej;
-          fr.readAsDataURL(blob);
-        });
-      } catch (_) { return null; }
-    };
-
-    const clone = document.documentElement.cloneNode(true);
-    clone.querySelectorAll('script').forEach((s) => s.remove());
-
-    const linksOrig = [...document.querySelectorAll('link[rel="stylesheet"]')];
-    const linksClone = [...clone.querySelectorAll('link[rel="stylesheet"]')];
-    for (let i = 0; i < linksOrig.length; i++) {
-      try {
-        const css = await fetch(linksOrig[i].href, { credentials: 'include' }).then((r) => r.text());
-        const st = document.createElement('style');
-        st.textContent = css;
-        if (linksClone[i]) linksClone[i].replaceWith(st);
-      } catch (_) { /* segue sem esse css */ }
-    }
-
-    const imgsOrig = [...document.querySelectorAll('img')];
-    const imgsClone = [...clone.querySelectorAll('img')];
-    for (let i = 0; i < imgsOrig.length; i++) {
-      const data = await paraDataURL(imgsOrig[i].currentSrc || imgsOrig[i].src);
-      if (data && imgsClone[i]) {
-        imgsClone[i].setAttribute('src', data);
-        imgsClone[i].removeAttribute('srcset');
-      }
-    }
-
+  // Numero da proposta, lido da propria pagina.
+  const numero = await pagina.evaluate(() => {
     const texto = document.body.innerText || '';
-    let numero = null;
     for (const p of [/N[úu]mero\s+da\s+Proposta\s*:?\s*(\d{1,10})/i, /Proposta\s*N[ºo°]?\s*\.?\s*:?\s*(\d{1,10})/i]) {
       const m = texto.match(p);
-      if (m) { numero = m[1]; break; }
+      if (m) return m[1];
     }
-    if (!numero) {
-      for (const td of document.querySelectorAll('td, th')) {
-        if (!/n[úu]mero\s+da\s+proposta/i.test(td.textContent || '')) continue;
-        const v = (td.nextElementSibling?.textContent || '').replace(/\D/g, '');
-        if (v) { numero = v; break; }
-      }
+    for (const td of document.querySelectorAll('td, th')) {
+      if (!/n[úu]mero\s+da\s+proposta/i.test(td.textContent || '')) continue;
+      const v = (td.nextElementSibling?.textContent || '').replace(/\D/g, '');
+      if (v) return v;
     }
-    return { numero, html: '<!DOCTYPE html>\n' + clone.outerHTML };
+    return null;
   });
+
+  /* PDF gerado AQUI, na propria pagina ja logada e renderizada. Antes mandavamos
+     o HTML (com imagens inline) para a Vercel reconverter — e o HTML grande
+     estourava a memoria do Chromium serverless ("IO.read: Read failed"). O
+     container do Railway tem memoria de sobra e a pagina ja esta pronta. */
+  const pdf = await pagina.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
+  });
+
+  return { numero, pdfBase64: Buffer.from(pdf).toString('base64') };
+
 }
 
 async function ronda() {
@@ -240,14 +268,14 @@ async function ronda() {
     for (let tentativa = 1; tentativa <= 2 && !ok; tentativa++) {
       try {
         log(`capturando ${p.cliente} (${p.tipo})${tentativa > 1 ? ' — 2ª tentativa' : ''}`);
-        const { numero, html } = await capturarProposta(p.idOrcamento);
+        const { numero, pdfBase64 } = await capturarProposta(p.idOrcamento);
         const num = p.numero || numero;
         if (!num) throw new Error('não achei o nº da proposta');
 
         const env = await fetch(`${HUB}/api/bling?acao=proposta_pdf_upload`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-hub-token': TOKEN },
-          body: JSON.stringify({ numero: num, html }),
+          body: JSON.stringify({ numero: num, pdfBase64 }),
         });
         const resp = await env.json();
         if (!resp.ok) throw new Error(resp.error || 'HUB recusou');
@@ -264,6 +292,19 @@ async function ronda() {
 
 async function principal() {
   log(`robô iniciado — ronda a cada ${INTERVALO_MS / 1000}s`);
+
+  /* Um unico teste de login na partida. Normalmente o robo so loga quando ha
+     proposta para capturar (logar a toa e padrao de acesso anormal), mas sem
+     isso nao ha como saber se o Bling aceita o acesso do servidor enquanto a
+     fila estiver vazia — e essa e a pergunta que decide se o servidor serve. */
+  try {
+    log('--- teste de login (uma vez, na partida) ---');
+    const ok = await garantirSessao();
+    log(ok ? '>>> LOGIN DO SERVIDOR FUNCIONA <<<' : '>>> login do servidor NAO passou <<<');
+  } catch (e) {
+    log('teste de login falhou:', e.message);
+  }
+
   for (;;) {
     try {
       await ronda();

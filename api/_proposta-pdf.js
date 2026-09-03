@@ -229,10 +229,16 @@ export async function uploadPdf(req, res) {
     return res.status(401).json({ ok: false, error: 'Token inválido.' });
   }
 
-  const { numero, html } = req.body || {};
+  const { numero, html, pdfBase64 } = req.body || {};
   const num = parseInt(numero, 10);
-  if (!num || !html || typeof html !== 'string' || html.length < 200) {
-    return res.status(400).json({ ok: false, error: 'numero e html são obrigatórios.' });
+  if (!num) return res.status(400).json({ ok: false, error: 'numero obrigatório.' });
+  // Dois modos: o robo do Railway ja tem a pagina renderizada, entao manda o PDF
+  // pronto (pdfBase64) — evita reconverter HTML gigante na Vercel, que estourava
+  // a memoria do Chromium ("IO.read: Read failed"). O userscript ainda manda html.
+  const temPdf = typeof pdfBase64 === 'string' && pdfBase64.length > 500;
+  const temHtml = typeof html === 'string' && html.length >= 200;
+  if (!temPdf && !temHtml) {
+    return res.status(400).json({ ok: false, error: 'numero e (html ou pdfBase64) são obrigatórios.' });
   }
 
   /* Trava contra proposta pela metade: a tela do Bling nasce com "Carregando..."
@@ -241,8 +247,8 @@ export async function uploadPdf(req, res) {
      Validamos pela PRESENÇA do que a proposta pronta tem, nunca pela ausência
      de "Carregando": o Bling deixa essa div escondida no documento mesmo depois
      de carregar, e checar por ela recusava proposta boa. */
-  const semTags = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
-  const marcadores = [
+  const semTags = temHtml ? html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ') : '';
+  const marcadores = !temHtml ? 1 : [
     /total\s+da\s+proposta/i,
     /n[ºo°]?\s*de\s+itens/i,
     /itens\s+da\s+proposta/i,
@@ -271,13 +277,20 @@ export async function uploadPdf(req, res) {
   }
   const tipoInfo = TIPOS.find(t => Number(orc[t.numCol]) === num) || TIPOS[2];
 
-  // 2. HTML → PDF (mesmo motor do "Salvar como PDF" do Chrome)
+  // 2. PDF: o robo manda pronto (pdfBase64); o userscript manda html para converter.
   let pdf;
   try {
-    pdf = await htmlParaPdf(html);
+    if (temPdf) {
+      pdf = Buffer.from(pdfBase64, 'base64');
+      if (pdf.length < 500 || pdf.slice(0, 5).toString() !== '%PDF-') {
+        return res.status(400).json({ ok: false, error: 'pdfBase64 não é um PDF válido.' });
+      }
+    } else {
+      pdf = await htmlParaPdf(html);
+    }
   } catch (e) {
-    console.error('[proposta-pdf] erro na conversão:', e);
-    return res.status(500).json({ ok: false, error: `Falha ao converter em PDF: ${e.message}` });
+    console.error('[proposta-pdf] erro no PDF:', e);
+    return res.status(500).json({ ok: false, error: `Falha no PDF: ${e.message}` });
   }
 
   // 3. Guardar no Storage (bucket privado; download só pelo HUB)
