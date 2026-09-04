@@ -27,7 +27,8 @@ export const RAPIDAS = [
       '• Copa SUR de CrossFit — 3 edições seguidas',
       '• TCB — The CrossFit Games Brasil',
       '• Powered by Coffee',
-      '• HYROX World Championship 2026',
+      '• UAIROX — Hybrid RUN',
+      '• HTC — Fitness RUN',
       '',
       'Equipamento que aguenta a pressão do pódio aguenta a rotina do seu box — é o mesmo padrão que entregamos pra você.',
       '',
@@ -53,25 +54,28 @@ const linhaPreco = (avista, prazo) => (Number(avista) > 0
   ? `💰 *${fmtBR(avista)} à vista* ou 10x de ${fmtBR((Number(prazo) || 0) / 10)} sem juros`
   : '💰 Preço sob consulta — me chama que monto sua condição');
 
-/* Remo e SkiErg sao estacoes oficiais de prova do HYROX — argumento de venda
-   mais forte que o subtitle generico do catalogo (que segue valendo nas LPs).
-   Cada um com angulo diferente para nao soar repetido na mesma conversa. */
-const HYROX = {
+/* Remo e SkiErg sao estacoes oficiais das provas de corrida hibrida —
+   argumento de venda mais forte que o subtitle generico do catalogo (que segue
+   valendo nas LPs). Cada um com angulo diferente para nao soar repetido na
+   mesma conversa. ATENCAO: "HYROX" e marca registrada de terceiro e nao pode
+   aparecer em conteudo nosso — citamos as provas que a BRAVE patrocina
+   (UAIROX e HTC) ou o termo generico "corrida hibrida". */
+const CORRIDA_HIBRIDA = {
   remo: {
-    subtitle: 'O ergômetro oficial das provas de HYROX e do Cross Training — pronto para transformar suas aulas de endurance.',
-    bullet: 'Estação oficial de prova do HYROX — treine seus alunos no equipamento da competição',
+    subtitle: 'O ergômetro oficial das provas de corrida híbrida e do Cross Training — pronto para transformar suas aulas de endurance.',
+    bullet: 'Estação oficial das provas UAIROX (Hybrid RUN) e HTC (Fitness RUN) — treine seus alunos no equipamento da competição',
   },
   skierg: {
-    subtitle: 'O simulador de esqui das provas de HYROX — o mais resistente e inovador do mercado.',
-    bullet: 'Estação oficial de prova do HYROX — a modalidade que mais cresce no mundo',
+    subtitle: 'O simulador de esqui das provas de corrida híbrida — o mais resistente e inovador do mercado.',
+    bullet: 'Estação oficial das provas UAIROX (Hybrid RUN) e HTC (Fitness RUN) — a modalidade que mais cresce no mundo',
   },
 };
 
 function mensagemErgo(p) {
-  const hy = HYROX[p.alias];
+  const hy = CORRIDA_HIBRIDA[p.alias];
   let specs = (p.specs || []).filter(Boolean);
   if (hy) {
-    // O bullet HYROX substitui o de Cross Training (que ja fica implicito no subtitle)
+    // O bullet da prova substitui o de Cross Training (que ja fica implicito no subtitle)
     specs = [hy.bullet, ...specs.filter((s) => !/cross training/i.test(s))];
   }
   return [
@@ -89,10 +93,10 @@ function mensagemErgo(p) {
 // tem video proprio, e video + texto devem casar (pedido do Leo em 2026-09-02).
 function mensagemSledImportado(p) {
   return [
-    '🛷 *Sled Importado — Medidas Oficiais HYROX 50kg*',
-    'Push e Pull: as estações 2 e 3 da prova, dentro do seu box.',
+    '🛷 *Sled Importado — Medidas Oficiais de Competição 50kg*',
+    'Push e Pull: as estações de força da prova, dentro do seu box.',
     '',
-    '✅ Medidas oficiais de competição HYROX',
+    '✅ Medidas oficiais — padrão UAIROX (Hybrid RUN) e HTC (Fitness RUN)',
     '✅ Serve para empurrar e puxar — 2 estações em 1',
     '✅ Tubo central em inox e grip nos tubos',
     '✅ Tubos removíveis para transporte fácil',
@@ -105,10 +109,10 @@ function mensagemSledImportado(p) {
 
 function mensagemSledNacional(p) {
   return [
-    '🛷 *Sled Nacional — Medidas Oficiais HYROX 25kg*',
+    '🛷 *Sled Nacional — Medidas Oficiais de Competição 25kg*',
     'O sled da prova em versão nacional — mesma pegada, preço mais acessível.',
     '',
-    '✅ Medidas oficiais de competição HYROX',
+    '✅ Medidas oficiais — padrão UAIROX (Hybrid RUN) e HTC (Fitness RUN)',
     '✅ Serve para empurrar e puxar — 2 estações em 1',
     '✅ Pintura eletrostática de alta resistência',
     '✅ Tubos removíveis para transporte fácil',
@@ -121,10 +125,10 @@ function mensagemSledNacional(p) {
 
 function mensagemTurf(cheio, lanes, base) {
   const l = [
-    '🏟️ *TURF Oficial — Piso Oficial HYROX*',
+    '🏟️ *TURF Oficial — O Piso das Provas de Corrida Híbrida*',
     'O mesmo piso que o atleta encontra na prova: seu box pronto para treinos de sled, lunges e carries.',
     '',
-    '✅ O mesmo piso das provas oficiais de HYROX',
+    '✅ O mesmo piso das provas UAIROX (Hybrid RUN) e HTC (Fitness RUN)',
     "✅ Ideal para sled push/pull, lunges e farmer's carry",
     '✅ Transforma qualquer corredor em estação de treino',
   ];
@@ -134,15 +138,15 @@ function mensagemTurf(cheio, lanes, base) {
   return l.join('\n');
 }
 
-/* Sandbag: estacao 7 do HYROX (100m de lunges). O catalogo nao traz specs
+/* Sandbag: a estacao de lunges da prova (100m). O catalogo nao traz specs
    para esses itens, entao os argumentos vivem aqui — mesma linha editorial
    dos demais. Tres pesos numa mensagem so, como turf e grama. */
 function mensagemSandbag(s10, s20, s30) {
   const l = [
     '🎒 *Sandbag Hybrid Pro Series*',
-    'A estação 7 do HYROX: 100 metros de lunges com a carga nas costas.',
+    'A estação de lunges da prova: 100 metros com a carga nas costas.',
     '',
-    '✅ Estação oficial de prova do HYROX',
+    '✅ Estação oficial das provas UAIROX (Hybrid RUN) e HTC (Fitness RUN)',
     '✅ Alças reforçadas para lunges, carries e cleans',
     '✅ Material resistente à abrasão e ao uso diário',
     '✅ Enchimento uniforme — carga estável durante o movimento',
@@ -204,7 +208,7 @@ async function montarItens() {
   }
   if (por.turf || por.turflanes) {
       itens.push({
-        id: 'turf', titulo: '🏟️ Turf Oficial HYROX',
+        id: 'turf', titulo: '🏟️ Turf Oficial de Competição',
         texto: mensagemTurf(por.turf, por.turflanes, por.turfbase),
         video: por.turflanes?.video || por.turf?.video || '',
       });
