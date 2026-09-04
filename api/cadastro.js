@@ -87,6 +87,9 @@ async function upsertClienteLocal(dados) {
       cidade: dados.cidade,
       estado: dados.estado,
       cep: dados.cep,
+      /* 'interno' = cadastrado pelo consultor (colagem no orcamento), onde o
+         e-mail e opcional; o formulario do cliente segue exigindo tudo. */
+      ...(dados.origemCadastro ? { origemCadastro: dados.origemCadastro } : {}),
     };
 
     if (clienteExistente) {

@@ -7,6 +7,7 @@ import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, propostasP
 import { vendasPeriodo, sincronizarVendas } from './_bling-vendas.js';
 import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
 import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
+import { interpretarColagem } from './_cadastro-colar.js';
 import { processarFollowups } from './_followup-auto.js';
 import exportarContatos from './_bling-contatos-export.js';
 
@@ -57,6 +58,7 @@ export default async function handler(req, res) {
     case 'produtos_fss':        return produtosFss(req, res);
     case 'enviar_produto_cliente': return enviarProdutoCliente(req, res);
     case 'cadastro_prefill_criar': return criarPrefill(req, res);
+    case 'cadastro_interpretar':   return interpretarColagem(req, res);
     case 'enviar_mensagem_cliente': return enviarMensagemCliente(req, res);
     case 'sincronizar_vendas':  return sincronizarVendas(req, res);
     case 'processar_followups': return processarFollowups(req, res);
