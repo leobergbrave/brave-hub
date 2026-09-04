@@ -464,19 +464,31 @@ export default async function handler(req, res) {
         .select('id, codigo_sku, nome, bling_id, preco');
 
       const norm = (sku) => String(sku || '').trim().toUpperCase().replace(/,/g, '.');
+      /* Pelo NOME tambem: o SKU errado nem sempre e so ponto/virgula — veio
+         hifen fora do lugar (MESAFLEXLT- x MESAFLEX-LT) e simbolo trocado
+         (45° x 45º). Normalizando so letras e numeros, a copia redundante
+         aparece; produto de nome REALMENTE diferente (Bulgarian renomeada no
+         Bling, Fat Bar 1,50 x 1,80) fica de fora de proposito — esses exigem
+         decisao humana, nao exclusao automatica. */
+      const normNome = (n) => String(n || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
       const vinculadoPorSku = new Map();
+      const vinculadoPorNome = new Map();
       for (const p of todos || []) {
-        if (p.bling_id) {
-          const k = norm(p.codigo_sku);
-          if (k && !vinculadoPorSku.has(k)) vinculadoPorSku.set(k, p);
-        }
+        if (!p.bling_id) continue;
+        const k = norm(p.codigo_sku);
+        if (k && !vinculadoPorSku.has(k)) vinculadoPorSku.set(k, p);
+        const kn = normNome(p.nome);
+        if (kn && !vinculadoPorNome.has(kn)) vinculadoPorNome.set(kn, p);
       }
 
       const alvos = [];
       for (const p of todos || []) {
         if (p.bling_id) continue;
-        const gemeo = vinculadoPorSku.get(norm(p.codigo_sku));
-        if (gemeo) alvos.push({ ...p, gemeo: { id: gemeo.id, codigo_sku: gemeo.codigo_sku, bling_id: gemeo.bling_id } });
+        const gemeo = vinculadoPorSku.get(norm(p.codigo_sku)) || vinculadoPorNome.get(normNome(p.nome));
+        if (gemeo) alvos.push({ ...p, gemeo: { id: gemeo.id, codigo_sku: gemeo.codigo_sku, nome: gemeo.nome, bling_id: gemeo.bling_id } });
       }
 
       if (!confirmar) {
