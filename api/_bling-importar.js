@@ -449,6 +449,66 @@ export default async function handler(req, res) {
       });
     }
 
+    /* Remove as linhas DUPLICADAS que sobraram sem vinculo. O mesmo produto
+       foi cadastrado duas vezes com SKUs equivalentes (DBO27.5 x DBO27,5, as
+       vezes identicos), e como o Bling so aceita um produto local por produto
+       dele, o gemeo ja ficou com o bling_id — a copia orfa nunca vincula e,
+       se for escolhida no orcamento, a proposta sai sem codigo e sem imagem.
+       So apaga na base LOCAL: nada e enviado ao Bling, onde o produto continua
+       existindo (e por isso que o gemeo aponta para la).
+       Sem `confirmar: true` apenas simula e devolve o que seria apagado. */
+    if (mode === 'limpar-duplicados-orfaos') {
+      const { confirmar = false } = req.body || {};
+      const { data: todos } = await supabaseAdmin
+        .from('produtos')
+        .select('id, codigo_sku, nome, bling_id, preco');
+
+      const norm = (sku) => String(sku || '').trim().toUpperCase().replace(/,/g, '.');
+      const vinculadoPorSku = new Map();
+      for (const p of todos || []) {
+        if (p.bling_id) {
+          const k = norm(p.codigo_sku);
+          if (k && !vinculadoPorSku.has(k)) vinculadoPorSku.set(k, p);
+        }
+      }
+
+      const alvos = [];
+      for (const p of todos || []) {
+        if (p.bling_id) continue;
+        const gemeo = vinculadoPorSku.get(norm(p.codigo_sku));
+        if (gemeo) alvos.push({ ...p, gemeo: { id: gemeo.id, codigo_sku: gemeo.codigo_sku, bling_id: gemeo.bling_id } });
+      }
+
+      if (!confirmar) {
+        return res.status(200).json({ ok: true, simulacao: true, encontrados: alvos.length, alvos });
+      }
+
+      /* Modelos de orcamento apontam para produto por id (orcamentos_modelo.itens).
+         Apagar um produto em uso deixaria o item orfao no modelo — conferimos
+         antes e recusamos, em vez de quebrar em silencio. */
+      const { data: modelos } = await supabaseAdmin.from('orcamentos_modelo').select('id, nome, itens');
+      const idsAlvo = new Set(alvos.map((a) => a.id));
+      const emUso = [];
+      for (const m of modelos || []) {
+        for (const it of m.itens || []) {
+          const pid = it.produto_id || it.id;
+          if (idsAlvo.has(pid)) emUso.push({ modelo: m.nome, produto: pid });
+        }
+      }
+      if (emUso.length) {
+        return res.status(409).json({ ok: false, error: 'Ha duplicatas em uso em modelos de orcamento.', emUso });
+      }
+
+      let apagados = 0;
+      const erros = [];
+      for (const a of alvos) {
+        const { error } = await supabaseAdmin.from('produtos').delete().eq('id', a.id);
+        if (error) { if (erros.length < 5) erros.push(`${a.codigo_sku}: ${error.message}`); }
+        else apagados++;
+      }
+      return res.status(200).json({ ok: true, apagados, deTotal: alvos.length, backup: alvos, ...(erros.length ? { erros } : {}) });
+    }
+
     if (mode === 'inspecionar-sku') {
       const { sku } = req.body || {};
       if (!sku) return res.status(400).json({ ok: false, error: 'Informe o sku.' });
