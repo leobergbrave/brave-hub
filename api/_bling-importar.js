@@ -509,6 +509,65 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, apagados, deTotal: alvos.length, backup: alvos, ...(erros.length ? { erros } : {}) });
     }
 
+    /* Ultimo recurso para os orfaos: casar pelo NOME do produto. O SKU local
+       pode estar digitado errado — a Linha Light chegou com o hifen fora do
+       lugar (EXT-LT virou EXTLT-, ABD-ADU-LT virou ABD-ADULT-), e por isso a
+       busca por codigo nunca achava. Casa so quando o nome normalizado bate em
+       UM unico produto do Bling; ambiguidade fica de fora, para nao vincular o
+       produto errado. Corrige o SKU junto, senao o erro volta na proxima
+       importacao. Simula por padrao. */
+    if (mode === 'vincular-por-nome') {
+      const { confirmar = false } = req.body || {};
+      const { data: orfaos } = await supabaseAdmin
+        .from('produtos')
+        .select('id, codigo_sku, nome')
+        .is('bling_id', null);
+      if (!orfaos?.length) return res.status(200).json({ ok: true, orfaos: 0, pares: [] });
+
+      const lista = await fetchProdutosLista(token, 30, false);
+      const norm = (s) => String(s || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+      const porNome = new Map();
+      for (const b of lista) {
+        const k = norm(b.nome);
+        if (!k) continue;
+        if (!porNome.has(k)) porNome.set(k, []);
+        porNome.get(k).push(b);
+      }
+
+      const pares = [];
+      const ambiguos = [];
+      const semPar = [];
+      for (const local of orfaos) {
+        const cands = porNome.get(norm(local.nome)) || [];
+        if (cands.length === 1) {
+          pares.push({
+            id: local.id,
+            de: { sku: local.codigo_sku, nome: local.nome },
+            para: { sku: cands[0].codigo, blingId: cands[0].id, nome: cands[0].nome },
+          });
+        } else if (cands.length > 1) ambiguos.push({ nome: local.nome, candidatos: cands.length });
+        else semPar.push(local.codigo_sku || local.nome);
+      }
+
+      if (!confirmar) {
+        return res.status(200).json({ ok: true, simulacao: true, pares, ambiguos, semPar });
+      }
+
+      let aplicados = 0;
+      const erros = [];
+      for (const p of pares) {
+        const patch = { bling_id: p.para.blingId };
+        if (p.para.sku && String(p.para.sku).trim()) patch.codigo_sku = String(p.para.sku).trim();
+        const { error } = await supabaseAdmin.from('produtos').update(patch).eq('id', p.id);
+        if (error) { if (erros.length < 8) erros.push(`${p.de.sku}: ${error.message}`); }
+        else aplicados++;
+      }
+      return res.status(200).json({ ok: true, aplicados, deTotal: pares.length, pares, ambiguos, semPar, ...(erros.length ? { erros } : {}) });
+    }
+
     if (mode === 'inspecionar-sku') {
       const { sku } = req.body || {};
       if (!sku) return res.status(400).json({ ok: false, error: 'Informe o sku.' });
