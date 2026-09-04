@@ -15,6 +15,27 @@ export const RAPIDAS = [
     texto: 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?',
   },
   {
+    /* Apresentacao institucional: usada com lead frio, que ainda nao sabe quem
+       e a BRAVE. Os numeros vem do perfil oficial (@bravefitnessbr) e das
+       credenciais do site — nada aqui pode ser estimativa. */
+    id: 'apresentacao', titulo: '🦁 Apresentar a BRAVE',
+    texto: [
+      '🦁 *BRAVE — Equipamentos Fitness*',
+      'O parceiro do empresário fitness desde 2020.',
+      '',
+      '🏆 *Patrocinadora oficial dos maiores campeonatos do país:*',
+      '• Copa SUR de CrossFit — 3 edições seguidas',
+      '• TCB — The CrossFit Games Brasil',
+      '• Powered by Coffee',
+      '• HYROX World Championship 2026',
+      '',
+      'Equipamento que aguenta a pressão do pódio aguenta a rotina do seu box — é o mesmo padrão que entregamos pra você.',
+      '',
+      '🇧🇷 +3.000 negócios fitness equipados no Brasil',
+      '📸 instagram.com/bravefitnessbr — 56 mil pessoas acompanham nossas entregas',
+    ].join('\n'),
+  },
+  {
     id: 'cadastro', titulo: '📋 Pedir cadastro',
     texto: 'Para realizar seu orçamento personalizado, por favor preencha esse cadastro\nhttps://brave-hub-two.vercel.app/cadastro\nMe avise quando finalizar',
   },

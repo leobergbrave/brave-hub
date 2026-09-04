@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.6
+// @version      3.7
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.6'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.7'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -373,6 +373,7 @@
      catálogo; aqui só listamos, baixamos o vídeo e escrevemos o texto.
      Cache por sessão da aba: o catálogo muda pouco durante o expediente. */
   let produtosCache = null;
+  let rapidasServidor = [];   // mensagens prontas vindas do HUB
 
   async function carregarProdutos() {
     if (produtosCache) return produtosCache;
@@ -380,7 +381,18 @@
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'catálogo indisponível');
     produtosCache = j.itens || [];
+    rapidasServidor = j.rapidas || [];
     return produtosCache;
+  }
+
+  /* Mensagens prontas que o HUB serve e o painel ainda nao tem (a apresentacao
+     institucional, por exemplo). Ficam no servidor para que mudar o texto nao
+     obrigue a reinstalar o script — as locais seguem locais porque dependem da
+     tela (nome do contato, link de cadastro com os dados ja preenchidos). */
+  async function extrasDoServidor() {
+    const locais = new Set(MENSAGENS_RAPIDAS.map((m) => m.id).filter(Boolean));
+    try { await carregarProdutos(); } catch (_) { return []; }
+    return rapidasServidor.filter((m) => !locais.has(m.id));
   }
 
   async function montarProdutos() {
@@ -557,7 +569,7 @@
      texto pode ser funcao: avaliada no clique, com o contato aberto na tela. */
   const MENSAGENS_RAPIDAS = [
     {
-      titulo: '👋 Abertura',
+      id: 'abertura', titulo: '👋 Abertura',
       texto: () => {
         const nome = acharPrimeiroNome();
         ultimoNomeAchado = nome; // o status conta se achou — visibilidade sem DevTools
@@ -567,7 +579,7 @@
       },
     },
     {
-      titulo: '📋 Pedir cadastro',
+      id: 'cadastro', titulo: '📋 Pedir cadastro',
       /* Gera um link com token: a pagina /cadastro busca nome/telefone/e-mail
          pelo token e preenche sozinha — o cliente completa so CPF e endereco.
          Sem dados na tela ou HUB fora do ar, cai no link generico de sempre. */
@@ -596,8 +608,7 @@
     linha.textContent = 'Mensagens prontas';
     linha.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px';
     painelEl.appendChild(linha);
-    for (const m of MENSAGENS_RAPIDAS) {
-      painelEl.appendChild(botao(m.titulo, '#334155', async () => {
+    const criarBotao = (m) => botao(m.titulo, '#334155', async () => {
         status(`⏳ Preparando ${m.titulo}...`);
         ultimoNomeAchado = null;
         const texto = typeof m.texto === 'function' ? await m.texto() : m.texto;
@@ -607,9 +618,17 @@
         status(ok ? `✅ ${m.titulo} escrita${extra} — revise e envie.` : '❌ Nao achei o campo de mensagem.',
           ok ? '#4ade80' : '#fca5a5');
         setTimeout(voltar, 4000);
-      }));
-    }
+    });
+
+    for (const m of MENSAGENS_RAPIDAS) painelEl.appendChild(criarBotao(m));
     painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
+
+    /* As do servidor entram quando chegam — o painel ja esta na tela e nao
+       pode esperar a rede para aparecer. */
+    extrasDoServidor().then((extras) => {
+      if (!painelEl.isConnected) return;  // painel ja foi remontado
+      for (const m of extras) painelEl.insertBefore(criarBotao(m), painelEl.lastChild);
+    });
   }
 
   /* Painel para contato sem orcamento: so os atalhos de mensagem. */
