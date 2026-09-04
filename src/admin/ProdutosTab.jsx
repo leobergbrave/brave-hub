@@ -39,6 +39,64 @@ const EditableCell = ({ value, onSave, type = "text", className = "", options = 
   );
 };
 
+/* ── Validação da importação por planilha ───────────────────────────────
+   Toda a bagunça que precisou ser limpa do catálogo em 04/09/2026 nasceu
+   aqui: cabeçalho de CSV virou produto ("codigo_sku"/"nome"/R$ 0), o `I`
+   maiúsculo foi digitado como `1` e `l` (AI1 virou Al1, DBO5 virou DB05),
+   o hífen mudou de lugar (EXT-LT virou EXTLT-) e um SKU veio com letras
+   gregas (ΕΙΧΟ2.0). Nada disso vinculava ao Bling — e item sem vínculo sai
+   na proposta sem código e sem imagem. Agora a linha suspeita é barrada
+   ANTES de gravar, com o motivo na tela. */
+
+const CABECALHOS = ['codigo_sku', 'sku', 'codigo', 'código', 'nome', 'produto', 'preco', 'preço', 'descricao', 'descrição'];
+
+const semAcentos = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/* Confundíveis: o olho não distingue I de l de 1, nem O de 0. Reduzindo os
+   três a um só símbolo, "Al1" e "AI1" colidem — e a duplicata aparece. */
+const skuConfundivel = (sku) => semAcentos(sku).toUpperCase()
+  .replace(/[IL1|]/g, '1')
+  .replace(/[O0]/g, '0')
+  .replace(/[^A-Z0-9]/g, '');
+
+const nomeNormalizado = (n) => semAcentos(n).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function validarLinha(linha, existentes, vistosNoLote) {
+  const sku = String(linha.codigo_sku || '').trim();
+  const nome = String(linha.nome || '').trim();
+
+  if (!sku) return 'sem código (SKU)';
+  if (CABECALHOS.includes(sku.toLowerCase()) || CABECALHOS.includes(nome.toLowerCase())) {
+    return 'parece o cabeçalho da planilha, não um produto';
+  }
+  if (nome.length < 3) return 'nome vazio ou curto demais';
+  if (/\s/.test(sku)) return `SKU com espaço ("${sku}") — remova o espaço`;
+  // Fora de A-Z 0-9 . , - / _ : pega letra grega/cirílica colada de outro teclado
+  if (/[^A-Za-z0-9.,\-/_]/.test(sku)) return `SKU com caractere inválido ("${sku}") — parece letra de outro alfabeto`;
+  if (/^-|-$|\s-|-\s/.test(sku)) return `SKU com hífen fora do lugar ("${sku}")`;
+  /* R$ 0,10 num equipamento e erro de digitacao, nao promocao — foi assim
+     que o "Luminoso Brave" entrou no catalogo. O item mais barato aqui
+     custa dezenas de reais, entao abaixo de R$ 1 e sempre engano. */
+  if (!(Number(linha.preco) >= 1)) return `preço inválido (R$ ${linha.preco}) — confira a coluna de preço`;
+
+  const conf = skuConfundivel(sku);
+  const nomeN = nomeNormalizado(nome);
+
+  const igualNoLote = vistosNoLote.find((v) => v.conf === conf || v.nomeN === nomeN);
+  if (igualNoLote) return `repetido na própria planilha (linha ${igualNoLote.linha})`;
+
+  const jaExiste = existentes.find((p) => skuConfundivel(p.codigo_sku) === conf);
+  if (jaExiste) {
+    return jaExiste.codigo_sku === sku
+      ? `SKU ${sku} já existe no catálogo`
+      : `já existe como ${jaExiste.codigo_sku} — provável erro de digitação (I/l/1 ou O/0)`;
+  }
+  const mesmoNome = existentes.find((p) => nomeNormalizado(p.nome) === nomeN);
+  if (mesmoNome) return `já existe com esse nome (${mesmoNome.codigo_sku})`;
+
+  return null;
+}
+
 export default function ProdutosTab() {
   const [produtos, setProdutos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +106,7 @@ export default function ProdutosTab() {
   const [saving, setSaving] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [csvText, setCsvText] = useState('');
+  const [csvAnalise, setCsvAnalise] = useState(null);  // { validas, problemas }
   const [showCsv, setShowCsv] = useState(false);
   const [categorias, setCategorias] = useState([]);
   const [subcategorias, setSubcategorias] = useState([]);
@@ -169,36 +228,56 @@ export default function ProdutosTab() {
     load();
   };
 
-  const handleCsvImport = async () => {
-    if (!csvText.trim()) return;
-    setSaving(true);
-    const lines = csvText.trim().split('\n');
-    const rows = [];
-    for (let i = 0; i < lines.length; i++) {
-      // Support either semicolon or comma as separator
-      const separator = lines[i].includes(';') ? ';' : ',';
-      const cols = lines[i].split(separator).map(c => c.trim());
-      if (cols.length < 3) continue;
-      
-      const precoStr = cols[2] || '0';
-      const pesoStr = cols[3] || '';
-      
-      const avistaStr = cols[6] || '';
-      const prazoStr = cols[7] || '';
-      rows.push({
-        codigo_sku: (cols[0] || '').replace(/^"|"$/g, '') || null,
-        nome: (cols[1] || '').replace(/^"|"$/g, ''),
-        preco: Number(precoStr.replace(',', '.')) || 0,
-        peso_kg: pesoStr && pesoStr !== '0' ? Number(pesoStr.replace(',', '.')) : null,
+  /* Analisa antes de gravar: separa o que entra do que precisa de olho. */
+  const analisarCsv = () => {
+    const linhas = csvText.trim().split('\n');
+    const validas = [];
+    const problemas = [];
+    const vistos = [];
+
+    for (let i = 0; i < linhas.length; i++) {
+      const bruta = linhas[i];
+      if (!bruta.trim()) continue;
+      const separador = bruta.includes(';') ? ';' : ',';
+      const cols = bruta.split(separador).map((c) => c.trim().replace(/^"|"$/g, ''));
+      if (cols.length < 3) {
+        problemas.push({ linha: i + 1, sku: cols[0] || '(vazio)', motivo: 'menos de 3 colunas' });
+        continue;
+      }
+
+      const item = {
+        codigo_sku: cols[0] || null,
+        nome: cols[1] || '',
+        preco: Number(String(cols[2] || '0').replace(',', '.')) || 0,
+        peso_kg: cols[3] && cols[3] !== '0' ? Number(cols[3].replace(',', '.')) : null,
         categoria: cols[4] || '',
         subcategoria: cols[5] || '',
-        preco_avista: avistaStr ? Number(avistaStr.replace(',', '.')) || null : null,
-        preco_prazo: prazoStr ? Number(prazoStr.replace(',', '.')) || null : null,
-      });
+        preco_avista: cols[6] ? Number(cols[6].replace(',', '.')) || null : null,
+        preco_prazo: cols[7] ? Number(cols[7].replace(',', '.')) || null : null,
+      };
+
+      const motivo = validarLinha(item, produtos, vistos);
+      if (motivo) {
+        problemas.push({ linha: i + 1, sku: item.codigo_sku || '(vazio)', nome: item.nome, motivo });
+      } else {
+        vistos.push({ linha: i + 1, conf: skuConfundivel(item.codigo_sku), nomeN: nomeNormalizado(item.nome) });
+        validas.push(item);
+      }
     }
-    if (rows.length > 0) {
-      await supabase.from('produtos').insert(rows);
+    setCsvAnalise({ validas, problemas });
+  };
+
+  /* Só grava o que passou. As linhas com problema ficam na tela para o
+     consultor corrigir na planilha — nunca entram "no melhor esforço". */
+  const confirmarImportCsv = async () => {
+    if (!csvAnalise?.validas.length) return;
+    setSaving(true);
+    const { error } = await supabase.from('produtos').insert(csvAnalise.validas);
+    if (error) {
+      alert('Erro ao importar: ' + error.message);
+    } else {
       setCsvText('');
+      setCsvAnalise(null);
       setShowCsv(false);
       load();
     }
@@ -466,10 +545,55 @@ export default function ProdutosTab() {
       {showCsv && (
         <div className="bg-dark-800/60 border border-purple-500/30 rounded-2xl p-5 mb-6">
           <p className="text-xs text-zinc-400 mb-2">Formato: <code className="text-purple-400">SKU, Nome, Preço, Peso, Categoria, Subcategoria, À Vista, A Prazo</code> (separado por vírgula ou ponto e vírgula)</p>
-          <textarea value={csvText} onChange={e => setCsvText(e.target.value)} rows={5} placeholder="BIKE01, BikeErg Concept 2, 18900, 30, Cardio" className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 mb-3 font-mono" />
-          <button onClick={handleCsvImport} disabled={saving} className="flex items-center gap-2 bg-purple-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-purple-500 transition-all cursor-pointer disabled:opacity-50">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Importar
-          </button>
+          <textarea value={csvText} onChange={e => { setCsvText(e.target.value); setCsvAnalise(null); }} rows={5} placeholder="BIKE01, BikeErg Concept 2, 18900, 30, Cardio" className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-purple-500/50 mb-3 font-mono" />
+
+          {!csvAnalise ? (
+            <button onClick={analisarCsv} disabled={!csvText.trim()} className="flex items-center gap-2 bg-purple-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-purple-500 transition-all cursor-pointer disabled:opacity-50">
+              <Search className="w-4 h-4" /> Conferir planilha
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5 text-green-400 font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {csvAnalise.validas.length} prontas para importar
+                </span>
+                {csvAnalise.problemas.length > 0 && (
+                  <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+                    <AlertTriangle className="w-3.5 h-3.5" /> {csvAnalise.problemas.length} barradas
+                  </span>
+                )}
+              </div>
+
+              {csvAnalise.problemas.length > 0 && (
+                <div className="bg-amber-500/5 border border-amber-500/25 rounded-xl p-3 max-h-52 overflow-auto">
+                  <p className="text-[11px] text-amber-300 font-semibold mb-2">
+                    Estas linhas não serão gravadas — corrija na planilha e confira de novo:
+                  </p>
+                  <ul className="space-y-1">
+                    {csvAnalise.problemas.map((p, i) => (
+                      <li key={i} className="text-[11px] text-zinc-300 leading-snug">
+                        <span className="text-zinc-500">linha {p.linha}</span>{' · '}
+                        <span className="font-mono text-amber-200">{p.sku}</span>
+                        {p.nome ? <span className="text-zinc-500"> ({p.nome.slice(0, 34)})</span> : null}
+                        {' — '}{p.motivo}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={confirmarImportCsv} disabled={saving || !csvAnalise.validas.length}
+                  className="flex items-center gap-2 bg-purple-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-purple-500 transition-all cursor-pointer disabled:opacity-50">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  Importar {csvAnalise.validas.length} {csvAnalise.validas.length === 1 ? 'produto' : 'produtos'}
+                </button>
+                <button onClick={() => setCsvAnalise(null)} className="text-xs text-zinc-400 border border-dark-600 rounded-xl px-4 hover:text-white cursor-pointer">
+                  Revisar texto
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
