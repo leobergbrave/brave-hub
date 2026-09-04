@@ -298,6 +298,34 @@ Deno.serve(async (req) => {
       for (const lp of localProducts) {
         if (lp.bling_id) blingIdMap.set(lp.id, lp.bling_id);
       }
+
+      /* Rede de seguranca: produto sem vinculo iria para a proposta como TEXTO
+         LIVRE, e o Bling descarta o codigo e nao mostra imagem. Antes de
+         desistir, procuramos pelo SKU no Bling e guardamos o vinculo — assim o
+         cliente nunca recebe uma proposta capenga e a base se conserta sozinha
+         conforme os produtos sao usados. Falha aqui nao interrompe nada: cai no
+         comportamento antigo. */
+      for (const lp of localProducts) {
+        if (lp.bling_id || !String(lp.codigo_sku || '').trim()) continue;
+        try {
+          await sleep(300);
+          const sku = String(lp.codigo_sku).trim();
+          const busca = await fetchWithBlingAuth(
+            `https://api.bling.com.br/v3/produtos?codigos[]=${encodeURIComponent(sku)}&limite=10`,
+            { method: 'GET' },
+            supabaseClient,
+          );
+          if (!busca.ok) continue;
+          const achados = (await busca.json())?.data || [];
+          const exato = achados.find((b: any) => String(b.codigo || '').trim().toUpperCase() === sku.toUpperCase());
+          if (!exato?.id) continue;
+          blingIdMap.set(lp.id, exato.id);
+          await supabaseClient.from('produtos').update({ bling_id: exato.id }).eq('id', lp.id);
+          console.log('[sync-bling-proposal] vinculo criado na hora:', sku, '->', exato.id);
+        } catch (e) {
+          console.error('[sync-bling-proposal] falha ao vincular', lp.codigo_sku, e?.message);
+        }
+      }
     }
 
     // 4. Montar itens para a Proposta À VISTA
