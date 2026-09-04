@@ -367,12 +367,15 @@ export default async function handler(req, res) {
       };
 
       const novos = comCodigo.filter(b => !temLocal(String(b.codigo)));
-      // sem 'origem'/'bling_id': essas colunas podem não existir (mesmo fallback do upsertProduto)
+      /* bling_id e obrigatorio: sem ele a proposta manda o item como texto
+         livre e o Bling nao mostra codigo nem imagem. Era o que este modo
+         fazia — inseria so nome/SKU/preco/peso — e deixou 161 produtos orfaos. */
       const linhas = novos.map(b => ({
         nome: b.nome || 'Produto Bling',
         codigo_sku: String(b.codigo).trim(),
         preco: parseFloat(b.preco) || 0,
         peso_kg: pesoDoNome(b.nome),
+        bling_id: b.id || null,
       }));
 
       let inseridos = 0;
@@ -394,6 +397,58 @@ export default async function handler(req, res) {
 
     // Inspeção pontual: como o Bling devolve UM produto específico (por SKU)?
     // Usado pra diagnosticar variantes com preco=0 / peso trocado. Só leitura.
+    /* Vincula ao Bling os produtos locais que ficaram sem bling_id. Sem esse
+       vinculo a proposta sai com o item como TEXTO LIVRE — e o Bling descarta
+       o codigo e nao tem de onde tirar a imagem (era o defeito relatado em
+       04/09/2026: 161 dos 955 produtos orfaos, 29% dos orcamentos afetados).
+       Casa por SKU numa unica varredura da lista do Bling, em vez de uma
+       consulta por produto: 161 chamadas viravam minutos e estouravam o
+       limite de requisicoes. */
+    if (mode === 'vincular-blingid') {
+      const { data: orfaos } = await supabaseAdmin
+        .from('produtos')
+        .select('id, codigo_sku, nome')
+        .is('bling_id', null)
+        .not('codigo_sku', 'is', null);
+
+      const pendentes = (orfaos || []).filter((p) => (p.codigo_sku || '').trim());
+      if (!pendentes.length) return res.status(200).json({ ok: true, orfaos: 0, vinculados: 0, naoEncontrados: [] });
+
+      // Inclui inativos: produto arquivado no Bling continua valendo para
+      // propostas antigas, e vincular e melhor do que deixar como texto livre.
+      const lista = await fetchProdutosLista(token, 30, false);
+      const porSku = new Map();
+      for (const b of lista) {
+        const c = String(b.codigo || '').trim().toUpperCase();
+        if (c && b.id && !porSku.has(c)) porSku.set(c, b.id);
+      }
+      // O Bling e o HUB divergem em ponto/virgula no SKU (DBO17.5 vs DBO17,5)
+      const acharId = (sku) => {
+        const s = String(sku).trim().toUpperCase();
+        return porSku.get(s) || porSku.get(s.replace(/,/g, '.')) || porSku.get(s.replace(/\./g, ',')) || null;
+      };
+
+      let vinculados = 0;
+      const naoEncontrados = [];
+      const erros = [];
+      for (const local of pendentes) {
+        const blingId = acharId(local.codigo_sku);
+        if (!blingId) { naoEncontrados.push(local.codigo_sku); continue; }
+        const { error } = await supabaseAdmin.from('produtos').update({ bling_id: blingId }).eq('id', local.id);
+        if (error) { if (erros.length < 5) erros.push(`${local.codigo_sku}: ${error.message}`); }
+        else vinculados++;
+      }
+
+      return res.status(200).json({
+        ok: true,
+        orfaos: pendentes.length,
+        vinculados,
+        naoEncontrados: naoEncontrados.slice(0, 40),
+        totalNaoEncontrados: naoEncontrados.length,
+        ...(erros.length ? { erros } : {}),
+      });
+    }
+
     if (mode === 'inspecionar-sku') {
       const { sku } = req.body || {};
       if (!sku) return res.status(400).json({ ok: false, error: 'Informe o sku.' });
