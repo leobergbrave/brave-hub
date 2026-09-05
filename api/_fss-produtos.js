@@ -158,6 +158,29 @@ function mensagemSandbag(s10, s20, s30) {
   return l.join('\n');
 }
 
+/* Corda do sled: duas linhas (Preta importada e Cinza Oficial) x dois
+   comprimentos. As de 10 metros nao ficam em estoque — avisar do prazo aqui
+   evita a pergunta depois e a frustracao de prometer entrega rapida. */
+function mensagemCorda(preta10, preta15, cinza10, cinza15) {
+  const l = [
+    '🪢 *Sled Tech Rope 38mm*',
+    'A corda que puxa o sled sem serrar na mão nem desfiar no atrito.',
+    '',
+    '✅ 38mm — diâmetro que dá pegada firme no pull',
+    '✅ Ponteira de aço: engate rápido e resistente',
+    '✅ Comprimento de prova para puxada completa',
+  ];
+  const opcao = (p, rotulo, encomenda) => {
+    if (!p) return;
+    l.push('', `${rotulo}${encomenda ? ' _(sob encomenda 60 dias)_' : ''}`, linhaPreco(p.preco_avista, p.preco));
+  };
+  opcao(preta10, '⚫ *Preta — 10 metros*', true);
+  opcao(preta15, '⚫ *Preta — 15 metros*', false);
+  opcao(cinza10, '🩶 *Cinza (Oficial) — 10 metros*', true);
+  opcao(cinza15, '🩶 *Cinza (Oficial) — 15 metros*', false);
+  return l.join('\n');
+}
+
 function mensagemGrama(g10, g16) {
   const l = [
     '🌱 *Grama Sintética Premium Preta — 2 Raias*',
@@ -218,6 +241,14 @@ async function montarItens() {
         id: 'grama', titulo: '🌱 Grama Premium',
         texto: mensagemGrama(por.gramp10, por.gramp16),
         video: por.gramp10?.video || por.gramp16?.video || '',
+      });
+  }
+  if (por.c10imp || por.c15imp || por.c10cinza || por.c15cinza) {
+      itens.push({
+        id: 'corda', titulo: '🪢 Corda para Sled (Tech Rope)',
+        texto: mensagemCorda(por.c10imp, por.c15imp, por.c10cinza, por.c15cinza),
+        video: por.c15imp?.video || por.c10imp?.video || '',
+        foto: primeiraFoto(por.c15imp, por.c10imp, por.c15cinza, por.c10cinza),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
