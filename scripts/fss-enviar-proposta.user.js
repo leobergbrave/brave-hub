@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.7
+// @version      3.8
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.7'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.8'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -218,6 +218,16 @@
     return p;
   }
 
+  /* Tipo pelo proprio endereco: o painel anexa PDF, video e agora foto — dar
+     .mp4 a um JPEG faz o chat recusar ou mostrar arquivo quebrado. */
+  const TIPOS_MIDIA = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' };
+
+  function tipoDaUrl(url) {
+    const ext = (String(url).split('?')[0].split('.').pop() || '').toLowerCase();
+    return { ext, mime: TIPOS_MIDIA[ext] || 'application/octet-stream' };
+  }
+
   async function baixarComoArquivo(url, nome, tipo = 'application/pdf') {
     const r = await hubFetch(url, { credentials: 'omit' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -272,11 +282,16 @@
     return !!document.querySelector('input[type="file"]');
   }
 
-  function entregarAoChat(file) {
+  /* Aceita um arquivo ou varios: a corda vai com as duas cores, e mandar as
+     duas de uma vez (mesmo DataTransfer) evita depender de o chat aceitar um
+     segundo anexo depois que o primeiro entrou. */
+  function entregarAoChat(arquivos) {
+    const lista = Array.isArray(arquivos) ? arquivos : [arquivos];
+    const file = lista[0];
     // 1) campo de anexo do proprio chat (o ultimo costuma ser o da conversa aberta)
     const inputs = [...document.querySelectorAll('input[type="file"]')];
-    /* O filtro de accept vale para qualquer tipo que anexamos (PDF ou vídeo):
-       comparamos com o grupo MIME e a extensão do arquivo em mãos. */
+    /* O filtro de accept vale para qualquer tipo que anexamos (PDF, vídeo ou
+       foto): comparamos com o grupo MIME e a extensão do arquivo em mãos. */
     const grupo = (file.type || '').split('/')[0];
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     const aceita = (i) => {
@@ -286,7 +301,7 @@
     const alvo = inputs.filter(aceita).pop();
     if (alvo) {
       const dt = new DataTransfer();
-      dt.items.add(file);
+      for (const f of lista) dt.items.add(f);
       alvo.files = dt.files;
       alvo.dispatchEvent(new Event('input', { bubbles: true }));
       alvo.dispatchEvent(new Event('change', { bubbles: true }));
@@ -297,7 +312,7 @@
     if (editor) {
       editor.focus();
       const dt = new DataTransfer();
-      dt.items.add(file);
+      for (const f of lista) dt.items.add(f);
       editor.dispatchEvent(new ClipboardEvent('paste', {
         bubbles: true, cancelable: true, clipboardData: dt,
       }));
@@ -451,19 +466,28 @@
     if (WA) return enviarProdutoWA(item);
     status(`⏳ Preparando ${item.titulo}...`);
     try {
-      if (item.video) {
-        const file = await baixarComoArquivo(item.video, `${item.id}.mp4`, 'video/mp4');
+      /* midias = video quando existe, senao as fotos do produto. Antes so o
+         video era anexado, e produto sem video (corda, sandbag) saia so com
+         texto — o cliente nao via o que estava comprando. */
+      const midias = (item.midias && item.midias.length ? item.midias : [item.video]).filter(Boolean);
+      const arquivos = [];
+      for (const [i, url] of midias.entries()) {
+        const { ext, mime } = tipoDaUrl(url);
+        arquivos.push(await baixarComoArquivo(url, `${item.id}${midias.length > 1 ? `-${i + 1}` : ''}.${ext || 'mp4'}`, mime));
+      }
+      if (arquivos.length) {
         if (!document.querySelector('input[type="file"]')) {
           status('⏳ Abrindo o anexo do chat...');
           await esperarCampoAnexo();
         }
-        entregarAoChat(file);
+        entregarAoChat(arquivos);
         await dormir(600); // o FSS remonta o editor logo após o anexo
       }
       const ok = escreverMensagem(item.texto);
-      const p = status(item.video
-        ? (ok ? '✅ Vídeo anexado e texto escrito — revise e envie.' : '⚠️ Vídeo anexado, mas não achei o campo de mensagem.')
-        : (ok ? '✅ Texto escrito (produto sem vídeo) — revise e envie.' : '❌ Não achei o campo de mensagem.'),
+      const quantos = arquivos.length;
+      const p = status(quantos
+        ? (ok ? `✅ ${quantos === 1 ? 'Mídia anexada' : `${quantos} mídias anexadas`} e texto escrito — revise e envie.` : '⚠️ Mídia anexada, mas não achei o campo de mensagem.')
+        : (ok ? '✅ Texto escrito (produto sem mídia) — revise e envie.' : '❌ Não achei o campo de mensagem.'),
         ok ? '#4ade80' : '#fca5a5');
       p.appendChild(botao('🎬 Outros produtos', '#334155', montarProdutos));
       p.appendChild(botao('↩︎ Voltar ao painel', '#334155', voltar));
