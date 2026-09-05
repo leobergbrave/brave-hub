@@ -248,7 +248,10 @@ async function montarItens() {
         id: 'corda', titulo: '🪢 Corda para Sled (Tech Rope)',
         texto: mensagemCorda(por.c10imp, por.c15imp, por.c10cinza, por.c15cinza),
         video: por.c15imp?.video || por.c10imp?.video || '',
-        foto: primeiraFoto(por.c15imp, por.c10imp, por.c15cinza, por.c10cinza),
+        /* A mensagem vende as duas cores — mandar so uma foto deixaria o
+           cliente escolhendo no escuro. Cinza (Oficial) primeiro por ser a
+           premium; a preta logo depois. */
+        fotos: [primeiraFoto(por.c15cinza, por.c10cinza), primeiraFoto(por.c15imp, por.c10imp)].filter(Boolean),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
@@ -260,11 +263,15 @@ async function montarItens() {
       });
   }
 
-  /* Anexo do envio: o video quando existe, senao a foto do produto. Produto
-     sem video (as sandbags, por ora) ia so com texto — e a imagem faz o
-     cliente ver o que esta comprando. `video` continua separado porque o
-     painel instalado baixa esse campo assumindo .mp4. */
-  for (const item of itens) item.midia = item.video || item.foto || '';
+  /* Anexo do envio: o video quando existe, senao a(s) foto(s) do produto.
+     Produto sem video (as sandbags, por ora) ia so com texto — e a imagem faz
+     o cliente ver o que esta comprando. `video` continua separado porque o
+     painel instalado baixa esse campo assumindo .mp4; `midia` idem, para as
+     versoes do painel anteriores a esta. */
+  for (const item of itens) {
+    item.midias = item.video ? [item.video] : (item.fotos || [item.foto]).filter(Boolean);
+    item.midia = item.midias[0] || '';
+  }
 
   return itens;
 }
@@ -319,8 +326,8 @@ export async function enviarProdutoCliente(req, res) {
 
     /* Midia primeiro, texto por ultimo — o texto (com precos) fica visivel na
        conversa. Midia e o video; nao havendo, a foto do produto. */
-    if (item.midia) {
-      const rv = await enviar({ type: 'file', value: item.midia });
+    for (const midia of item.midias || []) {
+      const rv = await enviar({ type: 'file', value: midia });
       if (!rv.ok) {
         return res.status(502).json({ ok: false, error: `BotConversa recusou a mídia (HTTP ${rv.status}): ${rv.texto.slice(0, 250)}` });
       }
@@ -331,8 +338,8 @@ export async function enviarProdutoCliente(req, res) {
       return res.status(502).json({ ok: false, error: `A mídia foi, mas o texto falhou (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` });
     }
 
-    console.log('[fss-produtos] envio BotConversa:', { id, tel, midia: !!item.midia });
-    return res.status(200).json({ ok: true, id, midia: !!item.midia });
+    console.log('[fss-produtos] envio BotConversa:', { id, tel, midias: (item.midias || []).length });
+    return res.status(200).json({ ok: true, id, midias: (item.midias || []).length });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
