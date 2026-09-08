@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.9
+// @version      3.10
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.9'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.10'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -100,11 +100,15 @@
       empurra(document.querySelector('#main footer [contenteditable="true"]')?.getAttribute('aria-label'));
       empurra(document.querySelector('#main header')?.innerText);
       /* 2) Contato salvo: varremos spans cujo texto INTEIRO e um telefone (e o
-         formato do numero no painel "Dados do contato"). Ignoramos a lista de
-         mensagens (#main) para nao pegar um numero citado numa conversa. */
+         formato do numero no painel "Dados do contato"). Ignoramos DUAS areas
+         para nao pegar numero de outra conversa:
+         - #main: a lista de mensagens (numero citado no papo);
+         - #pane-side: a LISTA DE CONVERSAS a esquerda, onde contato nao salvo
+           aparece com o numero como titulo (pegava o 1o da lista — visto com a
+           Joyce, que puxou o numero de outro contato do topo). */
       const RE_CHEIA = /^\+?55[\s.\-]?\(?\d{2}\)?[\s.\-]?9?\d{4}[\s.\-]?\d{4}$/;
       for (const s of document.querySelectorAll('span[title], span[dir="auto"]')) {
-        if (s.closest('#main')) continue;
+        if (s.closest('#main') || s.closest('#pane-side')) continue;
         const txt = (s.getAttribute('title') || s.textContent || '').trim();
         if (RE_CHEIA.test(txt)) empurra(txt);
       }
