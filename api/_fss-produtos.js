@@ -5,7 +5,7 @@
 // na hora, sem reinstalar o script no Tampermonkey.
 
 import { loadCatalog } from './_ergo-fetch.js';
-import { bcFetch } from './_proposta-pdf.js';
+import { bcFetch, telefoneWhatsappBR } from './_proposta-pdf.js';
 
 /* Mensagens de inicio de conversa — mesma fonte para o userscript do PC e a
    central mobile (/enviar). */
@@ -300,9 +300,8 @@ export async function enviarProdutoCliente(req, res) {
     if (!apiKey) return res.status(500).json({ ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel.' });
 
     const { telefone, id } = req.body || {};
-    let tel = String(telefone || '').replace(/\D/g, '');
-    if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
-    if (tel.length < 12) return res.status(400).json({ ok: false, error: 'Telefone inválido.' });
+    const tel = telefoneWhatsappBR(telefone);
+    if (!tel || tel.length < 12) return res.status(400).json({ ok: false, error: 'Telefone inválido.' });
 
     const item = (await montarItens()).find((i) => i.id === id);
     if (!item) return res.status(404).json({ ok: false, error: `Produto "${id}" não encontrado.` });

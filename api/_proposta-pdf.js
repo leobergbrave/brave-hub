@@ -89,6 +89,23 @@ const ORIGENS_AUTOMATICAS = ['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO'];
    ORIGENS_AUTOMATICAS, nada e enviado ao cliente. */
 const ORIGENS_SEM_CAPTURA = ['SOMENTE BLING'];
 
+/* Normaliza telefone brasileiro para o WhatsApp: 55 + DDD + 9 dígitos.
+   O 9º dígito do celular entra e sai conforme a origem — o FSS às vezes traz o
+   número "curto" de 10 dígitos (DDD + 8), sem o 9. Antes, o envio só colava o
+   55 na frente; sem o 9 o BotConversa mandava para um número que não é WhatsApp
+   e AINDA marcava como enviado, então a proposta do cliente sumia (visto com o
+   Thomas em 08/09: 4796291882 -> deveria ser 5547996291882). Aqui todo número
+   DDD + 8 dígitos cujo assinante começa em 6-9 (faixa de celular) ganha o 9;
+   fixo (2-5) fica como está. Retorna null se não der para formar número válido. */
+export function telefoneWhatsappBR(raw) {
+  let tel = String(raw || '').replace(/\D/g, '');
+  if (tel.startsWith('55') && tel.length >= 12) tel = tel.slice(2);
+  if (tel.length === 10 && /^[6-9]/.test(tel.slice(2))) {
+    tel = tel.slice(0, 2) + '9' + tel.slice(2);
+  }
+  return (tel.length === 10 || tel.length === 11) ? `55${tel}` : null;
+}
+
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 /* Resumo em texto dos valores, para o cliente ter os números na conversa sem
@@ -491,9 +508,8 @@ async function despacharPdfs(orc, automatico = false) {
     return { ok: false, error: 'Nenhum PDF capturado ainda. Imprima a proposta no Bling primeiro.' };
   }
 
-  let tel = String(orc.payload?.telefoneCliente || '').replace(/\D/g, '');
-  if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
-  if (tel.length < 12) {
+  const tel = telefoneWhatsappBR(orc.payload?.telefoneCliente);
+  if (!tel || tel.length < 12) {
     return { ok: false, error: 'Orçamento sem telefone válido do cliente.' };
   }
 
@@ -612,9 +628,8 @@ export async function enviarMensagemCore({ telefone, mensagem, media_url, client
   const apiKey = process.env.BOTCONVERSA_API_KEY;
   if (!apiKey) return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel.' };
 
-  let tel = String(telefone || '').replace(/\D/g, '');
-  if (tel.length === 10 || tel.length === 11) tel = `55${tel}`;
-  if (tel.length < 12) return { ok: false, error: 'Telefone inválido.' };
+  const tel = telefoneWhatsappBR(telefone);
+  if (!tel || tel.length < 12) return { ok: false, error: 'Telefone inválido.' };
   if (!String(mensagem || '').trim()) return { ok: false, error: 'Mensagem vazia.' };
 
   let subscriberId = null;
