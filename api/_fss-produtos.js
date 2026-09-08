@@ -248,8 +248,10 @@ const corDaBola = (nome) => {
   return m ? m[1] : '';
 };
 
-/* Lista longa (10-11 pesos): repetir "a vista + 10x" em cada linha viraria 22
-   linhas no WhatsApp. Mostramos o a vista por peso e o parcelamento uma vez. */
+/* Cada peso leva os DOIS valores, como no resto do painel. Mostrar so o a
+   vista e anunciar "10x" no rodape fazia o cliente dividir o numero errado: a
+   parcela sai do preco A PRAZO (R$ 419 = 10x de R$ 41,90), nao do a vista
+   (R$ 377). Preco do catalogo e o a prazo; a vista tem 10% de desconto. */
 function linhasDePeso(bolas, comCor) {
   return bolas
     .slice()
@@ -259,7 +261,7 @@ function linhasDePeso(bolas, comCor) {
       // (R$ 449, R$ 629) — centavos quebrados denunciam conta automatica.
       const avista = Math.round(Number(b.preco) * 0.9);
       const cor = comCor ? corDaBola(b.nome) : '';
-      return `⚖️ *${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${fmtBR(avista)}`;
+      return `⚖️ *${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${linhaPreco(avista, b.preco)}`;
     });
 }
 
@@ -273,10 +275,8 @@ function mensagemMedBallPro(bolas) {
     '✅ Superfície com pegada mesmo com a mão suada',
     '✅ Garantia de 1 ano',
     '',
-    '*Pesos e valores à vista:*',
+    '*Pesos e valores:*',
     ...linhasDePeso(bolas, false),
-    '',
-    '💳 Ou em até 10x sem juros',
   ].join('\n');
 }
 
@@ -290,10 +290,8 @@ function mensagemMedBallColorida(bolas) {
     '✅ Enchimento firme, sem deformar com o uso',
     '✅ Garantia de 1 ano',
     '',
-    '*Pesos e valores à vista:*',
+    '*Pesos e valores:*',
     ...linhasDePeso(bolas, true),
-    '',
-    '💳 Ou em até 10x sem juros',
   ].join('\n');
 }
 
