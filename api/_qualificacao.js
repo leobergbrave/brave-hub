@@ -184,7 +184,13 @@ async function achar({ telefone, clienteId }) {
   if (telefone) q = q.eq('telefone', telefone);
   else if (clienteId) q = q.eq('cliente_id', clienteId);
   else return null;
-  const { data } = await q;
+  const { data, error } = await q;
+  /* Erro de leitura NAO pode virar "ainda nao tem qualificacao". Se virasse, o
+     save seguinte acharia `anterior` vazio, faria INSERT em vez de UPDATE e
+     criaria uma segunda linha com apenas a resposta recem-digitada — que, por
+     ser a mais recente, passaria a ser a que o painel mostra. As respostas
+     anteriores sumiriam da tela sem ninguem apagar nada. */
+  if (error) throw new Error(`leitura da qualificação falhou: ${error.message}`);
   return data?.[0] || null;
 }
 
