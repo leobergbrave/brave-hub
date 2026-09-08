@@ -3,10 +3,11 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Shield, Package, Weight,
   Truck, Star, Award, Loader2, X, FolderOpen, CreditCard, Banknote,
-  Flame, Zap, CheckCircle2, Building2, ExternalLink,
+  Flame, Zap, CheckCircle2, Building2, ExternalLink, Phone,
 } from 'lucide-react';
 import { fetchProdutos, fetchRegrasFrete, calcularFreteComRegra, parseMediaUrl } from '../data';
 import { supabase } from '../lib/supabase';
+import { temPacotes, itensDoNivel, NIVEIS, NIVEL_PADRAO } from '../lib/pacotes';
 import { InstitutionalFooter } from '../components/BraveCredentials';
 import LogoBrave from '../components/LogoBrave';
 
@@ -158,6 +159,13 @@ export default function OrcamentoPage() {
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef(null);
 
+  // Estado do modal de captura de telefone
+  const [modalTelefone, setModalTelefone] = useState(null); // null | { produtoPendente }
+  const [inputTelefone, setInputTelefone] = useState('');
+  const [salvandoTelefone, setSalvandoTelefone] = useState(false);
+  const [telefoneCliente, setTelefoneCliente] = useState('');
+  const [nivelSel, setNivelSel] = useState(NIVEL_PADRAO);   // o Recomendado abre marcado
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -169,6 +177,8 @@ export default function OrcamentoPage() {
           const { data } = await supabase.from('orcamentos_salvos').select('*').eq('slug', slug).single();
           if (data) {
             setOrcamentoSalvo(data);
+            // Pré-carrega telefone salvo se existir
+            if (data.telefone_cliente) setTelefoneCliente(data.telefone_cliente);
             // Dispara webhook de abertura (apenas uma vez, edge function garante idempotência)
             if (!data.aberto) {
               supabase.functions.invoke('notificar-orcamento-aberto', { body: { slug } })
@@ -244,7 +254,11 @@ export default function OrcamentoPage() {
     });
   }, [doSave]);
 
-  const orcamento = useMemo(() => {
+  /* Antes isto era o useMemo `orcamento`. Virou funcao de UM nivel para que os
+     tres cartoes e o resumo la embaixo saiam do MESMO calculo — frete, peso e
+     descontos inclusos. Se o cartao usasse outra conta, os numeros divergiriam
+     na primeira mudanca de frete, e numero que nao bate destroi a proposta. */
+  const montarPacote = useCallback((nivelAlvo) => {
     try {
       if (!produtosDb.length) return null;
 
@@ -274,7 +288,11 @@ export default function OrcamentoPage() {
 
       if (!itensRaw || !itensRaw.length) return null;
 
-      const itensCompletos = itensRaw.map(itemRaw => {
+      // Orcamento sem pacotes (todos nivel 1, como os 864 ja salvos): passa inteiro.
+      const itensDoPacote = temPacotes(itensRaw) ? itensDoNivel(itensRaw, nivelAlvo) : itensRaw;
+      if (!itensDoPacote.length) return null;
+
+      const itensCompletos = itensDoPacote.map(itemRaw => {
         const prod = produtosDb.find(p => p.id === itemRaw.id);
         // Itens gerados nas Landing Pages (ex.: variantes de peso) não têm linha no
         // catálogo — nesse caso usamos os dados que vieram no próprio item (preço/peso/foto).
@@ -363,6 +381,27 @@ export default function OrcamentoPage() {
     }
   }, [searchParams, produtosDb, regrasFreteDb, orcamentoSalvo]);
 
+  const comPacotes = temPacotes(orcamentoSalvo?.payload?.itens || []);
+
+  /* Trocar de pacote e instantaneo na tela; o registro vai atras, sem bloquear.
+     Se a rede falhar o cliente nem percebe — o alerta e um ganho, nao um
+     requisito para ele conseguir olhar a proposta. */
+  const escolherPacote = useCallback((nivel) => {
+    setNivelSel(nivel);
+    setQtds({});   // as quantidades sao de OUTRA lista de itens; manter confundiria os totais
+    if (!orcamentoSalvo?.slug) return;
+    fetch('/api/bling?acao=pacote_escolhido', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: orcamentoSalvo.slug, nivel }),
+    }).catch(() => {});
+  }, [orcamentoSalvo]);
+  const pacotes = useMemo(
+    () => ({ 1: montarPacote(1), 2: montarPacote(2), 3: montarPacote(3) }),
+    [montarPacote]
+  );
+  const orcamento = comPacotes ? pacotes[nivelSel] : pacotes[3];
+
   // Orcamento with client-edited quantities applied
   const activeOrcamento = useMemo(() => {
     if (!orcamento || Object.keys(qtds).length === 0) return orcamento;
@@ -389,9 +428,8 @@ export default function OrcamentoPage() {
     return { ...orcamento, itens, pesoTotal, totalAvista, totalCartao, parcelaValor };
   }, [orcamento, qtds]);
 
-  // Cliente adiciona produto do catálogo das LPs: entra no payload salvo do
-  // orçamento (preço congelado da LP) e o Léo é avisado no WhatsApp.
-  const adicionarProdutoCliente = useCallback(async (novo) => {
+  // Executa de fato a adição do produto ao orçamento e dispara a notificação
+  const _executarAdicao = useCallback(async (novo, telCliente) => {
     if (!orcamentoSalvo) return;
     const id = 'cli:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     const nomeCompleto = novo.variante ? `${novo.nome} ${novo.variante}` : novo.nome;
@@ -414,9 +452,43 @@ export default function OrcamentoPage() {
         acao: 'orcamento-adicionado',
         slug, cliente: orcamentoSalvo.cliente, produto: nomeCompleto,
         valor: Number(novo.preco) || 0, link: window.location.href,
+        telefone_cliente: telCliente || '',
       }),
     }).catch(() => {});
   }, [orcamentoSalvo, slug]);
+
+  // Cliente adiciona produto do catálogo das LPs:
+  // Se já temos o telefone → adiciona direto.
+  // Se não temos → abre modal pedindo o número primeiro.
+  const adicionarProdutoCliente = useCallback((novo) => {
+    if (!orcamentoSalvo) return;
+    const telAtual = telefoneCliente || orcamentoSalvo?.telefone_cliente || '';
+    if (telAtual) {
+      _executarAdicao(novo, telAtual);
+    } else {
+      setModalTelefone({ produtoPendente: novo });
+      setInputTelefone('');
+    }
+  }, [orcamentoSalvo, telefoneCliente, _executarAdicao]);
+
+  // Confirmação do modal: salva telefone no Supabase e adiciona o produto
+  const confirmarTelefoneEAdicionar = useCallback(async () => {
+    if (!modalTelefone) return;
+    const telRaw = inputTelefone.replace(/\D/g, '');
+    if (telRaw.length < 10) return; // validação mínima
+    setSalvandoTelefone(true);
+    try {
+      await supabase
+        .from('orcamentos_salvos')
+        .update({ telefone_cliente: telRaw })
+        .eq('id', orcamentoSalvo.id);
+      setTelefoneCliente(telRaw);
+      await _executarAdicao(modalTelefone.produtoPendente, telRaw);
+    } finally {
+      setSalvandoTelefone(false);
+      setModalTelefone(null);
+    }
+  }, [modalTelefone, inputTelefone, orcamentoSalvo, _executarAdicao]);
 
   const handleNegociarProjeto = useCallback(() => {
     if (!activeOrcamento) return;
@@ -508,6 +580,45 @@ export default function OrcamentoPage() {
           2. LISTA DE EQUIPAMENTOS — Horizontal Rows
           ══════════════════════════════════════════ */}
       <section className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-8">
+
+        {/* Escada de tres pacotes. O Recomendado vem marcado e com selo: a
+            pesquisa do JOLT Effect mostra que 40-60% dos negocios B2B morrem em
+            "sem decisao" e que o antidoto e recomendacao explicita, nao mais
+            pressao. Tres opcoes com uma indicacao clara, e nao um cardapio. */}
+        {comPacotes && (
+          <div className="mb-8">
+            <p className="text-[11px] uppercase tracking-widest text-gray-400 font-bold mb-3">
+              Escolha o formato que faz sentido pra voce
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {NIVEIS.map((nv) => {
+                const pac = pacotes[nv.n];
+                if (!pac) return null;
+                const ativo = nivelSel === nv.n;
+                const indicado = nv.n === NIVEL_PADRAO;
+                return (
+                  <button key={nv.n} type="button" onClick={() => escolherPacote(nv.n)}
+                    className={`relative text-left rounded-2xl border-2 p-4 transition-all cursor-pointer ${
+                      ativo ? 'border-gray-900 bg-gray-900 text-white shadow-lg'
+                            : 'border-gray-200 bg-white text-gray-900 hover:border-gray-400'}`}>
+                    {indicado && (
+                      <span className={`absolute -top-2.5 left-4 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        ativo ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`}>
+                        Nossa indicacao
+                      </span>
+                    )}
+                    <p className="text-sm font-bold">{nv.nome}</p>
+                    <p className={`text-[10px] mt-0.5 ${ativo ? 'text-gray-300' : 'text-gray-500'}`}>{nv.legenda}</p>
+                    <p className="text-xl font-black mt-2 tracking-tight">{fmt(pac.totalAvista)}</p>
+                    <p className={`text-[10px] ${ativo ? 'text-gray-300' : 'text-gray-500'}`}>
+                      a vista · {pac.itens.length} {pac.itens.length === 1 ? 'item' : 'itens'}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Column headers (desktop) */}
         <div className="hidden sm:grid sm:grid-cols-[80px_1fr_auto_220px] items-center gap-4 px-4 pb-3 text-[10px] uppercase tracking-widest text-gray-400 font-bold border-b border-gray-200 mb-3">
@@ -776,6 +887,99 @@ export default function OrcamentoPage() {
           </div>
         );
       })()}
+      {/* ── Modal: Captura de Telefone do Cliente ── */}
+      {modalTelefone && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div
+            className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-7 flex flex-col gap-5"
+            style={{ boxShadow: '0 25px 60px rgba(0,0,0,0.25)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Botão fechar */}
+            <button
+              onClick={() => setModalTelefone(null)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+
+            {/* Ícone */}
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto">
+              <Phone className="w-7 h-7 text-emerald-600" />
+            </div>
+
+            {/* Texto */}
+            <div className="text-center">
+              <h3 className="text-gray-900 font-black text-lg leading-tight mb-1">
+                Informe seu WhatsApp
+              </h3>
+              <p className="text-zinc-500 text-sm leading-snug">
+                Para adicionarmos o produto e nosso especialista entrar em contato rapidamente com você.
+              </p>
+            </div>
+
+            {/* Produto sendo adicionado */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-center">
+              <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mb-0.5">Adicionando ao orçamento</p>
+              <p className="text-gray-900 font-bold text-sm truncate">
+                {modalTelefone.produtoPendente?.variante
+                  ? `${modalTelefone.produtoPendente.nome} ${modalTelefone.produtoPendente.variante}`
+                  : modalTelefone.produtoPendente?.nome}
+              </p>
+            </div>
+
+            {/* Input */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                Número do WhatsApp
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium select-none">🇧🇷 +55</span>
+                <input
+                  id="modal-telefone-input"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={15}
+                  value={inputTelefone}
+                  onChange={(e) => {
+                    // Máscara simples: (XX) XXXXX-XXXX
+                    const nums = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    let masked = nums;
+                    if (nums.length > 2) masked = `(${nums.slice(0,2)}) ${nums.slice(2)}`;
+                    if (nums.length > 7) masked = `(${nums.slice(0,2)}) ${nums.slice(2,7)}-${nums.slice(7)}`;
+                    setInputTelefone(masked);
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmarTelefoneEAdicionar(); }}
+                  placeholder="(48) 99999-9999"
+                  className="w-full bg-gray-50 border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 text-gray-900 text-base rounded-xl pl-16 pr-4 py-3.5 focus:outline-none placeholder:text-zinc-400 transition-all"
+                  autoFocus
+                />
+              </div>
+              {inputTelefone.replace(/\D/g, '').length > 0 && inputTelefone.replace(/\D/g, '').length < 10 && (
+                <p className="text-xs text-red-500 font-medium">Digite DDD + número completo</p>
+              )}
+            </div>
+
+            {/* Botão confirmar */}
+            <button
+              id="modal-telefone-confirmar"
+              onClick={confirmarTelefoneEAdicionar}
+              disabled={salvandoTelefone || inputTelefone.replace(/\D/g, '').length < 10}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-base rounded-2xl py-4 transition-all active:scale-[0.98] shadow-lg shadow-emerald-600/20"
+            >
+              {salvandoTelefone ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Adicionando...</>
+              ) : (
+                <><CheckCircle2 className="w-4 h-4" /> Confirmar e Adicionar</>
+              )}
+            </button>
+
+            <p className="text-[10px] text-center text-zinc-400 leading-relaxed -mt-2">
+              Seu número é usado apenas para o consultor entrar em contato sobre este orçamento. Não enviamos spam.
+            </p>
+          </div>
+        </div>
+      )}
 
 
     </div>

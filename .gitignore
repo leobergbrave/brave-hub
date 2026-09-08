@@ -27,3 +27,6 @@ dist-ssr
 
 .vercel
 .env*.local
+
+# Cookies de sessao do Bling capturados pelo userscript — segredo vivo, nunca versionar.
+sess.json

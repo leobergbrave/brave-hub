@@ -23,8 +23,29 @@ export default function MarketingTab({ onBadgeUpdate }) {
       
       // Calculate Disparos
       const { data: orcs } = await supabase.from('orcamentos_salvos').select('*').order('criado_em', { ascending: false });
+
       const activeTemplates = tData.filter(t => t.ativo).sort((a, b) => b.dias_delay - a.dias_delay);
       const now = new Date();
+      /* Data de inauguracao por telefone (8 ultimos digitos, mesma regra do
+         resto da tela). A fila daqui precisa ser IDENTICA a do piloto
+         automatico em api/_followup-auto.js — se as duas ordenarem diferente,
+         o Leo ve uma ordem na tela e o robo manda em outra. */
+      const { data: quals } = await supabase.from('qualificacoes')
+        .select('telefone, prazo_data')
+        .not('prazo_data', 'is', null)
+        .order('atualizado_em', { ascending: false });
+      const prazos = new Map();
+      for (const q of (quals || [])) {
+        const t8 = String(q.telefone || '').replace(/\D/g, '').slice(-8);
+        if (t8.length === 8 && !prazos.has(t8)) prazos.set(t8, q.prazo_data);
+      }
+      const diasAtePrazo = (prazoData) => {
+        if (!prazoData) return null;
+        const alvo = Date.parse(`${prazoData}T00:00:00Z`);
+        if (Number.isNaN(alvo)) return null;
+        const d = Math.round((alvo - now.getTime()) / 86400000);
+        return d >= 0 && d <= 90 ? d : null;   // JANELA_PRAZO_DIAS
+      };
       const disparos = [];
       const telefonesVistos = new Set(); // 1-A: deduplicar por telefone
 
@@ -70,12 +91,23 @@ export default function MarketingTab({ onBadgeUpdate }) {
             const adiado = o.payload?.follow_up_adiado_ate;
             const retornou = adiado && new Date(adiado) <= now &&
               (now - new Date(adiado)) < 48 * 60 * 60 * 1000;
-            disparos.push({ orcamento: o, template: t, retornou: !!retornou });
+            const prazoData = prazos.get(telNorm.slice(-8)) || null;
+            disparos.push({
+              orcamento: o, template: t, retornou: !!retornou,
+              prazoData, diasAteData: diasAtePrazo(prazoData),
+            });
             telefonesVistos.add(telNorm);
             break;
           }
         }
       }
+      // Mesma ordenacao de montarFila() em api/_followup-auto.js.
+      disparos.sort((a, b) => {
+        if (a.diasAteData === null && b.diasAteData === null) return 0;
+        if (a.diasAteData === null) return 1;
+        if (b.diasAteData === null) return -1;
+        return a.diasAteData - b.diasAteData;
+      });
       setPendingDisparos(disparos);
       onBadgeUpdate?.(disparos.length);
     }
@@ -445,6 +477,21 @@ export default function MarketingTab({ onBadgeUpdate }) {
                             {d.retornou && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
                                 🔔 Retornou
+                              </span>
+                            )}
+                            {/* Por que este lead esta no topo. Automacao que
+                                reordena a fila sem dizer o motivo nao da ao Leo
+                                como discordar dela. */}
+                            {d.diasAteData !== null && (
+                              <span
+                                title={`Data informada pelo cliente na qualificacao: ${d.prazoData}`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                  d.diasAteData <= 30
+                                    ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                                    : 'bg-orange-500/15 text-orange-300 border-orange-500/30'}`}>
+                                📅 {d.diasAteData === 0
+                                  ? 'inaugura hoje'
+                                  : `inaugura em ${d.diasAteData} dia${d.diasAteData === 1 ? '' : 's'}`}
                               </span>
                             )}
                           </div>

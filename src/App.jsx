@@ -7,6 +7,7 @@ import {
   Mic, Square, FileText, MapPinned, CreditCard, Percent, Bookmark, Save, RotateCcw
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
+import { sugerirNiveis, nivelDoItem, temPacotes, itensDoNivel, NIVEIS } from './lib/pacotes';
 import {
   fetchProdutos, fetchRegrasFrete, extrairEstadosEZonas,
   calcularFreteComRegra, formatCurrency, formatWeight, parseMediaUrl
@@ -248,6 +249,7 @@ export default function App() {
             quantidade: itemSalvo.quantidade ?? itemSalvo.q ?? 1,
             descontoAvistaItem: itemSalvo.descontoAvistaItem || 0,
             descontoCartaoItem: itemSalvo.descontoCartaoItem || 0,
+            nivel: nivelDoItem(itemSalvo),
           };
         });
         setItens(itensCarregados);
@@ -462,6 +464,41 @@ export default function App() {
     setItens((prev) => prev.map((i) => (i.id === id ? { ...i, quantidade: novaQuantidade } : i)));
   }, []);
 
+  /* Pacotes: o Leo aplica a sugestao e ajusta o que discordar (modo hibrido,
+     escolhido em 08/09/2026). A regra de divisao vive em lib/pacotes.js. */
+  /* Qualificacao do cliente: AVISA, nunca bloqueia (decisao do Leo em
+     08/09/2026). O Gerador ja tem uma trava dura — a do cadastro incompleto —
+     e uma segunda trava no mesmo botao transformaria a ferramenta em
+     obstaculo no meio do atendimento. */
+  const [qualif, setQualif] = useState(null);   // { chave, resumo }
+
+  const chaveQualif = useMemo(() => {
+    if (clienteSel?.id) return `cliente_id=${clienteSel.id}`;
+    const tel = String(telefoneCliente || '').replace(/[^0-9]/g, '');
+    return tel.length >= 10 ? `telefone=${tel}` : null;
+  }, [clienteSel, telefoneCliente]);
+
+  useEffect(() => {
+    if (!chaveQualif) return undefined;
+    let vivo = true;
+    fetch(`/api/bling?acao=qualificacao&${chaveQualif}`)
+      .then((r) => r.json())
+      .then((j) => { if (vivo && j.ok) setQualif({ chave: chaveQualif, resumo: j.resumo }); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [chaveQualif]);
+
+  /* Guardamos a chave JUNTO com o resumo e comparamos na hora de mostrar, em vez
+     de limpar o estado quando o cliente troca. Limpar exigiria um setState
+     sincrono dentro do efeito (cascata de render), e — o que importa mais — abre
+     uma janela em que a resposta do cliente ANTERIOR ainda esta na tela do
+     cliente novo. Aviso de qualificacao trocado e pior que aviso nenhum. */
+  const qualifAtual = qualif && qualif.chave === chaveQualif ? qualif.resumo : null;
+
+  const handleDefinirNivel = useCallback((id, nivel) => {
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, nivel } : i)));
+  }, []);
+
   const handleIniciarEdicao = useCallback((item) => {
     setEditingItemId(item.id);
     setEditItemPrice(item.preco.toString());
@@ -629,7 +666,7 @@ export default function App() {
       const slug = `${slugBase}-${slugId}`;
 
       const payload = {
-        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, preco_avista: i.preco_avista || null, preco_prazo: i.preco_prazo || null, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, descontoCartaoItem: i.descontoCartaoItem })),
+        itens: itens.map((i) => ({ id: i.id, quantidade: i.quantidade, preco: i.preco, preco_avista: i.preco_avista || null, preco_prazo: i.preco_prazo || null, nome: i.nome, peso_kg: i.peso_kg, url_imagem: i.url_imagem, codigo_sku: i.codigo_sku, descontoAvistaItem: i.descontoAvistaItem, descontoCartaoItem: i.descontoCartaoItem, nivel: nivelDoItem(i) })),
         estado,
         zona,
         telefoneCliente,
@@ -674,9 +711,20 @@ export default function App() {
         showToastMessage(`⚠️ Origem ${origemFinal} sem telefone do cliente — os PDFs não terão para onde ir.`, true);
       }
       
+      /* Ao Bling vai UM pacote, o Recomendado — nunca os três.
+         O HUB já emite duas propostas por orçamento (à vista + a prazo), o que
+         dá ao Léo um fator de duplicação de 2,36x contra 1,53x da Laís e joga
+         a conversão MEDIDA dele de 19,5% para 8,3% (análise de 08/09/2026).
+         Mandar três pacotes levaria esse fator para ~7x: resolveríamos o
+         problema de venda e criaríamos um problema político maior. Quando o
+         cliente escolher outro pacote, atualizamos ESTE documento. */
+      const payloadBling = temPacotes(itens)
+        ? { ...payload, itens: payload.itens.filter((i) => nivelDoItem(i) <= 2) }
+        : payload;
+
       // Envia para a Bling e notifica o resultado
       supabase.functions.invoke('sync-bling-proposal', {
-        body: { cliente: nomeCliente, consultor: nomeConsultor, payload, clienteId: clienteSel?.id || null }
+        body: { cliente: nomeCliente, consultor: nomeConsultor, payload: payloadBling, clienteId: clienteSel?.id || null }
       }).then(({ data, error: blingErr }) => {
         if (blingErr) { showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true); return; }
         showToastMessage('Proposta enviada ao Bling com sucesso!');
@@ -1703,6 +1751,49 @@ export default function App() {
                     <p className="text-xs text-dark-500 mt-1">Selecione um produto e clique em "Adicionar"</p>
                   </div>
                 ) : (
+                  <>
+                  {itens.length >= 3 && (
+                    <div className="mb-3 rounded-xl border border-dark-700/60 bg-dark-900/40 p-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                          <p className="text-[11px] font-bold text-white uppercase tracking-wider">Tres pacotes</p>
+                          <p className="text-[10px] text-dark-500 mt-0.5">
+                            {temPacotes(itens)
+                              ? 'O cliente escolhe. So o Recomendado vai ao Bling.'
+                              : 'Orcamento com 10+ itens converte 8,4%. Em escada de 3 opcoes, o cliente tem um degrau para dizer sim.'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          <button onClick={() => setItens(sugerirNiveis(itens))}
+                            className="flex items-center gap-1 bg-neon/10 text-neon text-[10px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-neon/20 transition-colors cursor-pointer">
+                            <Sparkles className="w-3 h-3" /> Sugerir divisao
+                          </button>
+                          {temPacotes(itens) && (
+                            <button onClick={() => setItens(itens.map((i) => ({ ...i, nivel: 1 })))}
+                              className="flex items-center gap-1 bg-dark-700 text-zinc-400 text-[10px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-dark-600 transition-colors cursor-pointer">
+                              <RotateCcw className="w-3 h-3" /> Desfazer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {temPacotes(itens) && (
+                        <div className="grid grid-cols-3 gap-1.5 mt-2.5">
+                          {NIVEIS.map((nv) => {
+                            const sel = itensDoNivel(itens, nv.n);
+                            const totalNivel = sel.reduce((acc, i) => acc + (Number(i.preco) || 0) * (Number(i.quantidade) || 1), 0);
+                            return (
+                              <div key={nv.n} title={nv.legenda}
+                                className={`rounded-lg px-2 py-1.5 border ${nv.n === 2 ? 'border-neon/40 bg-neon/5' : 'border-dark-700 bg-dark-900/60'}`}>
+                                <p className={`text-[9px] font-bold uppercase tracking-wider ${nv.n === 2 ? 'text-neon' : 'text-dark-500'}`}>{nv.nome}</p>
+                                <p className="text-[11px] font-bold text-white mt-0.5">{formatCurrency(totalNivel)}</p>
+                                <p className="text-[9px] text-dark-500">{sel.length} {sel.length === 1 ? 'item' : 'itens'}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <ul className="space-y-3">
                     {itens.map((item, idx) => {
                       const semPeso = !item.peso_kg;
@@ -1750,6 +1841,19 @@ export default function App() {
 
                             {/* Subtotal */}
                             <p className="text-xs sm:text-sm font-bold text-neon shrink-0">{formatCurrency(item.preco * item.quantidade)}</p>
+
+                            {/* Pacote do item: Essencial / Recomendado / Completo */}
+                            {itens.length >= 3 && (
+                              <div className="shrink-0 flex items-center rounded-lg overflow-hidden border border-dark-700">
+                                {NIVEIS.map((nv) => (
+                                  <button key={nv.n} onClick={() => handleDefinirNivel(item.id, nv.n)}
+                                    title={`${nv.nome} - ${nv.legenda}`}
+                                    className={`w-6 h-6 text-[10px] font-bold transition-colors cursor-pointer ${nivelDoItem(item) === nv.n ? 'bg-neon text-dark-900' : 'text-dark-500 hover:bg-dark-700'}`}>
+                                    {nv.nome[0]}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
 
                             {/* Remove */}
                             <button onClick={() => handleRemover(item.id)} className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-dark-500 hover:bg-red-500/10 hover:text-red-400 transition-all cursor-pointer">
@@ -1855,6 +1959,7 @@ export default function App() {
                       );
                     })}
                   </ul>
+                  </>
                 )}
               </div>
 
@@ -1929,6 +2034,19 @@ export default function App() {
                     <span className="text-xl font-black text-neon">{formatCurrency(totalProjeto)}</span>
                   </div>
                 </div>
+                {qualifAtual && !qualifAtual.suficiente && itens.length > 0 && totalProjeto > 20000 && (
+                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                    <p className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Cliente pouco qualificado ({qualifAtual.respondidas}/{qualifAtual.total})
+                    </p>
+                    <p className="text-[10px] text-amber-200/70 mt-1 leading-relaxed">
+                      Acima de R$ 20 mil sua conversao cai de ~20% para 9,8%. Falta perguntar:{' '}
+                      {qualifAtual.faltando.map((f) => f.titulo.replace(/^[^ ]+ /, '')).join(', ')}.
+                      {' '}Da pra perguntar pelo painel do Tampermonkey, no proprio chat.
+                    </p>
+                  </div>
+                )}
                 <button id="btn-gerar-link" onClick={handleGerarLink} disabled={itens.length === 0}
                   className="w-full mt-3 flex items-center justify-center gap-2.5 bg-gradient-to-r from-orange-dim to-orange-accent text-white font-bold text-sm py-4 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-orange-accent/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none cursor-pointer">
                   <FileCheck2 className="w-5 h-5" />{editingSlug ? 'Regravar Orçamento (Edição)' : 'Gerar Orçamento e Propostas no Bling'}

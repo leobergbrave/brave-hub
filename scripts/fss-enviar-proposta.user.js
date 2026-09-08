@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.10
-// @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
+// @version      3.11
+// @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
 // @run-at       document-idle
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.10'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.11'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -641,6 +641,148 @@
     },
   ];
 
+  /* ── Qualificação: as 5 perguntas antes de orçar ──────────────────
+     Por que mora no painel, e nao numa tela do admin: a qualificacao acontece
+     NA CONVERSA. Se o Leo tiver que abrir outra aba para anotar, ele nao anota
+     — e a analise de 08/09/2026 mostrou que e justamente a falta disso que
+     derruba os orcamentos grandes (9,8% de conversao acima de R$ 20 mil contra
+     ~20% abaixo).
+
+     Uma pergunta por vez: o botao escreve UMA pergunta no campo de mensagem
+     para o Leo revisar e enviar. Despejar as cinco viraria formulario, e
+     comprador sobrecarregado escolhe "depois eu vejo". */
+  let emQualificacao = false;   // trava o remonte automatico de verificar()
+
+  const COR_SINAL = {
+    quente: '#f97316', multithread: '#a78bfa', preco: '#38bdf8',
+    marca: '#4ade80', risco: '#fca5a5',
+  };
+
+  async function montarQualificacao() {
+    const tel = acharTelefones()[0];
+    if (!tel) {
+      const p = status('❌ Nao achei o telefone desta conversa.', '#fca5a5');
+      p.appendChild(botao('↩︎ Voltar', '#334155', voltar));
+      return;
+    }
+
+    status('⏳ Carregando qualificação...');
+    let j;
+    try {
+      const r = await hubFetch(`${HUB}/api/bling?acao=qualificacao&telefone=${tel}`);
+      j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'o HUB recusou');
+    } catch (e) {
+      const p = status(`❌ ${e.message}`, '#fca5a5');
+      p.appendChild(botao('↩︎ Voltar', '#334155', voltar));
+      return;
+    }
+
+    emQualificacao = true;
+    const nome = acharPrimeiroNome() || j.nome || '';
+    const p = painel();
+    p.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.style.cssText = 'font-weight:700;font-size:12px;color:#e2e8f0';
+    p.appendChild(titulo);
+
+    const aviso = document.createElement('div');
+    aviso.style.cssText = 'font:600 10px/1.2 system-ui;color:#64748b;min-height:12px';
+    p.appendChild(aviso);
+
+    const sinaisEl = document.createElement('div');
+    sinaisEl.style.cssText = 'display:flex;flex-direction:column;gap:3px';
+
+    const pintar = (resumo) => {
+      titulo.textContent = `🎯 Qualificação${nome ? ' — ' + nome : ''}`
+        + ` (${resumo.respondidas}/${resumo.total})`;
+      sinaisEl.innerHTML = '';
+      for (const s of resumo.sinais || []) {
+        const d = document.createElement('div');
+        d.textContent = '• ' + s.texto;
+        d.style.cssText = 'font:600 10px/1.3 system-ui;color:' + (COR_SINAL[s.tipo] || '#94a3b8');
+        sinaisEl.appendChild(d);
+      }
+    };
+
+    /* Salvamento com atraso curto e por tecla (nao no blur): o painel pode ser
+       remontado por uma troca de tela do WhatsApp, e resposta digitada na
+       frente do cliente nao pode se perder. */
+    const pendentes = {};
+    let timer = null;
+
+    async function salvar() {
+      const envio = { ...pendentes };
+      for (const k of Object.keys(pendentes)) delete pendentes[k];
+      if (!Object.keys(envio).length) return;
+      aviso.textContent = '⏳ salvando...';
+      try {
+        const r = await hubFetch(`${HUB}/api/bling?acao=qualificacao_salvar`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: tel, nome: acharDadosContato().nome || nome, respostas: envio }),
+        });
+        const jr = await r.json();
+        if (!jr.ok) throw new Error(jr.error || 'o HUB recusou');
+        pintar(jr.resumo);
+        aviso.textContent = '✅ salvo';
+      } catch (e) {
+        aviso.textContent = '❌ nao salvou — ' + e.message;
+      }
+    }
+
+    const agendar = (chave, valor) => {
+      pendentes[chave] = valor;
+      clearTimeout(timer);
+      timer = setTimeout(salvar, 900);
+    };
+
+    for (const q of j.perguntas || []) {
+      const linha = document.createElement('div');
+      linha.style.cssText = 'display:flex;gap:6px;align-items:center';
+
+      const rot = document.createElement('span');
+      rot.textContent = q.titulo;
+      rot.title = q.porque;   // o "por que" fica no hover, sem ocupar o painel
+      rot.style.cssText = 'flex:1;font:600 11px/1.2 system-ui;color:#94a3b8;cursor:help';
+
+      const perguntar = document.createElement('button');
+      perguntar.type = 'button';
+      perguntar.textContent = '✍️';
+      perguntar.title = 'Escrever esta pergunta no chat';
+      perguntar.style.cssText = 'background:#0e7490;border:none;border-radius:6px;color:#fff;'
+        + 'cursor:pointer;padding:3px 7px;font-size:12px';
+      perguntar.onclick = () => {
+        const ok = escreverMensagem(q.pergunta);
+        perguntar.textContent = ok ? '✅' : '❌';
+        setTimeout(() => { perguntar.textContent = '✍️'; }, 2000);
+      };
+      linha.append(rot, perguntar);
+
+      const campo = document.createElement('textarea');
+      campo.value = (j.respostas || {})[q.chave] || '';
+      campo.placeholder = 'anote a resposta dele...';
+      campo.rows = 2;
+      campo.style.cssText = 'width:100%;box-sizing:border-box;background:#1e293b;'
+        + 'border:1px solid #334155;border-radius:6px;color:#e2e8f0;'
+        + 'font:500 11px/1.35 system-ui;padding:5px 6px;resize:vertical';
+      campo.oninput = () => agendar(q.chave, campo.value);
+
+      p.append(linha, campo);
+    }
+
+    p.appendChild(sinaisEl);
+    pintar(j.resumo);
+
+    p.appendChild(botao('↩︎ Voltar ao painel', '#334155', async () => {
+      clearTimeout(timer);
+      await salvar();          // o que estiver na tela vai junto ao sair
+      emQualificacao = false;
+      ultimoTelefone = null;   // obriga verificar() a reavaliar do zero
+      voltar();
+    }));
+  }
+
   function adicionarAtalhos(painelEl) {
     const linha = document.createElement('div');
     linha.textContent = 'Mensagens prontas';
@@ -660,6 +802,7 @@
 
     for (const m of MENSAGENS_RAPIDAS) painelEl.appendChild(criarBotao(m));
     painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
+    painelEl.appendChild(botao('🎯 Qualificar cliente', '#7c3aed', montarQualificacao));
 
     /* As do servidor entram quando chegam — o painel ja esta na tela e nao
        pode esperar a rede para aparecer. */
@@ -712,6 +855,8 @@
   }
 
   async function verificar() {
+    // Qualificacao aberta: nao remonta o painel por baixo de quem esta digitando.
+    if (emQualificacao) return;
     const tels = acharTelefones();
     const chave = tels.join(',');
     if (chave === ultimoTelefone) return; // mesma tela, ja avaliada

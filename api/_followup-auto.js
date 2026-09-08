@@ -51,6 +51,41 @@ async function lerEstado() {
 const salvarEstado = (st) => supabaseAdmin.storage.from(BUCKET)
   .upload(ESTADO, Buffer.from(JSON.stringify(st)), { upsert: true, contentType: 'application/json' });
 
+/* Janela em que a data de inauguracao passa a mandar na ordem da fila. Alem de
+   90 dias o cliente ainda nao esta decidindo; dentro dela, cada dia conta —
+   negocio fechado em ate 50 dias ganha ~47% das vezes contra ~20% depois disso
+   (Ebsta x Pavilion 2025, 655 mil oportunidades). */
+const JANELA_PRAZO_DIAS = 90;
+
+/* Dias ate a data marcada, ou null quando ela nao existe, ja passou ou esta
+   longe demais para pressionar. Data no passado NAO penaliza: pode ser resposta
+   velha, e rebaixar quem talvez tenha adiado a obra seria pior que ignorar. */
+function diasAtePrazo(prazoData, agora) {
+  if (!prazoData) return null;
+  const alvo = Date.parse(`${prazoData}T00:00:00Z`);
+  if (Number.isNaN(alvo)) return null;
+  const dias = Math.round((alvo - agora) / 86400000);
+  return dias >= 0 && dias <= JANELA_PRAZO_DIAS ? dias : null;
+}
+
+/* Datas de inauguracao por telefone. Casamos pelos 8 ultimos digitos, mesma
+   regra que o resto do arquivo ja usa para reconhecer quem comprou — DDI e o
+   nono digito entram e saem conforme a origem do cadastro. */
+async function prazosPorTelefone() {
+  const { data } = await supabaseAdmin.from('qualificacoes')
+    .select('telefone, prazo_data')
+    .not('prazo_data', 'is', null)
+    .order('atualizado_em', { ascending: false });
+  const mapa = new Map();
+  for (const q of (data || [])) {
+    const t8 = String(q.telefone || '').replace(/\D/g, '').slice(-8);
+    // Vem ordenado do mais recente para o mais antigo: o primeiro que aparece
+    // para um telefone e a resposta que vale.
+    if (t8.length === 8 && !mapa.has(t8)) mapa.set(t8, q.prazo_data);
+  }
+  return mapa;
+}
+
 /* Mesma elegibilidade da tela Follow Up LEADS (MarketingTab.load). Qualquer
    mudanca de regra deve valer nos dois lugares. */
 async function montarFila() {
@@ -74,6 +109,7 @@ async function montarFila() {
     }
   }
 
+  const prazos = await prazosPorTelefone();
   const agora = new Date();
   const fila = [];
   const vistos = new Set();
@@ -89,12 +125,29 @@ async function montarFila() {
     const enviados = o.payload?.marketing_sent || [];
     for (const t of ativos) {
       if (dias >= t.dias_delay && !enviados.includes(t.id)) {
-        fila.push({ orcamento: o, template: t });
+        const prazoData = prazos.get(telNorm.slice(-8)) || null;
+        fila.push({
+          orcamento: o, template: t, prazoData,
+          diasAteData: diasAtePrazo(prazoData, agora.getTime()),
+        });
         vistos.add(telNorm);
         break;
       }
     }
   }
+
+  /* Quem tem data marcada chegando vai na frente, do mais proximo ao mais
+     distante; o resto mantem a ordem de sempre (orcamento mais novo primeiro).
+     A ORDEM e a unica coisa que muda: o atraso do template, o teto diario e o
+     intervalo entre envios continuam valendo iguais para todo mundo. Furar
+     essas travas por urgencia e exatamente o caminho do banimento no WhatsApp
+     — o motivo pelo qual este motor existe com limite em primeiro lugar. */
+  fila.sort((a, b) => {
+    if (a.diasAteData === null && b.diasAteData === null) return 0;
+    if (a.diasAteData === null) return 1;
+    if (b.diasAteData === null) return -1;
+    return a.diasAteData - b.diasAteData;
+  });
   return fila;
 }
 
@@ -122,7 +175,12 @@ export async function processarFollowups(req, res) {
     const fila = await montarFila();
     if (!fila.length) return res.status(200).json({ ok: true, pulado: 'fila vazia' });
 
-    const { orcamento: o, template: t } = fila[0];
+    const { orcamento: o, template: t, diasAteData, prazoData } = fila[0];
+    /* Sem isso o Leo ve "mandei para a Joyce" e nao sabe por que ela passou na
+       frente — automacao que nao explica a propria escolha nao se corrige. */
+    const motivo = diasAteData === null
+      ? 'ordem normal'
+      : `data marcada em ${diasAteData} dia${diasAteData === 1 ? '' : 's'} (${prazoData})`;
     const mensagem = String(t.mensagem || '').replace(/{cliente}/g, o.cliente);
     const r = await enviarMensagemCore({
       cliente: o.cliente,
@@ -141,11 +199,11 @@ export async function processarFollowups(req, res) {
     // Falhou? Tambem espera o intervalo: martelar o mesmo lead em loop e pior.
     const gapMs = (GAP_MIN_MIN + Math.random() * (GAP_MAX_MIN - GAP_MIN_MIN)) * 60 * 1000;
     st.proximoEm = Date.now() + Math.round(gapMs);
-    st.ultimo = { cliente: o.cliente, template: t.nome, ok: r.ok, erro: r.error || null, em: new Date().toISOString() };
+    st.ultimo = { cliente: o.cliente, template: t.nome, ok: r.ok, erro: r.error || null, motivo, em: new Date().toISOString() };
     await salvarEstado(st);
 
     console.log('[followup-auto]', st.ultimo, `hoje: ${st.enviadosHoje}/${MAX_POR_DIA}`);
-    return res.status(200).json({ ok: true, enviado: r.ok, cliente: o.cliente, template: t.nome,
+    return res.status(200).json({ ok: true, enviado: r.ok, cliente: o.cliente, template: t.nome, motivo,
       erro: r.error || undefined, enviadosHoje: st.enviadosHoje, proximoEm: new Date(st.proximoEm).toISOString() });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
