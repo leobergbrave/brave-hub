@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.8
+// @version      3.9
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.8'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.9'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -85,18 +85,28 @@
     if (WA) {
       /* No WhatsApp o numero da conversa aparece no aria-label do campo de
          mensagem ("Digite uma mensagem para +55 37 9967-4991") e no cabecalho
-         quando o contato nao esta salvo. Contato salvo mostra so o nome —
-         nesse caso nao ha numero na tela. */
+         quando o contato NAO esta salvo. Contato salvo mostra so o nome no topo
+         — mas ao abrir "Dados do contato" (clicar no nome) o numero aparece no
+         painel lateral. Lemos esse painel tambem. */
       const achados = new Set();
-      const fontes = [
-        document.querySelector('#main footer [contenteditable="true"]')?.getAttribute('aria-label') || '',
-        document.querySelector('#main header')?.innerText || '',
-      ];
-      for (const t of fontes) {
-        for (const m of String(t).matchAll(/\+?55[\s.\-]?\(?\d{2}\)?[\s.\-]?9?\d{4}[\s.\-]?\d{4}/g)) {
+      const RE = /\+?55[\s.\-]?\(?\d{2}\)?[\s.\-]?9?\d{4}[\s.\-]?\d{4}/g;
+      const empurra = (t) => {
+        for (const m of String(t || '').matchAll(RE)) {
           const n = m[0].replace(/\D/g, '').replace(/^55/, '');
           if (n.length === 10 || n.length === 11) achados.add(n);
         }
+      };
+      // 1) Contato nao salvo: numero no campo de mensagem e no cabecalho.
+      empurra(document.querySelector('#main footer [contenteditable="true"]')?.getAttribute('aria-label'));
+      empurra(document.querySelector('#main header')?.innerText);
+      /* 2) Contato salvo: varremos spans cujo texto INTEIRO e um telefone (e o
+         formato do numero no painel "Dados do contato"). Ignoramos a lista de
+         mensagens (#main) para nao pegar um numero citado numa conversa. */
+      const RE_CHEIA = /^\+?55[\s.\-]?\(?\d{2}\)?[\s.\-]?9?\d{4}[\s.\-]?\d{4}$/;
+      for (const s of document.querySelectorAll('span[title], span[dir="auto"]')) {
+        if (s.closest('#main')) continue;
+        const txt = (s.getAttribute('title') || s.textContent || '').trim();
+        if (RE_CHEIA.test(txt)) empurra(txt);
       }
       return [...achados].slice(0, 4);
     }
@@ -437,7 +447,7 @@
   function enviarProdutoWA(item) {
     const tel = acharTelefones()[0];
     if (!tel) {
-      const p = status('❌ Não achei o número desta conversa (contato salvo mostra só o nome).', '#fca5a5');
+      const p = status('❌ Não achei o número desta conversa. Abra os "Dados do contato" (clique no nome no topo) e clique em enviar de novo.', '#fca5a5');
       p.appendChild(botao('↩︎ Voltar', '#334155', montarProdutos));
       return;
     }
