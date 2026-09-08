@@ -203,8 +203,16 @@ function mensagemGrama(g10, g16) {
    ate racks junto. Ficam em `produtos` (nao em combo_produtos): sao 21 itens,
    e duplica-los na lista curada poluiria o montador de combos e criaria duas
    verdades de preco. */
-const MEDBALL_PRO = ['M2P', 'M4P', 'M6P', 'M8P', 'M9P', 'M10P', 'M12P', 'M14P', 'M16P', 'M20P', 'M30P'];
-const MEDBALL_COR = ['M4L', 'M8C', 'M10C', 'M12C', 'M14C', 'M16C', 'M18B', 'M20C', 'M25B', 'M30C'];
+/* So os pesos em LB: a linha tem KG e LB ao mesmo tempo, e misturar as duas
+   unidades na mesma mensagem deixa o cliente sem base de comparacao (pedido do
+   Leo em 08/09). As de KG (M2P, M4P, M6P, M9P, M12P) seguem no catalogo e no
+   orcamento — so nao entram nesta mensagem. */
+const MEDBALL_PRO = ['M8P', 'M10P', 'M14P', 'M16P', 'M20P', 'M30P'];
+
+/* M25B (25LB Black) fora: custava R$ 269 a vista, abaixo da 20LB e ate da 8LB
+   — na lista o preco furado salta aos olhos. Volta quando o valor no catalogo
+   for corrigido. */
+const MEDBALL_COR = ['M4L', 'M8C', 'M10C', 'M12C', 'M14C', 'M16C', 'M18B', 'M20C', 'M30C'];
 
 async function buscarPorSku(skus) {
   try {
