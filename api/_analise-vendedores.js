@@ -73,6 +73,11 @@ async function pedidosDoVendedor(idVendedor, ini, fim, token) {
    devolvemos null e a tela mostra "-" em vez de um numero inventado. */
 async function propostasDoVendedor(idVendedor, ini, fim, token) {
   let total = 0;
+  /* Contar DOCUMENTOS nao compara vendedores de forma justa: o HUB gera duas
+     propostas por orcamento (a vista + a prazo), entao quem usa o HUB parece
+     orcar o dobro. Contamos tambem combinacoes distintas de contato+data — a
+     aproximacao de "orcamentos unicos" — para a conversao sair comparavel. */
+  const unicos = new Set();
   for (let pagina = 1; pagina <= 40; pagina++) {
     const url = `https://api.bling.com.br/v3/propostas-comerciais?dataInicial=${ini}&dataFinal=${fim}`
       + `&pagina=${pagina}&limite=100&idVendedor=${idVendedor}`;
@@ -80,10 +85,14 @@ async function propostasDoVendedor(idVendedor, ini, fim, token) {
     if (!r.ok) return null;
     const lista = (await r.json())?.data || [];
     total += lista.length;
+    for (const p of lista) {
+      const contato = p.contato?.id ?? p.contato?.nome ?? '?';
+      unicos.add(`${contato}|${String(p.data || '').slice(0, 10)}`);
+    }
     if (lista.length < 100) break;
     await sleep(350);
   }
-  return total;
+  return { documentos: total, unicos: unicos.size };
 }
 
 const mesDe = (data) => String(data || '').slice(0, 7);
@@ -137,13 +146,16 @@ export async function analiseVendedores(req, res) {
       const { pedidos, parcial } = await pedidosDoVendedor(v.id, ini, fim, token);
       if (parcial) algumParcial = true;
       await sleep(350);
-      const propostas = await propostasDoVendedor(v.id, ini, fim, token);
+      const prop = await propostasDoVendedor(v.id, ini, fim, token);
       const r = resumir(pedidos);
       resultado.push({
         ...v, ...r,
-        propostas,
+        propostas: prop?.documentos ?? null,
+        orcamentosUnicos: prop?.unicos ?? null,
         // Conversao so faz sentido com denominador: sem propostas, fica null.
-        conversao: propostas ? Math.round((r.pedidos / propostas) * 1000) / 10 : null,
+        conversao: prop?.documentos ? Math.round((r.pedidos / prop.documentos) * 1000) / 10 : null,
+        // A comparavel: vendas sobre orcamentos unicos, nao sobre documentos.
+        conversaoJusta: prop?.unicos ? Math.round((r.pedidos / prop.unicos) * 1000) / 10 : null,
       });
     }
 
