@@ -4,6 +4,7 @@
 // e nao no userscript, para que preco/caracteristicas editados no admin valham
 // na hora, sem reinstalar o script no Tampermonkey.
 
+import { createClient } from '@supabase/supabase-js';
 import { loadCatalog } from './_ergo-fetch.js';
 import { bcFetch, telefoneWhatsappBR } from './_proposta-pdf.js';
 
@@ -196,6 +197,98 @@ function mensagemGrama(g10, g16) {
   return l.join('\n');
 }
 
+/* ── Med Balls ──────────────────────────────────────────────────────────
+   Sao 39 linhas no catalogo, em familias sobrepostas — por isso a lista de
+   SKUs e explicita: um filtro por nome traria as Kids, as pretas de entrada e
+   ate racks junto. Ficam em `produtos` (nao em combo_produtos): sao 21 itens,
+   e duplica-los na lista curada poluiria o montador de combos e criaria duas
+   verdades de preco. */
+const MEDBALL_PRO = ['M2P', 'M4P', 'M6P', 'M8P', 'M9P', 'M10P', 'M12P', 'M14P', 'M16P', 'M20P', 'M30P'];
+const MEDBALL_COR = ['M4L', 'M8C', 'M10C', 'M12C', 'M14C', 'M16C', 'M18B', 'M20C', 'M25B', 'M30C'];
+
+async function buscarPorSku(skus) {
+  try {
+    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { data } = await supabase
+      .from('produtos')
+      .select('codigo_sku, nome, preco, url_imagem')
+      .in('codigo_sku', skus);
+    return data || [];
+  } catch (_) {
+    return [];   // sem catalogo a familia simplesmente nao aparece no menu
+  }
+}
+
+/* Ordena por peso REAL: a linha mistura KG e LB, e ordenar pelo numero cru
+   colocaria a de 30LB (13,6kg) antes da de 12KG. */
+function pesoEmKg(nome) {
+  const m = String(nome).match(/(\d+(?:[.,]\d+)?)\s*(KG|LB)/i);
+  if (!m) return 999;
+  const n = Number(m[1].replace(',', '.'));
+  return m[2].toUpperCase() === 'LB' ? n * 0.4536 : n;
+}
+
+/* Rotulo do peso como esta no catalogo (02KG, 20LB) — e o que o cliente vera
+   na proposta, entao inventar conversao aqui criaria divergencia. */
+const rotuloPeso = (nome) => {
+  const m = String(nome).match(/(\d+)\s*(KG|LB)/i);
+  return m ? `${Number(m[1])}${m[2].toUpperCase()}` : nome;
+};
+
+const corDaBola = (nome) => {
+  const m = String(nome).match(/-\s*([A-Za-zÀ-ú]+)\s*$/);
+  return m ? m[1] : '';
+};
+
+/* Lista longa (10-11 pesos): repetir "a vista + 10x" em cada linha viraria 22
+   linhas no WhatsApp. Mostramos o a vista por peso e o parcelamento uma vez. */
+function linhasDePeso(bolas, comCor) {
+  return bolas
+    .slice()
+    .sort((a, b) => pesoEmKg(a.nome) - pesoEmKg(b.nome))
+    .map((b) => {
+      // Reais inteiros: e como os precos a vista aparecem no catalogo
+      // (R$ 449, R$ 629) — centavos quebrados denunciam conta automatica.
+      const avista = Math.round(Number(b.preco) * 0.9);
+      const cor = comCor ? corDaBola(b.nome) : '';
+      return `⚖️ *${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${fmtBR(avista)}`;
+    });
+}
+
+function mensagemMedBallPro(bolas) {
+  return [
+    '🏐 *Medicine Ball Pro Series*',
+    'A bola de wall ball da linha de competição: costura reforçada e peso que não desanda no meio do WOD.',
+    '',
+    '✅ Costura reforçada — aguenta arremesso repetido na parede',
+    '✅ Enchimento firme, sem deformar com o uso',
+    '✅ Superfície com pegada mesmo com a mão suada',
+    '✅ Garantia de 1 ano',
+    '',
+    '*Pesos e valores à vista:*',
+    ...linhasDePeso(bolas, false),
+    '',
+    '💳 Ou em até 10x sem juros',
+  ].join('\n');
+}
+
+function mensagemMedBallColorida(bolas) {
+  return [
+    '🎨 *Med Ball Colorida — Peso por Cor*',
+    'Cada peso tem sua cor: o aluno pega a bola certa de longe, sem parar o treino para conferir.',
+    '',
+    '✅ Cor por peso — organiza a aula e agiliza a troca',
+    '✅ Costura reforçada para arremesso na parede',
+    '✅ Enchimento firme, sem deformar com o uso',
+    '✅ Garantia de 1 ano',
+    '',
+    '*Pesos e valores à vista:*',
+    ...linhasDePeso(bolas, true),
+    '',
+    '💳 Ou em até 10x sem juros',
+  ].join('\n');
+}
+
 const ERGO_ALIASES = ['esteira', 'escada', 'remo', 'skierg', 'bikeerg', 'storm'];
 
 /* Primeira foto utilizavel entre os produtos de uma familia. So serve link que
@@ -252,6 +345,25 @@ async function montarItens() {
            cliente escolhendo no escuro. Cinza (Oficial) primeiro por ser a
            premium; a preta logo depois. */
         fotos: [primeiraFoto(por.c15cinza, por.c10cinza), primeiraFoto(por.c15imp, por.c10imp)].filter(Boolean),
+      });
+  }
+  /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
+     nao somar duas idas ao banco no tempo de resposta do painel. */
+  const [medPro, medCor] = await Promise.all([buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR)]);
+  if (medPro.length) {
+      itens.push({
+        id: 'medballpro', titulo: '🏐 Medicine Ball Pro Series',
+        texto: mensagemMedBallPro(medPro),
+        video: '',
+        fotos: medPro.map((b) => b.url_imagem).filter(Boolean).slice(0, 2),
+      });
+  }
+  if (medCor.length) {
+      itens.push({
+        id: 'medballcor', titulo: '🎨 Med Ball Colorida',
+        texto: mensagemMedBallColorida(medCor),
+        video: '',
+        fotos: medCor.map((b) => b.url_imagem).filter(Boolean).slice(0, 2),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
