@@ -1113,6 +1113,158 @@ export default function App() {
           {/* ═══ COLUNA ESQUERDA ═══ */}
           <div className="lg:col-span-5 flex flex-col gap-6 animate-fade-in-up">
 
+            {/* Card: Dados */}
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <UserRound className="w-4 h-4 text-blue-400" />
+                </div>
+                <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Dados do Orçamento</h2>
+              </div>
+              <div className="space-y-4">
+                <ClienteSelect cliente={clienteSel} onSelect={(c) => {
+                  setClienteSel(c);
+                  if (!c) return;
+                  setNomeCliente(c.nome || '');
+                  if (c.telefone) setTelefoneCliente(c.telefone);
+                  // O CEP do cadastro já resolve o frete: a busca preenche
+                  // cidade, estado e zona (capital/interior) de uma vez.
+                  const cepCli = String(c.dados_fiscais?.cep || '').replace(/\D/g, '');
+                  if (cepCli.length === 8) {
+                    setCep(cepCli.replace(/(\d{5})(\d{3})/, '$1-$2'));
+                    handleBuscarCep(cepCli);
+                  }
+                }} />
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Cliente / Box</span>
+                  <input type="text" value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)}
+                    placeholder="Ex: CrossFit Olympus"
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Telefone do Cliente (WhatsApp)</span>
+                  <input type="text" value={telefoneCliente} onChange={(e) => setTelefoneCliente(e.target.value)}
+                    placeholder="Ex: 11999999999"
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
+                    <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
+                      placeholder="Ex: Leo Berg"
+                      list="consultores-list"
+                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
+                    <datalist id="consultores-list">
+                      <option value="Léo Berg" />
+                      <option value="Laís Carlos" />
+                      <option value="Thiago Freitas" />
+                      <option value="Lara Vitória" />
+                      <option value="Du Barbosa" />
+                      <option value="Eduardo Aureliano" />
+                    </datalist>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Data do Orçamento (Opcional)</span>
+                    <input type="datetime-local" value={dataCriacaoCustom} onChange={(e) => setDataCriacaoCustom(e.target.value)}
+                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all [color-scheme:dark]" />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Origem do Lead</span>
+                  <select value={origemLead} onChange={e => setOrigemLead(e.target.value)}
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all">
+                    <option value="">Selecione a origem...</option>
+                    <option value="FSS">FSS — veio da central (envia PDFs + apresentação)</option>
+                    <option value="WHATSAPP">WhatsApp BRAVE — já em conversa (envia PDFs)</option>
+                    <option value="VENDA DIRETA">Venda Direta (envia PDFs)</option>
+                    <option value="SOMENTE BLING">Gerar no Bling — eu mesmo imprimo (não envia nada)</option>
+                    {/* Orçamento antigo abre com a origem que tinha (Uairox,
+                        Indicação, etc). Sem esta opção o select viria vazio e a
+                        origem se perderia ao salvar — o histórico de canal é
+                        justamente o que vai medir de onde vem a venda. */}
+                    {origemLead && !['FSS', 'WHATSAPP', 'VENDA DIRETA', 'SOMENTE BLING'].includes(origemLead) && (
+                      <option value={origemLead}>{origemLead} (origem antiga)</option>
+                    )}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            {/* Card: Destino */}
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-orange-accent/10 flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-orange-accent" />
+                </div>
+                <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Destino da Entrega</h2>
+              </div>
+
+              {/* CEP Input */}
+              <label className="block mb-4">
+                <span className="text-xs font-medium text-zinc-400 mb-1.5 block">CEP do Cliente</span>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={cep}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      const formatted = v.length > 5 ? `${v.slice(0, 5)}-${v.slice(5)}` : v;
+                      setCep(formatted);
+                      if (v.length === 8) handleBuscarCep(v);
+                    }}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all placeholder:text-dark-500 font-mono"
+                  />
+                  {buscandoCep ? (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-accent animate-spin" />
+                  ) : (
+                    <MapPinned className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+                  )}
+                </div>
+              </label>
+
+              {/* CEP Result */}
+              {cepInfo && (
+                <div className="mb-4 bg-dark-900/60 border border-orange-accent/20 rounded-xl px-4 py-2.5 animate-fade-in-up">
+                  <p className="text-xs text-white font-medium">{cepInfo.localidade} — {cepInfo.uf}</p>
+                  {cepInfo.logradouro && (
+                    <p className="text-[10px] text-dark-500 mt-0.5 truncate">{cepInfo.logradouro}{cepInfo.bairro ? `, ${cepInfo.bairro}` : ''}</p>
+                  )}
+                </div>
+              )}
+
+              {loadingFrete ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
+                  <div className="flex items-center gap-2"><Loader2 className="w-3 h-3 text-dark-500 animate-spin" /><span className="text-[11px] text-dark-500">Carregando zonas...</span></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Estado</span>
+                    <div className="relative">
+                      <select id="select-estado" value={estado} onChange={(e) => setEstado(e.target.value)}
+                        className="w-full appearance-none bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all cursor-pointer">
+                        {estados.map((uf) => (<option key={uf} value={uf}>{uf}</option>))}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Zona</span>
+                    <div className="relative">
+                      <select id="select-zona" value={zona} onChange={(e) => setZona(e.target.value)}
+                        className="w-full appearance-none bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all cursor-pointer">
+                        {zonas.map((z) => (<option key={z} value={z}>{z}</option>))}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                    </div>
+                  </label>
+                </div>
+              )}
+            </section>
+
             {/* Card: IA */}
             <section className="relative bg-dark-800/60 backdrop-blur-sm border border-purple-500/30 rounded-2xl p-4 sm:p-6 overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-[60px] pointer-events-none" />
@@ -1284,57 +1436,6 @@ export default function App() {
               )}
             </section>
 
-            {/* Card: Orçamentos Modelo */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-amber-500/20 rounded-2xl p-4 sm:p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <Bookmark className="w-4 h-4 text-amber-400" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Orçamentos Modelo</h2>
-                  <p className="text-[10px] text-amber-400/70 font-medium tracking-wide">Carregar template rápido</p>
-                </div>
-              </div>
-
-              {loadingModelos ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : modelos.length === 0 ? (
-                <p className="text-xs text-zinc-500 text-center py-4">Nenhum modelo salvo ainda.<br/>Crie um orçamento e clique em "Salvar como Modelo".</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {modelos.map(modelo => (
-                    <div key={modelo.id} className="flex items-center justify-between bg-dark-900/60 border border-dark-700/40 rounded-xl px-3 py-2.5 hover:border-amber-500/30 transition-all group">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{modelo.nome}</p>
-                        {modelo.descricao && (
-                          <p className="text-[10px] text-zinc-500 truncate">{modelo.descricao}</p>
-                        )}
-                        <p className="text-[10px] text-zinc-600">{modelo.itens?.length || 0} {(modelo.itens?.length || 0) === 1 ? 'item' : 'itens'}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        <button
-                          onClick={() => handleCarregarModelo(modelo)}
-                          disabled={loadingProdutos}
-                          className="px-3 py-1.5 text-[10px] font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition-colors cursor-pointer disabled:opacity-30"
-                        >
-                          Usar
-                        </button>
-                        <button
-                          onClick={() => handleExcluirModelo(modelo.id)}
-                          className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
             {/* Card: Adicionar Produto */}
             <section className="order-first lg:order-none bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
@@ -1436,154 +1537,53 @@ export default function App() {
               </button>
             </section>
 
-            {/* Card: Dados */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
+            {/* Card: Orçamentos Modelo */}
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-amber-500/20 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <UserRound className="w-4 h-4 text-blue-400" />
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <Bookmark className="w-4 h-4 text-amber-400" />
                 </div>
-                <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Dados do Orçamento</h2>
-              </div>
-              <div className="space-y-4">
-                <ClienteSelect cliente={clienteSel} onSelect={(c) => {
-                  setClienteSel(c);
-                  if (!c) return;
-                  setNomeCliente(c.nome || '');
-                  if (c.telefone) setTelefoneCliente(c.telefone);
-                  // O CEP do cadastro já resolve o frete: a busca preenche
-                  // cidade, estado e zona (capital/interior) de uma vez.
-                  const cepCli = String(c.dados_fiscais?.cep || '').replace(/\D/g, '');
-                  if (cepCli.length === 8) {
-                    setCep(cepCli.replace(/(\d{5})(\d{3})/, '$1-$2'));
-                    handleBuscarCep(cepCli);
-                  }
-                }} />
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Cliente / Box</span>
-                  <input type="text" value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)}
-                    placeholder="Ex: CrossFit Olympus"
-                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Telefone do Cliente (WhatsApp)</span>
-                  <input type="text" value={telefoneCliente} onChange={(e) => setTelefoneCliente(e.target.value)}
-                    placeholder="Ex: 11999999999"
-                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Nome do Consultor</span>
-                    <input type="text" value={nomeConsultor} onChange={(e) => setNomeConsultor(e.target.value)}
-                      placeholder="Ex: Leo Berg"
-                      list="consultores-list"
-                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-dark-500" />
-                    <datalist id="consultores-list">
-                      <option value="Léo Berg" />
-                      <option value="Laís Carlos" />
-                      <option value="Thiago Freitas" />
-                      <option value="Lara Vitória" />
-                      <option value="Du Barbosa" />
-                      <option value="Eduardo Aureliano" />
-                    </datalist>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Data do Orçamento (Opcional)</span>
-                    <input type="datetime-local" value={dataCriacaoCustom} onChange={(e) => setDataCriacaoCustom(e.target.value)}
-                      className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all [color-scheme:dark]" />
-                  </label>
+                <div>
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Orçamentos Modelo</h2>
+                  <p className="text-[10px] text-amber-400/70 font-medium tracking-wide">Carregar template rápido</p>
                 </div>
-                <label className="block">
-                  <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Origem do Lead</span>
-                  <select value={origemLead} onChange={e => setOrigemLead(e.target.value)}
-                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all">
-                    <option value="">Selecione a origem...</option>
-                    <option value="FSS">FSS — veio da central (envia PDFs + apresentação)</option>
-                    <option value="WHATSAPP">WhatsApp BRAVE — já em conversa (envia PDFs)</option>
-                    <option value="VENDA DIRETA">Venda Direta (envia PDFs)</option>
-                    <option value="SOMENTE BLING">Gerar no Bling — eu mesmo imprimo (não envia nada)</option>
-                    {/* Orçamento antigo abre com a origem que tinha (Uairox,
-                        Indicação, etc). Sem esta opção o select viria vazio e a
-                        origem se perderia ao salvar — o histórico de canal é
-                        justamente o que vai medir de onde vem a venda. */}
-                    {origemLead && !['FSS', 'WHATSAPP', 'VENDA DIRETA', 'SOMENTE BLING'].includes(origemLead) && (
-                      <option value={origemLead}>{origemLead} (origem antiga)</option>
-                    )}
-                  </select>
-                </label>
-              </div>
-            </section>
-
-            {/* Card: Destino */}
-            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="w-8 h-8 rounded-lg bg-orange-accent/10 flex items-center justify-center">
-                  <MapPin className="w-4 h-4 text-orange-accent" />
-                </div>
-                <h2 className="text-sm font-semibold text-white uppercase tracking-wider">Destino da Entrega</h2>
               </div>
 
-              {/* CEP Input */}
-              <label className="block mb-4">
-                <span className="text-xs font-medium text-zinc-400 mb-1.5 block">CEP do Cliente</span>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={cep}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, '').slice(0, 8);
-                      const formatted = v.length > 5 ? `${v.slice(0, 5)}-${v.slice(5)}` : v;
-                      setCep(formatted);
-                      if (v.length === 8) handleBuscarCep(v);
-                    }}
-                    placeholder="00000-000"
-                    maxLength={9}
-                    className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all placeholder:text-dark-500 font-mono"
-                  />
-                  {buscandoCep ? (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-accent animate-spin" />
-                  ) : (
-                    <MapPinned className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
-                  )}
+              {loadingModelos ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
                 </div>
-              </label>
-
-              {/* CEP Result */}
-              {cepInfo && (
-                <div className="mb-4 bg-dark-900/60 border border-orange-accent/20 rounded-xl px-4 py-2.5 animate-fade-in-up">
-                  <p className="text-xs text-white font-medium">{cepInfo.localidade} — {cepInfo.uf}</p>
-                  {cepInfo.logradouro && (
-                    <p className="text-[10px] text-dark-500 mt-0.5 truncate">{cepInfo.logradouro}{cepInfo.bairro ? `, ${cepInfo.bairro}` : ''}</p>
-                  )}
-                </div>
-              )}
-
-              {loadingFrete ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
-                  <div className="flex items-center gap-2"><Loader2 className="w-3 h-3 text-dark-500 animate-spin" /><span className="text-[11px] text-dark-500">Carregando zonas...</span></div>
-                </div>
+              ) : modelos.length === 0 ? (
+                <p className="text-xs text-zinc-500 text-center py-4">Nenhum modelo salvo ainda.<br/>Crie um orçamento e clique em "Salvar como Modelo".</p>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Estado</span>
-                    <div className="relative">
-                      <select id="select-estado" value={estado} onChange={(e) => setEstado(e.target.value)}
-                        className="w-full appearance-none bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all cursor-pointer">
-                        {estados.map((uf) => (<option key={uf} value={uf}>{uf}</option>))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {modelos.map(modelo => (
+                    <div key={modelo.id} className="flex items-center justify-between bg-dark-900/60 border border-dark-700/40 rounded-xl px-3 py-2.5 hover:border-amber-500/30 transition-all group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{modelo.nome}</p>
+                        {modelo.descricao && (
+                          <p className="text-[10px] text-zinc-500 truncate">{modelo.descricao}</p>
+                        )}
+                        <p className="text-[10px] text-zinc-600">{modelo.itens?.length || 0} {(modelo.itens?.length || 0) === 1 ? 'item' : 'itens'}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <button
+                          onClick={() => handleCarregarModelo(modelo)}
+                          disabled={loadingProdutos}
+                          className="px-3 py-1.5 text-[10px] font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition-colors cursor-pointer disabled:opacity-30"
+                        >
+                          Usar
+                        </button>
+                        <button
+                          onClick={() => handleExcluirModelo(modelo.id)}
+                          className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-medium text-zinc-400 mb-1.5 block">Zona</span>
-                    <div className="relative">
-                      <select id="select-zona" value={zona} onChange={(e) => setZona(e.target.value)}
-                        className="w-full appearance-none bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 pr-10 focus:outline-none focus:border-orange-accent/50 focus:ring-1 focus:ring-orange-accent/20 transition-all cursor-pointer">
-                        {zonas.map((z) => (<option key={z} value={z}>{z}</option>))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500 pointer-events-none" />
-                    </div>
-                  </label>
+                  ))}
                 </div>
               )}
             </section>
