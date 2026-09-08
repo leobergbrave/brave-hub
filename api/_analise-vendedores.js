@@ -67,6 +67,25 @@ async function pedidosDoVendedor(idVendedor, ini, fim, token) {
   return { pedidos, parcial };
 }
 
+/* Propostas comerciais do vendedor no periodo — o denominador da conversao
+   ("orcamentos criados x vendas"), que e a pergunta central da analise. O
+   endpoint pode nao aceitar os mesmos filtros dos pedidos; se recusar,
+   devolvemos null e a tela mostra "-" em vez de um numero inventado. */
+async function propostasDoVendedor(idVendedor, ini, fim, token) {
+  let total = 0;
+  for (let pagina = 1; pagina <= 40; pagina++) {
+    const url = `https://api.bling.com.br/v3/propostas-comerciais?dataInicial=${ini}&dataFinal=${fim}`
+      + `&pagina=${pagina}&limite=100&idVendedor=${idVendedor}`;
+    const r = await blingGet(url, token);
+    if (!r.ok) return null;
+    const lista = (await r.json())?.data || [];
+    total += lista.length;
+    if (lista.length < 100) break;
+    await sleep(350);
+  }
+  return total;
+}
+
 const mesDe = (data) => String(data || '').slice(0, 7);
 
 function resumir(pedidos) {
@@ -117,7 +136,15 @@ export async function analiseVendedores(req, res) {
       await sleep(350);
       const { pedidos, parcial } = await pedidosDoVendedor(v.id, ini, fim, token);
       if (parcial) algumParcial = true;
-      resultado.push({ ...v, ...resumir(pedidos) });
+      await sleep(350);
+      const propostas = await propostasDoVendedor(v.id, ini, fim, token);
+      const r = resumir(pedidos);
+      resultado.push({
+        ...v, ...r,
+        propostas,
+        // Conversao so faz sentido com denominador: sem propostas, fica null.
+        conversao: propostas ? Math.round((r.pedidos / propostas) * 1000) / 10 : null,
+      });
     }
 
     resultado.sort((a, b) => b.faturamento - a.faturamento);
