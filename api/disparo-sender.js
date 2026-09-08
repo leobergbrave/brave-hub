@@ -6,6 +6,19 @@ const cors = {
   'Access-Control-Allow-Headers': 'content-type, x-cron-secret',
 };
 
+/* Normaliza celular BR para 55 + DDD + 9 + 8 dígitos. O número às vezes chega
+   curto (10 dígitos, sem o 9) e, sem ele, o disparo ia para um número que não é
+   WhatsApp. Cópia local pura (esta função roda no runtime edge, não pode importar
+   o módulo Node de proposta). Ver telefoneWhatsappBR em _proposta-pdf.js. */
+function telBR(raw) {
+  let tel = String(raw || '').replace(/\D/g, '');
+  if (tel.startsWith('55') && tel.length >= 12) tel = tel.slice(2);
+  if (tel.length === 10 && /^[6-9]/.test(tel.slice(2))) {
+    tel = tel.slice(0, 2) + '9' + tel.slice(2);
+  }
+  return (tel.length === 10 || tel.length === 11) ? '55' + tel : null;
+}
+
 function sbBase() { return process.env.VITE_SUPABASE_URL + '/rest/v1'; }
 function sbKey()  { return process.env.SUPABASE_SERVICE_ROLE_KEY; }
 
@@ -206,21 +219,23 @@ async function run(req) {
       erro = 'Webhook URL não configurada';
     } else {
       try {
-        let tel = (item.telefone || '').replace(/\D/g, '');
-        if (tel.length === 10 || tel.length === 11) tel = '55' + tel;
+        const tel = telBR(item.telefone);
+        if (!tel) {
+          erro = 'Telefone inválido';
+        } else {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-        const res = await fetch(cfg.webhook_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cliente: item.nome || '', telefone: tel }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        sent = res.ok;
-        if (!sent) erro = `HTTP ${res.status}`;
+          const res = await fetch(cfg.webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cliente: item.nome || '', telefone: tel }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          sent = res.ok;
+          if (!sent) erro = `HTTP ${res.status}`;
+        }
       } catch (e) {
         erro = e.name === 'AbortError' ? 'Timeout (8s)' : e.message;
       }
