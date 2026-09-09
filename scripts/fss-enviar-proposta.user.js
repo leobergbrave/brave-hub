@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.11
+// @version      3.12
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.11'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.12'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -611,9 +611,13 @@
       texto: () => {
         const nome = acharPrimeiroNome();
         ultimoNomeAchado = nome; // o status conta se achou — visibilidade sem DevTools
+        /* Abre espaco para a APRESENTACAO em vez de pedir a lista de
+           equipamentos: perguntar "quais equipamentos" ja empurra a conversa
+           para um orcamento grande, e orcamento de 10+ itens fecha 8,4% contra
+           26,4% do de 1 item. Quem qualifica o escopo agora e o botao 🎯. */
         return nome
-          ? `Fala ${nome}, tudo bem? Aqui é o Léo Berg da BRAVE 👊 Quais equipamentos você busca?`
-          : 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?';
+          ? `Fala ${nome}, tudo bem? Aqui é o Léo Berg 👊 Você já conhece a BRAVE?`
+          : 'Oi, tudo bem? Aqui é o Léo Berg 👊 Você já conhece a BRAVE?';
       },
     },
     {
@@ -695,8 +699,9 @@
     sinaisEl.style.cssText = 'display:flex;flex-direction:column;gap:3px';
 
     const pintar = (resumo) => {
+      const rotuloTrilha = { pontual: ' · pontual', projeto: ' · projeto' }[resumo.trilha] || '';
       titulo.textContent = `🎯 Qualificação${nome ? ' — ' + nome : ''}`
-        + ` (${resumo.respondidas}/${resumo.total})`;
+        + ` (${resumo.respondidas}/${resumo.total})${rotuloTrilha}`;
       sinaisEl.innerHTML = '';
       for (const s of resumo.sinais || []) {
         const d = document.createElement('div');
@@ -768,7 +773,32 @@
         + 'font:500 11px/1.35 system-ui;padding:5px 6px;resize:vertical';
       campo.oninput = () => agendar(q.chave, campo.value);
 
-      p.append(linha, campo);
+      /* Resposta por CLIQUE na pergunta que classifica o negocio: o Leo marca
+         enquanto o cliente fala, sem digitar. Como a trilha decide quais
+         perguntas vem depois, a tela e remontada assim que a escolha salva. */
+      let opcoesEl = null;
+      if (Array.isArray(q.opcoes) && q.opcoes.length) {
+        opcoesEl = document.createElement('div');
+        opcoesEl.style.cssText = 'display:flex;gap:4px';
+        for (const op of q.opcoes) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = op;
+          const marcado = (j.respostas || {})[q.chave] === op;
+          b.style.cssText = 'flex:1;border:1px solid #334155;border-radius:6px;cursor:pointer;'
+            + 'padding:5px 6px;font:600 10px/1.2 system-ui;'
+            + (marcado ? 'background:#7c3aed;color:#fff' : 'background:#1e293b;color:#94a3b8');
+          b.onclick = async () => {
+            clearTimeout(timer);
+            pendentes[q.chave] = op;
+            await salvar();
+            montarQualificacao();
+          };
+          opcoesEl.appendChild(b);
+        }
+      }
+
+      p.append(linha, ...(opcoesEl ? [opcoesEl] : []), campo);
     }
 
     p.appendChild(sinaisEl);
@@ -800,15 +830,33 @@
         setTimeout(voltar, 4000);
     });
 
-    for (const m of MENSAGENS_RAPIDAS) painelEl.appendChild(criarBotao(m));
-    painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
-    painelEl.appendChild(botao('🎯 Qualificar cliente', '#7c3aed', montarQualificacao));
+    /* ORDEM DO PAINEL = ordem real da conversa (pedido do Leo, 08/09/2026):
+       abre, apresenta a marca, qualifica, so entao mostra produto e pede
+       cadastro. Antes a ordem saia de um insertBefore no penultimo filho, que
+       nao dava controle nenhum — a apresentacao caia onde desse.
 
-    /* As do servidor entram quando chegam — o painel ja esta na tela e nao
-       pode esperar a rede para aparecer. */
+       Agora cada posicao e explicita. A apresentacao vem do SERVIDOR e pode
+       demorar, entao ela ganha um espaco reservado que e preenchido quando
+       chega: o painel aparece inteiro na hora, sem esperar a rede, e sem que a
+       mensagem pule de lugar depois. */
+    const porId = new Map(MENSAGENS_RAPIDAS.map((m) => [m.id, m]));
+    const vaga = document.createElement('div');   // reservado para a apresentacao
+    vaga.style.cssText = 'display:contents';
+
+    if (porId.has('abertura')) painelEl.appendChild(criarBotao(porId.get('abertura')));
+    painelEl.appendChild(vaga);
+    painelEl.appendChild(botao('🎯 Qualificar cliente', '#7c3aed', montarQualificacao));
+    painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
+    if (porId.has('cadastro')) painelEl.appendChild(criarBotao(porId.get('cadastro')));
+
+    // Qualquer mensagem local nova entra no fim, sem precisar mexer aqui.
+    for (const m of MENSAGENS_RAPIDAS) {
+      if (m.id !== 'abertura' && m.id !== 'cadastro') painelEl.appendChild(criarBotao(m));
+    }
+
     extrasDoServidor().then((extras) => {
       if (!painelEl.isConnected) return;  // painel ja foi remontado
-      for (const m of extras) painelEl.insertBefore(criarBotao(m), painelEl.lastChild);
+      for (const m of extras) vaga.appendChild(criarBotao(m));
     });
   }
 

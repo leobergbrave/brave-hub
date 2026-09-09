@@ -1,4 +1,4 @@
-// api/_qualificacao.js — as 5 perguntas qualificadoras e as respostas do cliente.
+// api/_qualificacao.js — as perguntas qualificadoras e as respostas do cliente.
 //
 // Por que existe: a análise de 08/09/2026 comparou o Léo aos vendedores que
 // também orçam antes de fechar (conversão justa, corrigindo o fator de
@@ -21,40 +21,63 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-/* MEDDIC-lite. Cada pergunta é escrita como o Léo escreveria no WhatsApp — o
-   painel entrega UMA por vez no campo de mensagem, para ele revisar e enviar.
-   Mandar as cinco juntas seria o oposto do objetivo: o Gartner mede que
-   comprador sobrecarregado fica 153% mais propenso a escolher a opção menor ou
-   nenhuma. Uma pergunta por vez constrói conversa; cinco viram formulário. */
+/* MEDDIC-lite, adaptativo. Cada pergunta é escrita como o Léo escreveria no
+   WhatsApp, e o painel entrega UMA por vez no campo de mensagem para ele
+   revisar e enviar. Despejar todas seria o oposto do objetivo: o Gartner mede
+   que comprador sobrecarregado fica 153% mais propenso a escolher a opção menor
+   ou nenhuma. Uma pergunta por vez constrói conversa; um bloco vira formulário.
+
+   A PRIMEIRA pergunta classifica o negócio e as outras se ajustam a ela. Antes
+   a abertura era "quantos alunos e qual o tamanho da área", que já pressupõe
+   projeto de espaço inteiro: quem quer só um remo estranha, e éramos nós mesmos
+   empurrando a conversa para um orçamento grande. Isso contraria os dados —
+   orçamento de 1 item fecha 26,4%, o de 10+ itens fecha 8,4%. Inflar o escopo
+   derruba a conversão. */
 export const PERGUNTAS = [
   {
-    chave: 'metrica', n: 1, titulo: '① Tamanho e meta',
-    pergunta: 'Pra eu montar certo: quantos alunos você atende hoje, e qual o tamanho da área que vai receber os equipamentos?',
-    porque: 'Dimensiona o pacote. Sem isso a quantidade é chute e o orçamento sai grande ou pequeno demais.',
+    chave: 'escopo', n: 1, titulo: '① O que busca',
+    pergunta: 'Me conta o que você tem em mente: é um equipamento específico ou você está montando/ampliando um espaço?',
+    porque: 'Classifica o negócio e define as próximas perguntas. Compra pontual não precisa do questionário inteiro.',
+    // Resposta por clique: o Léo marca enquanto o cliente fala, sem digitar.
+    opcoes: ['Equipamento pontual', 'Montar ou ampliar espaço'],
+    trilhas: ['pontual', 'projeto'],
   },
   {
-    chave: 'decisor', n: 2, titulo: '② Quem decide',
+    chave: 'metrica', n: 2, titulo: '② Tamanho e meta',
+    pergunta: 'Pra eu dimensionar certo: quantos alunos você atende hoje, e qual o tamanho da área que vai receber os equipamentos?',
+    porque: 'Dimensiona o pacote. Sem isso a quantidade é chute e o orçamento sai grande ou pequeno demais.',
+    trilhas: ['projeto'],
+  },
+  {
+    chave: 'decisor', n: 3, titulo: '③ Quem decide',
     pergunta: 'Além de você, mais alguém participa dessa decisão? Pergunto porque gosto de já deixar tudo alinhado com todo mundo de uma vez.',
     porque: 'Negócio com 3+ contatos fecha 2,4x mais; trazer quem assina cedo aumenta 55%. Sem isso você negocia com quem não decide.',
+    trilhas: ['projeto'],
   },
   {
-    chave: 'criterio', n: 3, titulo: '③ Critério de escolha',
+    chave: 'criterio', n: 4, titulo: '④ Critério de escolha',
     pergunta: 'O que pesa mais na sua escolha de fornecedor: preço, prazo de entrega, garantia ou durabilidade do equipamento?',
     porque: 'Diz qual argumento usar. Se o critério é durabilidade, desconto não fecha — patrocínio dos campeonatos fecha.',
+    trilhas: ['pontual', 'projeto'],
   },
   {
-    chave: 'dor', n: 4, titulo: '④ Custo de não fazer',
+    chave: 'dor', n: 5, titulo: '⑤ Custo de não fazer',
     pergunta: 'E hoje, o que esse equipamento está te custando não ter? Perde aluno, trava alguma aula, sobrecarrega o que já tem?',
     porque: 'É a pergunta que mais fecha. 40-60% dos negócios morrem em "sem decisão" — sem dor explícita, adiar é sempre o mais confortável.',
+    trilhas: ['projeto'],
   },
   {
-    chave: 'prazo', n: 5, titulo: '⑤ Data',
+    chave: 'prazo', n: 6, titulo: '⑥ Data',
     pergunta: 'Tem alguma data na frente? Inauguração, reforma, início de turma — pra eu já checar o prazo de entrega pra você.',
     porque: 'Negócio fechado em até 50 dias ganha ~47% das vezes; além disso, ~20%. E a data vira o gatilho certo do follow-up.',
+    trilhas: ['pontual', 'projeto'],
   },
 ];
 
-const MINIMO = 3;   // abaixo disso o Gerador avisa (não bloqueia — decisão do Léo, 08/09/2026)
+/* Quantas respostas bastam em cada trilha. Compra pontual já converte 26,4%
+   sozinha: exigir o questionário inteiro dela seria atrito puro. */
+const MINIMO_POR_TRILHA = { pontual: 2, projeto: 4 };
+const MINIMO_PADRAO = 1;   // sem classificação, a única cobrança é classificar
 
 /* Só dígitos com DDI, igual ao resto do HUB (telefoneWhatsappBR). Guardar
    formatado faria a busca por telefone falhar em silêncio — e falha silenciosa
@@ -142,12 +165,38 @@ export function interpretarPrazo(texto, referencia = new Date()) {
   return null;
 }
 
+/* Trilha do negócio, lida da resposta 1. Null = ainda não classificado, e aí o
+   painel mostra só a pergunta que classifica. Na dúvida cai em 'projeto': errar
+   para mais perguntas é recuperável, orçar às cegas um projeto grande não. */
+export function trilhaDe(respostas = {}) {
+  const e = semAcento(respostas.escopo);
+  if (!preenchida(e)) return null;
+  if (/pontual|especific|so um|apenas um|unico|uma unidade|troca|repor/.test(e)) return 'pontual';
+  return 'projeto';
+}
+
+/* As perguntas que valem para esta conversa. */
+export function perguntasDaTrilha(respostas = {}) {
+  const trilha = trilhaDe(respostas);
+  if (!trilha) return PERGUNTAS.filter((p) => p.chave === 'escopo');
+  return PERGUNTAS.filter((p) => (p.trilhas || []).includes(trilha));
+}
+
 /* Resumo pronto para a tela: quantas faltam e o que as respostas já dizem. Os
    sinais não são enfeite — cada um aponta uma ação com efeito medido. */
 export function resumir(respostas = {}) {
-  const respondidas = PERGUNTAS.filter((p) => preenchida(respostas[p.chave]));
-  const faltando = PERGUNTAS.filter((p) => !preenchida(respostas[p.chave]));
+  const trilha = trilhaDe(respostas);
+  const relevantes = perguntasDaTrilha(respostas);
+  const respondidas = relevantes.filter((p) => preenchida(respostas[p.chave]));
+  const faltando = relevantes.filter((p) => !preenchida(respostas[p.chave]));
   const sinais = [];
+
+  if (trilha === 'pontual') {
+    sinais.push({
+      tipo: 'escopo',
+      texto: 'Compra pontual — não infle o orçamento. 1 item fecha 26,4%; 10+ itens, 8,4%.',
+    });
+  }
 
   const MESES = /janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/i;
   if (preenchida(respostas.prazo) && (/\d|inaugur|reform|turma|obra/i.test(respostas.prazo) || MESES.test(respostas.prazo))) {
@@ -162,15 +211,19 @@ export function resumir(respostas = {}) {
   if (preenchida(respostas.criterio) && /durab|qualidade|resist|garantia|aguent|robust/i.test(respostas.criterio)) {
     sinais.push({ tipo: 'marca', texto: 'Critério é durabilidade — mande a apresentação da BRAVE (patrocínio dos campeonatos), não desconto.' });
   }
-  if (!preenchida(respostas.dor)) {
-    sinais.push({ tipo: 'risco', texto: 'Sem dor explícita: é aqui que o negócio vira "vou pensar". Volte na pergunta ④.' });
+  // A dor só é cobrada na trilha em que ela pesa — numa compra pontual o motivo
+  // costuma já estar na própria resposta 1.
+  if (trilha === 'projeto' && !preenchida(respostas.dor)) {
+    sinais.push({ tipo: 'risco', texto: 'Sem dor explícita: é aqui que o negócio vira "vou pensar". Volte na pergunta ⑤.' });
   }
 
+  const minimo = MINIMO_POR_TRILHA[trilha] || MINIMO_PADRAO;
   return {
+    trilha,
     respondidas: respondidas.length,
-    total: PERGUNTAS.length,
-    minimo: MINIMO,
-    suficiente: respondidas.length >= MINIMO,
+    total: relevantes.length,
+    minimo,
+    suficiente: respondidas.length >= minimo,
     faltando: faltando.map((p) => ({ chave: p.chave, titulo: p.titulo })),
     sinais,
   };
@@ -202,7 +255,9 @@ export async function lerQualificacao(req, res) {
     const respostas = linha?.respostas || {};
     return res.status(200).json({
       ok: true,
-      perguntas: PERGUNTAS,
+      // Só as perguntas que valem para esta conversa: enquanto o negócio não
+      // estiver classificado, vai apenas a que classifica.
+      perguntas: perguntasDaTrilha(respostas),
       respostas,
       nome: linha?.nome || null,
       atualizadoEm: linha?.atualizado_em || null,

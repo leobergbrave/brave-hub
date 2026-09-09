@@ -13,7 +13,7 @@ import { bcFetch, telefoneWhatsappBR } from './_proposta-pdf.js';
 export const RAPIDAS = [
   {
     id: 'abertura', titulo: '👋 Abertura',
-    texto: 'Aqui é o Léo Berg da BRAVE, tudo bem? Quais equipamentos você busca?',
+    texto: 'Oi, tudo bem? Aqui é o Léo Berg 👊 Você já conhece a BRAVE?',
   },
   {
     /* Apresentacao institucional: usada com lead frio, que ainda nao sabe quem
@@ -34,7 +34,7 @@ export const RAPIDAS = [
       'Equipamento que aguenta a pressão do pódio aguenta a rotina do seu box — é o mesmo padrão que entregamos pra você.',
       '',
       '🇧🇷 +3.000 negócios fitness equipados no Brasil',
-      '📸 instagram.com/bravefitnessbr — 56 mil pessoas acompanham nossas entregas',
+      '📸 https://instagram.com/bravefitnessbr — 56 mil pessoas acompanham nossas entregas',
     ].join('\n'),
   },
   {
