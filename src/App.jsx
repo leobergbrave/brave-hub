@@ -1485,7 +1485,7 @@ export default function App() {
             </section>
 
             {/* Card: Adicionar Produto */}
-            <section className="order-first lg:order-none bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
+            <section className="bg-dark-800/60 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-4 sm:p-6">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 rounded-lg bg-neon/10 flex items-center justify-center">
                   <Plus className="w-4 h-4 text-neon" />
