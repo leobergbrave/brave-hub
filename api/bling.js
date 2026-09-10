@@ -10,6 +10,7 @@ import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
 import { interpretarColagem } from './_cadastro-colar.js';
 import { analiseVendedores } from './_analise-vendedores.js';
 import { lerQualificacao, salvarQualificacao } from './_qualificacao.js';
+import { sugerirQualificacao } from './_qualificacao-sugerir.js';
 import { registrarEscolhaPacote } from './_pacote-escolha.js';
 import { processarFollowups } from './_followup-auto.js';
 import exportarContatos from './_bling-contatos-export.js';
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
     case 'analise_vendedores':     return analiseVendedores(req, res);
     case 'qualificacao':           return lerQualificacao(req, res);
     case 'qualificacao_salvar':    return salvarQualificacao(req, res);
+    case 'qualificacao_sugerir':   return sugerirQualificacao(req, res);
     case 'pacote_escolhido':       return registrarEscolhaPacote(req, res);
     case 'enviar_mensagem_cliente': return enviarMensagemCliente(req, res);
     case 'sincronizar_vendas':  return sincronizarVendas(req, res);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.12
+// @version      3.13
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.12'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.13'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -742,6 +742,7 @@
       timer = setTimeout(salvar, 900);
     };
 
+    const campos = {}; // chave -> textarea, para o copiloto ler o que está na tela
     for (const q of j.perguntas || []) {
       const linha = document.createElement('div');
       linha.style.cssText = 'display:flex;gap:6px;align-items:center';
@@ -772,6 +773,7 @@
         + 'border:1px solid #334155;border-radius:6px;color:#e2e8f0;'
         + 'font:500 11px/1.35 system-ui;padding:5px 6px;resize:vertical';
       campo.oninput = () => agendar(q.chave, campo.value);
+      campos[q.chave] = campo;
 
       /* Resposta por CLIQUE na pergunta que classifica o negocio: o Leo marca
          enquanto o cliente fala, sem digitar. Como a trilha decide quais
@@ -803,6 +805,74 @@
 
     p.appendChild(sinaisEl);
     pintar(j.resumo);
+
+    /* Copiloto de IA (sob demanda): lê o que já está anotado e devolve a próxima
+       pergunta personalizada + uma leitura estratégica. É assistivo — a IA
+       propõe, o Léo revisa no campo e clica pra escrever no chat. */
+    const copiloto = document.createElement('div');
+    copiloto.style.cssText = 'display:flex;flex-direction:column;gap:5px;border-top:1px solid #334155;padding-top:7px';
+    const saidaIA = document.createElement('div');
+    saidaIA.style.cssText = 'display:flex;flex-direction:column;gap:5px';
+
+    const renderSugestao = (s) => {
+      saidaIA.innerHTML = '';
+      if (s.leitura) {
+        const l = document.createElement('div');
+        l.textContent = '🧠 ' + s.leitura;
+        l.style.cssText = 'font:600 10px/1.35 system-ui;color:#c4b5fd;background:#1e1b4b;border-radius:6px;padding:6px 7px';
+        saidaIA.appendChild(l);
+      }
+      if (s.alerta) {
+        const a = document.createElement('div');
+        a.textContent = '⚠️ ' + s.alerta;
+        a.style.cssText = 'font:600 10px/1.3 system-ui;color:#fca5a5';
+        saidaIA.appendChild(a);
+      }
+      if (s.pergunta) {
+        const ta = document.createElement('textarea');
+        ta.value = s.pergunta; ta.rows = 2;
+        ta.style.cssText = 'width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #7c3aed;'
+          + 'border-radius:6px;color:#e2e8f0;font:500 11px/1.35 system-ui;padding:5px 6px;resize:vertical';
+        const esc = botao('✍️ Escrever no chat', '#0e7490', () => {
+          const ok = escreverMensagem(ta.value);
+          esc.textContent = ok ? '✅ escrito' : '❌ falhou';
+          setTimeout(() => { esc.textContent = '✍️ Escrever no chat'; }, 2000);
+        });
+        saidaIA.append(ta, esc);
+      }
+    };
+
+    const btnIA = botao('✨ Me ajuda com a próxima', '#7c3aed', async () => {
+      // Antes de pedir, garante que o que está na tela foi salvo (a leitura usa
+      // as respostas — e não custa perder o texto recém-digitado).
+      clearTimeout(timer);
+      await salvar();
+      const respostas = {};
+      for (const [k, el] of Object.entries(campos)) {
+        if (String(el.value || '').trim()) respostas[k] = el.value.trim();
+      }
+      btnIA.textContent = '⏳ pensando...'; btnIA.disabled = true;
+      try {
+        const r = await hubFetch(`${HUB}/api/bling?acao=qualificacao_sugerir`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: tel, nome: acharDadosContato().nome || nome, respostas }),
+        });
+        const jr = await r.json();
+        if (!jr.ok) throw new Error(jr.error || 'o HUB recusou');
+        renderSugestao(jr);
+      } catch (e) {
+        saidaIA.innerHTML = '';
+        const d = document.createElement('div');
+        d.textContent = '❌ ' + e.message;
+        d.style.cssText = 'font:600 10px/1.3 system-ui;color:#fca5a5';
+        saidaIA.appendChild(d);
+      } finally {
+        btnIA.textContent = '✨ Me ajuda com a próxima'; btnIA.disabled = false;
+      }
+    });
+
+    copiloto.append(btnIA, saidaIA);
+    p.appendChild(copiloto);
 
     p.appendChild(botao('↩︎ Voltar ao painel', '#334155', async () => {
       clearTimeout(timer);
