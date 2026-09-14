@@ -23,6 +23,15 @@ const supabaseAdmin = createClient(
 
 export async function reautorizarBling(req, res) {
   try {
+    /* Gate: grava tokens no bling_config, então exige o mesmo segredo do resto
+       do HUB (HUB_PDF_TOKEN). Aceita no header x-hub-token OU na query ?t=,
+       porque o Léo abre isto como URL no navegador (header é inviável ali). */
+    const esperado = process.env.HUB_PDF_TOKEN;
+    const fornecido = req.headers['x-hub-token'] || req.query?.t || '';
+    if (!esperado || fornecido !== esperado) {
+      return res.status(401).json({ ok: false, error: 'Não autorizado (token inválido).' });
+    }
+
     const code = String(req.query?.code || req.body?.code || '').trim();
     if (!code) {
       return res.status(400).json({ ok: false, error: 'Faltou o parâmetro ?code= (o código que o Bling mostra ao autorizar).' });
