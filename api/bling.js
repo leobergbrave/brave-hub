@@ -11,6 +11,7 @@ import { interpretarColagem } from './_cadastro-colar.js';
 import { analiseVendedores } from './_analise-vendedores.js';
 import { lerQualificacao, salvarQualificacao } from './_qualificacao.js';
 import { sugerirQualificacao } from './_qualificacao-sugerir.js';
+import { reautorizarBling } from './_bling-reauth.js';
 import { registrarEscolhaPacote } from './_pacote-escolha.js';
 import { processarFollowups } from './_followup-auto.js';
 import exportarContatos from './_bling-contatos-export.js';
@@ -67,6 +68,7 @@ export default async function handler(req, res) {
     case 'qualificacao':           return lerQualificacao(req, res);
     case 'qualificacao_salvar':    return salvarQualificacao(req, res);
     case 'qualificacao_sugerir':   return sugerirQualificacao(req, res);
+    case 'bling_reauth':           return reautorizarBling(req, res);
     case 'pacote_escolhido':       return registrarEscolhaPacote(req, res);
     case 'enviar_mensagem_cliente': return enviarMensagemCliente(req, res);
     case 'sincronizar_vendas':  return sincronizarVendas(req, res);
