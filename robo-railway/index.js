@@ -24,7 +24,16 @@
  * - Senha só via variável de ambiente, nunca em log.
  */
 
-import puppeteer from 'puppeteer';
+import { addExtra } from 'puppeteer-extra';
+import puppeteerBase from 'puppeteer';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+/* Stealth: o Bling passou a servir o "Executando verificação de segurança" da
+   Cloudflare na tela de login, que detecta o Chrome headless e nem carrega os
+   campos. O plugin esconde as marcas de automação (navigator.webdriver, chrome
+   runtime, plugins, etc.) — melhor chance de passar o desafio JS sem CAPTCHA. */
+const puppeteer = addExtra(puppeteerBase);
+puppeteer.use(StealthPlugin());
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { promises as fs } from 'node:fs';
@@ -97,6 +106,8 @@ const BLING_SENHA = process.env.BLING_SENHA;
 const INTERVALO_MS = Number(process.env.INTERVALO_SEGUNDOS || 60) * 1000;
 const ESPERA_PROPOSTA_MS = 75_000;
 const MAX_FALHAS_LOGIN = 3;
+const BACKOFF_CF_MS = 20 * 60 * 1000; // Cloudflare bloqueando: espera 20min p/ o IP esfriar
+let bloqueadoAteMs = 0;               // enquanto Date.now() < isto, não tenta logar
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -174,6 +185,28 @@ async function login() {
      qualquer input aparecer antes de desistir. */
   await pagina.waitForSelector('input:not([type="hidden"])', { timeout: 20_000 }).catch(() => {});
   await sleep(1500);
+
+  /* Cloudflare "Executando verificação de segurança": interstitial anti-bot, sem
+     campos de login. Com o stealth, o desafio JS costuma passar sozinho em
+     alguns segundos — damos até ~45s, checando os campos aparecerem. Se não
+     passar, entramos em backoff: martelar o login a cada 60s é o que mantém o IP
+     marcado pela Cloudflare. */
+  const ehDesafioCF = () => pagina.evaluate(() =>
+    /verifica[çc][ãa]o de seguran[çc]a|executando verifica|um momento|checking your browser|just a moment/i.test(document.body?.innerText || '')
+    && document.querySelectorAll('input:not([type="hidden"])').length === 0);
+  if (await ehDesafioCF()) {
+    log('Cloudflare: verificação de segurança na tela de login — aguardando o desafio passar...');
+    const limite = Date.now() + 45_000;
+    while (Date.now() < limite && !(await pagina.$('input:not([type="hidden"])'))) {
+      await sleep(3000);
+    }
+    if (await ehDesafioCF()) {
+      bloqueadoAteMs = Date.now() + BACKOFF_CF_MS;
+      log(`Cloudflare continua bloqueando. Pausando o login por ${BACKOFF_CF_MS / 60000} min para o IP esfriar.`);
+      return false;
+    }
+    log('  desafio da Cloudflare passou — seguindo com o login.');
+  }
 
   const diag = await pagina.evaluate(() => ({
     url: location.href,
@@ -327,6 +360,7 @@ async function capturarProposta(idOrcamento) {
 
 async function ronda() {
   if (pausado) return;
+  if (Date.now() < bloqueadoAteMs) return; // backoff da Cloudflare: não martelar o login
 
   const r = await fetch(`${HUB}/api/bling?acao=propostas_pendentes`, {
     headers: { 'x-hub-token': TOKEN },

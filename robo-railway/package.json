@@ -9,7 +9,9 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "puppeteer": "^24.10.0"
+    "puppeteer": "^24.10.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "engines": {
     "node": ">=20"
