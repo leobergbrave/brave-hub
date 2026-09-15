@@ -380,21 +380,22 @@ async function ronda() {
   }
 }
 
-/* Follow-up automatico: o motor no HUB (processar_followups) decide sozinho se
-   manda algo — janela comercial, teto diario, intervalo aleatorio. Antes isso
-   ficava pendurado no cron-job.org, que caiu e derrubou os follow-ups por ~2
-   semanas sem ninguem perceber. Agora pega carona neste robo, que ja roda 24/7:
-   se o robo esta de pe, o follow-up roda. Falha aqui NUNCA pode atrapalhar a
-   captura de PDF, por isso o try/catch proprio e o log discreto. */
-async function tiqueFollowup() {
+/* Disparo em massa (campanhas) + follow-up automatico: ambos ficavam pendurados
+   no cron-job.org, que caiu e os derrubou (follow-up parou ~02/09, disparo ~11/06)
+   sem ninguem perceber. Agora pegam carona neste robo, que ja roda 24/7: se o robo
+   esta de pe, rodam. Os dois se auto-limitam no HUB (janela, teto diario, intervalo).
+   Falha aqui NUNCA pode atrapalhar a captura de PDF — por isso o try/catch proprio. */
+async function tiqueDisparo() {
   try {
-    const r = await fetch(`${HUB}/api/bling?acao=processar_followups`, { method: 'POST' });
+    // O disparo-sender processa as campanhas de disparo em massa E dispara o
+    // follow-up internamente (uma chamada cobre as duas). Ambos se auto-limitam.
+    const r = await fetch(`${HUB}/api/disparo-sender`, { method: 'POST' });
     const j = await r.json().catch(() => ({}));
-    if (j.enviado) log(`follow-up → ${j.cliente} (${j.template})`);
-    else if (j.erro) log(`follow-up falhou: ${j.erro}`);
-    // "aguardando intervalo" / "fora da janela" / "fila vazia" ficam silenciosos.
+    if (j.followup?.enviado) log(`follow-up → ${j.followup.cliente} (${j.followup.template})`);
+    else if (j.followup?.erro) log(`follow-up falhou: ${j.followup.erro}`);
+    // Campanhas e "aguardando intervalo/janela/fila vazia" ficam silenciosos.
   } catch (e) {
-    log('follow-up: erro ao chamar o HUB:', e.message);
+    log('disparo/follow-up: erro ao chamar o HUB:', e.message);
   }
 }
 
@@ -422,7 +423,7 @@ async function principal() {
       try { await navegador?.close(); } catch (_) {}
       navegador = null; pagina = null;
     }
-    await tiqueFollowup();  // independente da captura de PDF
+    await tiqueDisparo();  // campanhas + follow-up, independente da captura de PDF
     await sleep(INTERVALO_MS);
   }
 }
