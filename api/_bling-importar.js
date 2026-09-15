@@ -606,6 +606,14 @@ export default async function handler(req, res) {
               ? d.variacoes.map(v => ({ id: v.id, nome: v.nome, codigo: v.codigo, preco: v.preco, pesoBruto: v.pesoBruto }))
               : d.variacao || null,
             estrutura: d.estrutura ? 'tem estrutura' : null,
+            /* Conteudo (nao so o nome dos campos) do que o painel de produtos
+               precisa e o catalogo local nao tem: fotos e descricao. Ex.: o
+               Kettlebell Hibrido chegou ao painel sem foto nenhuma e sem
+               diferenciais (15/09) — se estiverem no Bling, vem daqui.
+               Somente leitura: nada e gravado nem apagado no Bling. */
+            midia: d.midia || null,
+            descricaoCurta: typeof d.descricaoCurta === 'string' ? d.descricaoCurta.slice(0, 2000) : null,
+            descricaoComplementar: typeof d.descricaoComplementar === 'string' ? d.descricaoComplementar.slice(0, 2000) : null,
             camposDetalhe: Object.keys(d),
           } : null,
         });
