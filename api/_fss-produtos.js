@@ -335,24 +335,56 @@ function mensagemKettlebellIron(kbs) {
   ].join('\n');
 }
 
-/* Oficial Texturizado e Hibrido ainda NAO tem diferenciais: nao existe
-   descricao deles nas LPs nem no catalogo. A unica afirmacao feita e a que o
-   proprio nome do produto sustenta (texturizado, vulcanizado). Os bullets
-   entram quando o Leo passar os diferenciais — ate la, sem fonte, sem bullet. */
+/* Oficial Texturizado — fonte de CADA bullet (pesquisa de 15/09/2026). Nem o
+   site da BRAVE, nem o Bling, nem as LPs tem descricao deste produto; o que
+   segue vem de onde da para conferir:
+   - texturizado ....... o nome do produto + o acabamento fosco visivel na foto
+   - KG e LB gravados .. a foto do produto (bling_kbo18: "32KG/71LB", "24KG/53LB")
+   - anel colorido ..... a foto do produto
+   - Corrida Fitness ... categorias da pagina do produto em bravefitness.com.br
+   NAO afirmar (a foto desmente):
+   - "kettlebell de competicao": os tamanhos VARIAM com o peso na foto, e
+     competicao tem o mesmo tamanho em todos os pesos por definicao;
+   - "uma cor por peso": na foto as cores se repetem (dois verdes, dois
+     vermelhos). */
 function mensagemKettlebellTexturizado(kbs) {
   return [
     '🔔 *Kettlebell Oficial Texturizado*',
-    'Pegada texturizada, do 4kg ao 32kg.',
+    'Acabamento texturizado e peso gravado em KG e LB, do 4kg ao 32kg.',
+    '',
+    '✅ Acabamento texturizado para pegada firme',
+    '✅ Peso gravado em KG e LB no próprio corpo',
+    '✅ Anel colorido na base da alça',
+    '✅ Linha BRAVE para Corrida Fitness e CrossTraining',
     '',
     '*Pesos e valores:*',
     ...linhasDePeso(kbs, false),
   ].join('\n');
 }
 
+/* Hibrido Vulcanizado — fonte de CADA bullet (pesquisa de 15/09/2026):
+   - oficial das provas .. afirmacao do Leo ("o Hybrid e o oficial, usado nas
+     provas"). A peca traz gravado "HYBRID", mesmo nome da UAIROX — Hybrid RUN,
+     prova que a BRAVE patrocina.
+   - vulcanizado ......... propriedade do revestimento de borracha vulcanizada
+     (amortece o impacto: protege o piso e reduz o barulho na queda).
+   - alca cromada, peso marcado .. a foto do produto (bling_kbh8). "Marcado" e
+     nao "gravado": no Hibrido o peso e letra branca sobre a borracha, e a foto
+     nao permite afirmar que e gravado (no Texturizado e fundido no ferro).
+   ATENCAO MARCA: o Leo disse "HYROX", mas HYROX e marca registrada de terceiro
+   e nao pode aparecer em conteudo nosso (regra dele). Alem disso, o kettlebell
+   oficial da HYROX e o Centr Octo, de 8 faces — e o Hibrido e arredondado. Por
+   isso: UAIROX (Hybrid RUN) e HTC (Fitness RUN), como no Sled, na Sandbag e no
+   Turf. NAO copiar especificacoes do Centr (uretano nao e vulcanizado). */
 function mensagemKettlebellHibrido(kbs) {
   return [
     '🔔 *Kettlebell Híbrido Vulcanizado*',
-    'Revestimento vulcanizado, do 8kg ao 32kg.',
+    'O kettlebell oficial das provas de corrida híbrida, do 8kg ao 32kg.',
+    '',
+    '✅ Estação oficial das provas UAIROX (Hybrid RUN) e HTC (Fitness RUN)',
+    '✅ Revestimento vulcanizado: protege o piso e reduz o barulho na queda',
+    '✅ Alça cromada e peso marcado no corpo',
+    "✅ Ideal para farmer's carry",
     '',
     '*Pesos e valores:*',
     ...linhasDePeso(kbs, false),
