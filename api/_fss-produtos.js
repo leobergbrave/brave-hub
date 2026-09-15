@@ -367,6 +367,35 @@ const primeiraFoto = (...produtos) => produtos
   .flatMap((p) => p?.fotos || [])
   .find((u) => u && !/drive\.google\.com/.test(u)) || '';
 
+/* Fotos de uma linha do catálogo geral (med balls, kettlebells), a partir das
+   linhas de `produtos`.
+
+   Bug que isto corrige (15/09/2026): antes era `.filter(Boolean).slice(0, 2)`
+   na ordem em que o banco devolvia — ordem não garantida. O catálogo guarda o
+   marcador de TEXTO 'SEM_FOTO_BLING' no lugar da foto (KBO12, M4L), e texto
+   passa num filtro Boolean. No dia em que o banco devolvesse um deles primeiro,
+   o marcador iria para a BotConversa como mídia, ela recusaria e o envio
+   abortaria ANTES do texto com os preços. O gerador de PDF já filtrava esse
+   marcador (_render-proposta.js); o painel nunca tinha aprendido.
+
+   Agora: só link http de verdade (nem marcador, nem vazio, nem Google Drive,
+   que bloqueia o download), sempre na mesma ordem — do peso mais leve ao mais
+   pesado, SKU como desempate — e sem repetir URL. Travado por
+   scripts/teste-fotos-da-linha.mjs. */
+const fotoUtilizavel = (u) => /^https?:\/\//i.test(u) && !/drive\.google\.com/i.test(u);
+
+export function fotosDaLinha(linhas, quantas) {
+  const vistas = new Set();
+  return (linhas || [])
+    .slice()
+    .sort((a, b) => pesoEmKg(a.nome) - pesoEmKg(b.nome)
+      || String(a.codigo_sku).localeCompare(String(b.codigo_sku)))
+    .map((l) => String(l.url_imagem || '').trim())
+    .filter(fotoUtilizavel)
+    .filter((u) => (vistas.has(u) ? false : vistas.add(u)))
+    .slice(0, quantas);
+}
+
 async function montarItens() {
   const catalogo = await loadCatalog();
   const por = Object.fromEntries(catalogo.map((p) => [p.alias, p]));
@@ -428,7 +457,7 @@ async function montarItens() {
         id: 'medballpro', titulo: '🏐 Medicine Ball Pro Series',
         texto: mensagemMedBallPro(medPro),
         video: '',
-        fotos: medPro.map((b) => b.url_imagem).filter(Boolean).slice(0, 2),
+        fotos: fotosDaLinha(medPro, 2),
       });
   }
   if (medCor.length) {
@@ -436,7 +465,7 @@ async function montarItens() {
         id: 'medballcor', titulo: '🎨 Med Ball Colorida',
         texto: mensagemMedBallColorida(medCor),
         video: '',
-        fotos: medCor.map((b) => b.url_imagem).filter(Boolean).slice(0, 2),
+        fotos: fotosDaLinha(medCor, 2),
       });
   }
   if (kbIron.length) {
@@ -444,7 +473,8 @@ async function montarItens() {
         id: 'kbiron', titulo: '🔔 Kettlebell Iron',
         texto: mensagemKettlebellIron(kbIron),
         video: '',
-        fotos: kbIron.map((k) => k.url_imagem).filter(Boolean).slice(0, 2),
+        // Uma foto so (pedido do Leo, 15/09): os 15 pesos usam a mesma imagem.
+        fotos: fotosDaLinha(kbIron, 1),
       });
   }
   /* Ordem Iron -> Texturizado -> Hibrido segue o preco por quilo (R$ 16, 28,
@@ -454,7 +484,7 @@ async function montarItens() {
         id: 'kbtex', titulo: '🔔 Kettlebell Oficial Texturizado',
         texto: mensagemKettlebellTexturizado(kbTex),
         video: '',
-        fotos: kbTex.map((k) => k.url_imagem).filter(Boolean).slice(0, 2),
+        fotos: fotosDaLinha(kbTex, 1),
       });
   }
   if (kbHib.length) {
@@ -463,7 +493,7 @@ async function montarItens() {
         texto: mensagemKettlebellHibrido(kbHib),
         video: '',
         // Sem foto no catalogo ainda: vai so o texto ate as imagens subirem.
-        fotos: kbHib.map((k) => k.url_imagem).filter(Boolean).slice(0, 2),
+        fotos: fotosDaLinha(kbHib, 1),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
