@@ -505,6 +505,71 @@ export async function produtosFss(req, res) {
    BotConversa — o caminho "zero toque" da central mobile. So funciona para
    conversas do numero BotConversa (FSS tem numero proprio) e dentro da janela
    de 24h da Meta; fora dela o erro do BotConversa e repassado. */
+/* ── Fotos PNG não chegam pelo WhatsApp ────────────────────────────────────
+   Diagnóstico de 15/09/2026, com envios reais ao número do Léo:
+     A) PNG original do Iron ............. não chegou
+     B) mesmo PNG sem metadado ........... não chegou
+     C) PNG do Texturizado (controle) .... não chegou
+     D) mesmos pixels do Iron, em JPEG ... CHEGOU
+   A BotConversa aceita PNG com transparência (responde 200), mas o WhatsApp
+   não entrega — e ninguém avisa. O Iron (PNG + PNG) saía só com texto; Med
+   Ball Colorida e Texturizado perdiam a foto PNG e mostravam só a JPG, por
+   isso passaram despercebidos.
+
+   A correção reproduz EXATAMENTE o teste D: um JPEG público no mesmo bucket,
+   com extensão .jpg. Fica guardado em whatsapp-jpg/ e é reaproveitado — o
+   nome do PNG já traz um carimbo de tempo, então foto trocada gera outro nome
+   e nunca serve cópia velha.
+
+   Vale só para o envio pela BotConversa (WhatsApp Web). No FSS o painel anexa
+   o arquivo direto na tela e isto não foi testado lá — não mexer sem teste.
+   Travado por scripts/teste-midia-entregavel.mjs. */
+export function precisaConverter(url) {
+  return /\.png$/i.test(String(url || '').split('?')[0]);
+}
+
+export async function pngParaJpeg(buffer) {
+  /* import dinâmico, nunca no topo do arquivo: o sharp é binário nativo, e
+     este módulo é importado pelo roteador api/bling.js — o mesmo que gera
+     proposta e sincroniza o Bling. Se o sharp falhasse ao carregar num import
+     de topo, derrubaria o roteador inteiro por causa de uma foto. */
+  const sharp = (await import('sharp')).default;
+  return sharp(buffer)
+    // Sem isto, as áreas transparentes saem PRETAS: o produto apareceria
+    // num quadro preto, pior do que não mandar foto.
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+}
+
+async function midiaEntregavel(url) {
+  if (!precisaConverter(url)) return url;
+  try {
+    const base = `${process.env.VITE_SUPABASE_URL}/storage/v1/object/public/produtos_media`;
+    const nome = String(url).split('?')[0].split('/').pop().replace(/\.png$/i, '.jpg');
+    const caminho = `whatsapp-jpg/${nome}`;
+    const publica = `${base}/${caminho}`;
+
+    const jaTem = await fetch(publica, { method: 'HEAD' });
+    if (jaTem.ok) return publica;
+
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`baixar o PNG deu HTTP ${r.status}`);
+    const jpg = await pngParaJpeg(Buffer.from(await r.arrayBuffer()));
+
+    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { error } = await supabase.storage.from('produtos_media')
+      .upload(caminho, jpg, { contentType: 'image/jpeg', upsert: true });
+    if (error) throw new Error(error.message);
+    return publica;
+  } catch (e) {
+    /* Pior caso = o comportamento de antes (o PNG vai e não chega). Uma foto
+       não pode impedir o texto com os preços de sair. */
+    console.error('[fss-produtos] PNG->JPG falhou, mandando o original:', e.message);
+    return url;
+  }
+}
+
 export async function enviarProdutoCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
   try {
@@ -537,7 +602,10 @@ export async function enviarProdutoCliente(req, res) {
 
     /* Midia primeiro, texto por ultimo — o texto (com precos) fica visivel na
        conversa. Midia e o video; nao havendo, a foto do produto. */
-    for (const midia of item.midias || []) {
+    for (const original of item.midias || []) {
+      // PNG não chega pelo WhatsApp mesmo com a BotConversa aceitando: vira
+      // JPEG antes de sair (diagnóstico e testes em midiaEntregavel).
+      const midia = await midiaEntregavel(original);
       const rv = await enviar({ type: 'file', value: midia });
       if (!rv.ok) {
         return res.status(502).json({ ok: false, error: `BotConversa recusou a mídia (HTTP ${rv.status}): ${rv.texto.slice(0, 250)}` });
