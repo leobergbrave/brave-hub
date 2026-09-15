@@ -214,6 +214,30 @@ const MEDBALL_PRO = ['M8P', 'M10P', 'M14P', 'M16P', 'M20P', 'M30P'];
    for corrigido. */
 const MEDBALL_COR = ['M4L', 'M8C', 'M10C', 'M12C', 'M14C', 'M16C', 'M18B', 'M20C', 'M30C'];
 
+/* Kettlebell Iron: a linha da fundicao propria, do 4 ao 32kg de 2 em 2.
+   ATENCAO KB26: custa R$ 390 no catalogo, fora da regra de R$ 16/kg das
+   outras catorze (seria R$ 416). Na lista isso aparece como +R$ 5 do 24 para o
+   26 e +R$ 52 do 26 para o 28, contra ~R$ 29 nos demais degraus. Fica na
+   mensagem porque o peso existe e vende; corrigir o preco e no catalogo. */
+const KETTLEBELL_IRON = [
+  'KB4', 'KB6', 'KB8', 'KB10', 'KB12', 'KB14', 'KB16', 'KB18',
+  'KB20', 'KB22', 'KB24', 'KB26', 'KB28', 'KB30', 'KB32',
+];
+
+/* Oficial Texturizado — a linha texturizada que o Leo vende (escolha dele em
+   15/09; a "Texturizado Importado", KT4-KT32, fica fora do painel).
+   ATENCAO 'Kbo4': o 4kg esta cadastrado em MINUSCULO. A busca por SKU e exata e
+   diferencia maiusculas, entao escrever 'KBO4' aqui faria o peso sumir da
+   mensagem sem erro nenhum. Mantenha o valor exato do catalogo. */
+const KETTLEBELL_TEXTURIZADO = [
+  'Kbo4', 'KBO6', 'KBO8', 'KBO10', 'KBO12', 'KBO14', 'KBO16', 'KBO18',
+  'KBO20', 'KBO24', 'KBO32',
+];
+
+/* Hibrido Vulcanizado. ATENCAO KBH8: peso_kg esta 12 no catalogo (e 8kg). Nao
+   afeta esta mensagem, que le o peso do NOME, mas afeta o frete do orcamento. */
+const KETTLEBELL_HIBRIDO = ['KBH8', 'KBH12', 'KBH16', 'KBH20', 'KBH24', 'KBH32'];
+
 async function buscarPorSku(skus) {
   try {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -295,6 +319,46 @@ function mensagemMedBallColorida(bolas) {
   ].join('\n');
 }
 
+/* Os argumentos vem da propria LP crossfit-box (config curada pelo Leo):
+   "Fundicao propria", "Produto ecologico", "produzido a partir de ferro de
+   sucata". Nada aqui e especificacao inventada — sem fonte, sem bullet. */
+function mensagemKettlebellIron(kbs) {
+  return [
+    '🔔 *Kettlebell Iron — Fundição Própria BRAVE*',
+    'Ferro fundido direto da nossa fundição, do 4kg ao 32kg.',
+    '',
+    '✅ Fundição própria BRAVE',
+    '✅ Produto ecológico, produzido a partir de ferro de sucata',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(kbs, false),
+  ].join('\n');
+}
+
+/* Oficial Texturizado e Hibrido ainda NAO tem diferenciais: nao existe
+   descricao deles nas LPs nem no catalogo. A unica afirmacao feita e a que o
+   proprio nome do produto sustenta (texturizado, vulcanizado). Os bullets
+   entram quando o Leo passar os diferenciais — ate la, sem fonte, sem bullet. */
+function mensagemKettlebellTexturizado(kbs) {
+  return [
+    '🔔 *Kettlebell Oficial Texturizado*',
+    'Pegada texturizada, do 4kg ao 32kg.',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(kbs, false),
+  ].join('\n');
+}
+
+function mensagemKettlebellHibrido(kbs) {
+  return [
+    '🔔 *Kettlebell Híbrido Vulcanizado*',
+    'Revestimento vulcanizado, do 8kg ao 32kg.',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(kbs, false),
+  ].join('\n');
+}
+
 const ERGO_ALIASES = ['esteira', 'escada', 'remo', 'skierg', 'bikeerg', 'storm'];
 
 /* Primeira foto utilizavel entre os produtos de uma familia. So serve link que
@@ -355,7 +419,10 @@ async function montarItens() {
   }
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
-  const [medPro, medCor] = await Promise.all([buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR)]);
+  const [medPro, medCor, kbIron, kbTex, kbHib] = await Promise.all([
+    buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
+    buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
+  ]);
   if (medPro.length) {
       itens.push({
         id: 'medballpro', titulo: '🏐 Medicine Ball Pro Series',
@@ -370,6 +437,33 @@ async function montarItens() {
         texto: mensagemMedBallColorida(medCor),
         video: '',
         fotos: medCor.map((b) => b.url_imagem).filter(Boolean).slice(0, 2),
+      });
+  }
+  if (kbIron.length) {
+      itens.push({
+        id: 'kbiron', titulo: '🔔 Kettlebell Iron',
+        texto: mensagemKettlebellIron(kbIron),
+        video: '',
+        fotos: kbIron.map((k) => k.url_imagem).filter(Boolean).slice(0, 2),
+      });
+  }
+  /* Ordem Iron -> Texturizado -> Hibrido segue o preco por quilo (R$ 16, 28,
+     60): o cliente le as tres linhas como degraus de uma escada. */
+  if (kbTex.length) {
+      itens.push({
+        id: 'kbtex', titulo: '🔔 Kettlebell Oficial Texturizado',
+        texto: mensagemKettlebellTexturizado(kbTex),
+        video: '',
+        fotos: kbTex.map((k) => k.url_imagem).filter(Boolean).slice(0, 2),
+      });
+  }
+  if (kbHib.length) {
+      itens.push({
+        id: 'kbhib', titulo: '🔔 Kettlebell Híbrido Vulcanizado',
+        texto: mensagemKettlebellHibrido(kbHib),
+        video: '',
+        // Sem foto no catalogo ainda: vai so o texto ate as imagens subirem.
+        fotos: kbHib.map((k) => k.url_imagem).filter(Boolean).slice(0, 2),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
