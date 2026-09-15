@@ -380,6 +380,24 @@ async function ronda() {
   }
 }
 
+/* Follow-up automatico: o motor no HUB (processar_followups) decide sozinho se
+   manda algo — janela comercial, teto diario, intervalo aleatorio. Antes isso
+   ficava pendurado no cron-job.org, que caiu e derrubou os follow-ups por ~2
+   semanas sem ninguem perceber. Agora pega carona neste robo, que ja roda 24/7:
+   se o robo esta de pe, o follow-up roda. Falha aqui NUNCA pode atrapalhar a
+   captura de PDF, por isso o try/catch proprio e o log discreto. */
+async function tiqueFollowup() {
+  try {
+    const r = await fetch(`${HUB}/api/bling?acao=processar_followups`, { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (j.enviado) log(`follow-up → ${j.cliente} (${j.template})`);
+    else if (j.erro) log(`follow-up falhou: ${j.erro}`);
+    // "aguardando intervalo" / "fora da janela" / "fila vazia" ficam silenciosos.
+  } catch (e) {
+    log('follow-up: erro ao chamar o HUB:', e.message);
+  }
+}
+
 async function principal() {
   log(`robô iniciado — ronda a cada ${INTERVALO_MS / 1000}s`);
 
@@ -404,6 +422,7 @@ async function principal() {
       try { await navegador?.close(); } catch (_) {}
       navegador = null; pagina = null;
     }
+    await tiqueFollowup();  // independente da captura de PDF
     await sleep(INTERVALO_MS);
   }
 }
