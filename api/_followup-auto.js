@@ -18,8 +18,8 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-const MAX_POR_DIA = 12;
-const GAP_MIN_MIN = 30;
+const MAX_POR_DIA = 15;
+const GAP_MIN_MIN = 30;   // intervalo aleatório entre mensagens (não o tique do robô)
 const GAP_MAX_MIN = 50;
 const HORA_INICIO = 9;   // BRT
 const HORA_FIM = 18;     // BRT (exclusivo)
