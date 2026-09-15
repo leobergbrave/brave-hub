@@ -123,6 +123,34 @@ export default function ClienteSelect({ cliente, onSelect }) {
 
   const setCampo = (campo, valor) => setRascunho((r) => ({ ...r, [campo]: valor }));
 
+  /* Ao ter um CEP com 8 dígitos, puxa o endereço no ViaCEP — vale tanto quando o
+     Léo digita quanto quando o CEP já veio do parse mas o resto ficou vazio (o
+     caso comum de "falta endereço"). Preenche logradouro/bairro/cidade/UF sem
+     mexer em número/complemento (que o ViaCEP não tem). Dedupe por ref evita
+     rebuscar o mesmo CEP a cada render. */
+  const cepBuscadoRef = useRef('');
+  const buscarCepRascunho = async (valorCep) => {
+    const cep = soDigitos(valorCep);
+    if (cep.length !== 8 || cepBuscadoRef.current === cep) return;
+    cepBuscadoRef.current = cep;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const d = await r.json();
+      if (d.erro) return;
+      setRascunho((rc) => (rc ? {
+        ...rc,
+        logradouro: d.logradouro || rc.logradouro || '',
+        bairro: d.bairro || rc.bairro || '',
+        cidade: d.localidade || rc.cidade || '',
+        estado: d.uf || rc.estado || '',
+      } : rc));
+    } catch (_) { /* silencioso: dá pra preencher à mão */ }
+  };
+
+  useEffect(() => {
+    if (rascunho && soDigitos(rascunho.cep).length === 8) buscarCepRascunho(rascunho.cep);
+  }, [rascunho?.cep]);
+
   const faltaNoRascunho = () => {
     if (!rascunho) return [];
     const f = [];
