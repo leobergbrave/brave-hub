@@ -248,6 +248,17 @@ const KETTLEBELL_HIBRIDO = ['KBH8', 'KBH12', 'KBH16', 'KBH20', 'KBH24', 'KBH32']
 const BUMPER_BLACK = ['2BK05', '2BK10', '2BK15', '2BK20', '2BK25'];
 const BUMPER_COLLOR = ['2AC05', '2AC10', '2AC15', '2AC20', '2AC25'];
 
+/* Foto da LINHA INTEIRA, e nao a de um peso: nas duas anilhas o que diferencia
+   e justamente a variacao entre os pesos — na Black a escrita muda de cor (25
+   vermelha, 20 azul, 15 amarela, 10 verde, 5 branca) e na Collor muda a anilha
+   toda. Uma foto de um peso so esconde o argumento do produto.
+   Fotos enviadas pelo Leo em 16/09; vieram do Google Drive e estao hospedadas
+   aqui porque a BotConversa nao consegue baixar do Drive. Nao vao no catalogo:
+   pertencem a linha, e url_imagem e por SKU (vale para proposta e Bling). */
+const BUCKET_PUBLICO = `${process.env.VITE_SUPABASE_URL || ''}/storage/v1/object/public/produtos_media`;
+const FOTO_LINHA_BLACK = `${BUCKET_PUBLICO}/linhas/linha-bumper-black-2.0.jpg`;
+const FOTO_LINHA_COLLOR = `${BUCKET_PUBLICO}/linhas/linha-bumper-collor-2.0.jpg`;
+
 async function buscarPorSku(skus) {
   try {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -593,20 +604,19 @@ async function montarItens() {
         id: 'bumperblack', titulo: '⚫ Anilha Black Bumper 2.0',
         texto: mensagemBumperBlack(bmpBlack),
         video: '',
-        fotos: fotosDaLinha(bmpBlack, 1),
+        // A foto da linha mostra a escrita colorida de cada peso; a do SKU nao.
+        fotos: [FOTO_LINHA_BLACK],
       });
   }
   if (bmpCollor.length) {
-      /* Duas fotos, e nao a do peso mais leve: a mensagem vende COR, e a de
-         5kg e cinza. Mesma logica da corda, que manda as duas cores. Pegamos
-         as duas mais pesadas (azul e vermelha); se faltar foto nelas, cai na
-         regra normal da linha em vez de ficar sem imagem. */
-      const coloridas = fotosDaLinha(bmpCollor.filter((a) => /2[05]\s*kg/i.test(a.nome)), 2);
       itens.push({
         id: 'bumpercollor', titulo: '🔴 Anilha Bumper Collor 2.0',
         texto: mensagemBumperCollor(bmpCollor),
         video: '',
-        fotos: coloridas.length ? coloridas : fotosDaLinha(bmpCollor, 2),
+        /* Uma foto so, com as cinco cores lado a lado. Antes eram duas (azul e
+           vermelha) porque nenhuma foto sozinha mostrava a linha — a do Leo
+           mostra, e duas fotos viraram repeticao. */
+        fotos: [FOTO_LINHA_COLLOR],
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
