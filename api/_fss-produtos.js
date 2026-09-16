@@ -238,6 +238,16 @@ const KETTLEBELL_TEXTURIZADO = [
    afeta esta mensagem, que le o peso do NOME, mas afeta o frete do orcamento. */
 const KETTLEBELL_HIBRIDO = ['KBH8', 'KBH12', 'KBH16', 'KBH20', 'KBH24', 'KBH32'];
 
+/* Anilhas Bumper 2.0. Fora da mensagem, de proposito:
+   - "Black and White" (2BW*) e "CAMPEONATO" (*CAMP): mesmos precos das linhas
+     base, sao edicoes especiais e poluiriam a lista de pesos;
+   - Collor em LIBRAS (2AC10LB..2AC55LB, 6 pesos, outras cores): misturar KG e
+     LB na mesma mensagem tira a base de comparacao do cliente — foi o que o
+     Leo mandou corrigir nas Med Balls. A LP crossfit-box apresenta o Collor
+     como "Disponivel de 5 a 25 kg", entao o painel segue em KG. */
+const BUMPER_BLACK = ['2BK05', '2BK10', '2BK15', '2BK20', '2BK25'];
+const BUMPER_COLLOR = ['2AC05', '2AC10', '2AC15', '2AC20', '2AC25'];
+
 async function buscarPorSku(skus) {
   try {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -267,9 +277,17 @@ const rotuloPeso = (nome) => {
   return m ? `${Number(m[1])}${m[2].toUpperCase()}` : nome;
 };
 
-const corDaBola = (nome) => {
-  const m = String(nome).match(/-\s*([A-Za-zÀ-ú]+)\s*$/);
-  return m ? m[1] : '';
+/* A cor fica no fim do nome, em dois formatos que o catalogo usa:
+     med ball .... "Med Ball 08LB - Verde"                  (traco, cor)
+     anilha ...... "Anilha Collor Bumper 2.0 - 05kg Cinza"  (peso, cor)
+   Os dois padroes nao se confundem: o da anilha exige o peso colado na cor, e
+   o da med ball exige que nao haja numero depois do traco. */
+const corDoItem = (nome) => {
+  const t = String(nome || '');
+  const aposPeso = t.match(/\d+\s*(?:kg|lb)\s+([A-Za-zÀ-ú]+)\s*$/i);
+  if (aposPeso) return aposPeso[1];
+  const aposTraco = t.match(/-\s*([A-Za-zÀ-ú]+)\s*$/);
+  return aposTraco ? aposTraco[1] : '';
 };
 
 /* Cada peso leva os DOIS valores, como no resto do painel. Mostrar so o a
@@ -284,7 +302,7 @@ function linhasDePeso(bolas, comCor) {
       // Reais inteiros: e como os precos a vista aparecem no catalogo
       // (R$ 449, R$ 629) — centavos quebrados denunciam conta automatica.
       const avista = Math.round(Number(b.preco) * 0.9);
-      const cor = comCor ? corDaBola(b.nome) : '';
+      const cor = comCor ? corDoItem(b.nome) : '';
       return `⚖️ *${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${linhaPreco(avista, b.preco)}`;
     });
 }
@@ -391,6 +409,47 @@ function mensagemKettlebellHibrido(kbs) {
   ].join('\n');
 }
 
+/* Anilhas — fonte de CADA bullet: a LP crossfit-box, curada pelo Leo.
+   Bumper Black 2.0: tagline "Quique reduzido e design com logo em alto
+   relevo", features "Dureza aferida com medidor" e "Alto nivel de
+   acabamento". O centro em inox e o logo em relevo aparecem na foto do
+   produto (2BK25). */
+function mensagemBumperBlack(anilhas) {
+  return [
+    '⚫ *Anilha Black Bumper 2.0*',
+    'Quique reduzido e logo em alto relevo, do 5kg ao 25kg.',
+    '',
+    '✅ Quique reduzido ao soltar a barra no chão',
+    '✅ Dureza aferida com medidor',
+    '✅ Logo BRAVE em alto relevo',
+    '✅ Alto nível de acabamento',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(anilhas, false),
+  ].join('\n');
+}
+
+/* Bumper Collor 2.0: tagline "Diferencie seu box com cores vibrantes de
+   impacto", features "Borracha premium · centro em inox" e "Garantia de 2 anos
+   contra quebra" (LP crossfit-box). A cor por peso e verificavel no proprio
+   catalogo — 5 cinza, 10 verde, 15 amarelo, 20 azul, 25 vermelha, todas
+   distintas (diferente dos kettlebells, onde as cores se repetiam).
+   NAO afirmar "padrao IWF": na LP essa e a linha Competition (ABC*), outro
+   produto. */
+function mensagemBumperCollor(anilhas) {
+  return [
+    '🔴 *Anilha Bumper Collor 2.0*',
+    'Cada peso na sua cor, do 5kg ao 25kg.',
+    '',
+    '✅ Uma cor para cada peso — a barra certa montada sem conferir',
+    '✅ Borracha premium com centro em inox',
+    '✅ Garantia de 2 anos contra quebra',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(anilhas, true),
+  ].join('\n');
+}
+
 const ERGO_ALIASES = ['esteira', 'escada', 'remo', 'skierg', 'bikeerg', 'storm'];
 
 /* Primeira foto utilizavel entre os produtos de uma familia. So serve link que
@@ -480,9 +539,10 @@ async function montarItens() {
   }
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
-  const [medPro, medCor, kbIron, kbTex, kbHib] = await Promise.all([
+  const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor] = await Promise.all([
     buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
     buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
+    buscarPorSku(BUMPER_BLACK), buscarPorSku(BUMPER_COLLOR),
   ]);
   if (medPro.length) {
       itens.push({
@@ -526,6 +586,27 @@ async function montarItens() {
         video: '',
         // Sem foto no catalogo ainda: vai so o texto ate as imagens subirem.
         fotos: fotosDaLinha(kbHib, 1),
+      });
+  }
+  if (bmpBlack.length) {
+      itens.push({
+        id: 'bumperblack', titulo: '⚫ Anilha Black Bumper 2.0',
+        texto: mensagemBumperBlack(bmpBlack),
+        video: '',
+        fotos: fotosDaLinha(bmpBlack, 1),
+      });
+  }
+  if (bmpCollor.length) {
+      /* Duas fotos, e nao a do peso mais leve: a mensagem vende COR, e a de
+         5kg e cinza. Mesma logica da corda, que manda as duas cores. Pegamos
+         as duas mais pesadas (azul e vermelha); se faltar foto nelas, cai na
+         regra normal da linha em vez de ficar sem imagem. */
+      const coloridas = fotosDaLinha(bmpCollor.filter((a) => /2[05]\s*kg/i.test(a.nome)), 2);
+      itens.push({
+        id: 'bumpercollor', titulo: '🔴 Anilha Bumper Collor 2.0',
+        texto: mensagemBumperCollor(bmpCollor),
+        video: '',
+        fotos: coloridas.length ? coloridas : fotosDaLinha(bmpCollor, 2),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
