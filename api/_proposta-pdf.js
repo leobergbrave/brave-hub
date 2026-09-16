@@ -788,12 +788,18 @@ export async function propostasPendentes(req, res) {
   for (const o of linhas || []) {
     if (ORIGENS_SEM_CAPTURA.includes(String(o.origem_lead || '').toUpperCase())) continue;
     for (const t of TIPOS) {
-      if (o[t.idCol] && !o[t.pdfCol]) {
-        pendentes.push({
-          slug: o.slug, cliente: o.cliente, tipo: t.tipo,
-          idOrcamento: String(o[t.idCol]), numero: o[t.numCol] || null,
-        });
-      }
+      if (!o[t.idCol] || o[t.pdfCol]) continue;
+      /* "unica" fantasma: quando o orçamento vira PEDIDO (venda), bling_pedido_id
+         (o idCol da "unica") é setado e dispara uma "unica" pendente que o robô
+         nunca captura — ele tenta imprimir um PEDIDO como se fosse orçamento, e
+         falha em loop, entupindo a fila e atrasando as propostas reais. Se
+         avista+prazo já foram capturados, não há "unica" de verdade a capturar
+         (venda convertida): pulamos. Um fluxo "unica" legítimo não tem os dois. */
+      if (t.tipo === 'unica' && o.bling_avista_pdf && o.bling_prazo_pdf) continue;
+      pendentes.push({
+        slug: o.slug, cliente: o.cliente, tipo: t.tipo,
+        idOrcamento: String(o[t.idCol]), numero: o[t.numCol] || null,
+      });
     }
   }
   return res.status(200).json({ ok: true, pendentes });
