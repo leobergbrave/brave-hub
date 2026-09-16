@@ -109,6 +109,15 @@ const MAX_FALHAS_LOGIN = 3;
 const BACKOFF_CF_MS = 20 * 60 * 1000; // Cloudflare bloqueando: espera 20min p/ o IP esfriar
 let bloqueadoAteMs = 0;               // enquanto Date.now() < isto, não tenta logar
 
+/* Trava anti-entupimento: uma proposta que NUNCA captura (ex.: apagada no Bling,
+   ou algum estado estranho) era retentada a cada rodada e travava a fila inteira,
+   atrasando as propostas boas por minutos (visto com órfãs de venda convertida
+   segurando o Hiago/LIFE ALVORADA). Aqui contamos as falhas por item e, passado
+   o limite, PULAMOS ele — as propostas reais nunca ficam presas atrás de uma
+   quebrada. O item pulado é retentado no próximo restart do robô (o Map zera). */
+const MAX_FALHAS_ITEM = 3;
+const falhasCaptura = new Map();
+
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -374,6 +383,9 @@ async function ronda() {
 
   for (const p of fila) {
     if (pausado) return;
+    const chave = `${p.slug}:${p.tipo}:${p.numero || p.idOrcamento}`;
+    if ((falhasCaptura.get(chave) || 0) >= MAX_FALHAS_ITEM) continue; // quebrada: não trava a fila
+
     let ok = false;
     for (let tentativa = 1; tentativa <= 2 && !ok; tentativa++) {
       try {
@@ -408,6 +420,15 @@ async function ronda() {
       } catch (e) {
         log(`  falhou: ${e.message}`);
         if (tentativa === 1) await sleep(6000);
+      }
+    }
+    if (ok) {
+      falhasCaptura.delete(chave);
+    } else {
+      const n = (falhasCaptura.get(chave) || 0) + 1;
+      falhasCaptura.set(chave, n);
+      if (n >= MAX_FALHAS_ITEM) {
+        log(`  ⚠️ ${p.cliente} (${p.tipo}) falhou ${n} rodadas — pulando para não travar a fila (será retentada num restart do robô).`);
       }
     }
     await sleep(5000); // ritmo humano entre propostas
