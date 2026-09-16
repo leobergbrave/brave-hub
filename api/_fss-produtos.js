@@ -153,7 +153,7 @@ function mensagemSandbag(s10, s20, s30) {
     '✅ Enchimento uniforme — carga estável durante o movimento',
     '✅ Pronta entrega',
   ];
-  const linha = (p, peso) => { if (p) l.push(`⚖️ *${peso}* — ${linhaPreco(p.preco_avista, p.preco)}`); };
+  const linha = (p, peso) => { if (p) l.push(`*${peso}* — ${linhaPreco(p.preco_avista, p.preco)}`); };
   if (s10 || s20 || s30) l.push('');
   linha(s10, '10kg'); linha(s20, '20kg'); linha(s30, '30kg');
   return l.join('\n');
@@ -314,7 +314,7 @@ function linhasDePeso(bolas, comCor) {
       // (R$ 449, R$ 629) — centavos quebrados denunciam conta automatica.
       const avista = Math.round(Number(b.preco) * 0.9);
       const cor = comCor ? corDoItem(b.nome) : '';
-      return `⚖️ *${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${linhaPreco(avista, b.preco)}`;
+      return `*${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${linhaPreco(avista, b.preco)}`;
     });
 }
 
