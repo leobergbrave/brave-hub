@@ -45,6 +45,24 @@ async function classificarComGemini(texto, geminiKey) {
   }
 }
 
+/* Pausa o follow-up automatico deste numero: grava tel8 -> ISO no mesmo JSON
+   que api/_followup-auto.js le (bucket propostas-pdf, estado/respostas-followup.json).
+   Piggyback neste webhook de resposta que JA funciona, para a pausa nao depender
+   so do fluxo "resposta padrao" do BotConversa. Best-effort: nunca quebra o handler. */
+async function registrarRespostaFollowup(supabase, telefone) {
+  const tel8 = String(telefone || '').replace(/\D/g, '').slice(-8);
+  if (tel8.length !== 8) return;
+  const BUCKET = 'propostas-pdf', PATH = 'estado/respostas-followup.json';
+  try {
+    let mapa = {};
+    const dl = await supabase.storage.from(BUCKET).download(PATH);
+    if (!dl.error) { try { mapa = JSON.parse(await dl.data.text()); } catch (_) {} }
+    mapa[tel8] = new Date().toISOString();
+    await supabase.storage.from(BUCKET)
+      .upload(PATH, Buffer.from(JSON.stringify(mapa)), { upsert: true, contentType: 'application/json' });
+  } catch (_) { /* best-effort */ }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -75,6 +93,9 @@ export default async function handler(req, res) {
   if (!telefone || !texto) {
     return res.status(200).json({ ok: false, tipo: 'desconhecido', reason: 'Payload sem telefone ou texto' });
   }
+
+  // Qualquer resposta pausa o follow-up automatico do numero (nao depende do lead).
+  await registrarRespostaFollowup(supabase, telefone);
 
   const { data: config } = await supabase
     .from('prospeccao_config').select('gemini_key').eq('id', 1).maybeSingle();

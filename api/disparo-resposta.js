@@ -76,6 +76,21 @@ async function registrarResposta(telRaw) {
   } catch (_) { /* best-effort: nunca falhar o webhook por causa do registro */ }
 }
 
+/* O BotConversa inclui o telefone do assinante automaticamente no corpo do
+   webhook, mas a chave varia (phone, telefone, from, sender, contact.phone,
+   data.phone) e as vezes vem sob root/data. Cobrimos as mesmas variacoes do
+   webhook que ja funciona (api/prospeccao-resposta.js) para nao depender de
+   uma unica forma. Retorna so digitos (>=10) ou ''. */
+function extrairTelefone(body) {
+  const cands = [body, body?.root, body?.data, body?.contact].filter(Boolean);
+  for (const o of cands) {
+    const raw = o.phone || o.telefone || o.from || o.sender || o.contact?.phone || o.data?.phone || '';
+    const tel = String(raw).replace(/\D/g, '');
+    if (tel.length >= 10) return tel;
+  }
+  return '';
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
@@ -89,8 +104,7 @@ export default async function handler(req) {
 
   // Lógica unificada para lead-respondeu
   if (type === 'lead-respondeu') {
-    const telefoneRaw = payload.telefone || payload.phone || payload.contact?.phone || '';
-    const tel = telefoneRaw.replace(/\D/g, '');
+    const tel = extrairTelefone(body);
     if (tel.length < 10) {
       return json({ ok: true, updated: false, msg: 'Telefone inválido ou variável não substituída' });
     }
