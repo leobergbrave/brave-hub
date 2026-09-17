@@ -21,6 +21,11 @@ const supabaseAdmin = createClient(
 const MAX_POR_DIA = 15;
 const GAP_MIN_MIN = 30;   // intervalo aleatório entre mensagens (não o tique do robô)
 const GAP_MAX_MIN = 50;
+/* Trava anti-duplicata: nunca dois follow-ups ao MESMO telefone em menos de
+   COOLDOWN_DIAS. Junto com o dedup por telefone (não por orçamento), garante que
+   o cliente recebe cada passo no máximo uma vez e nunca dois em sequência curta —
+   mesmo que ele tenha vários orçamentos. */
+const COOLDOWN_DIAS = 7;
 const HORA_INICIO = 9;   // BRT
 const HORA_FIM = 18;     // BRT (exclusivo)
 const DIAS_UTEIS = [1, 2, 3, 4, 5]; // seg-sex
@@ -109,6 +114,25 @@ async function montarFila() {
     }
   }
 
+  /* Histórico por TELEFONE, somando TODAS as linhas do cliente. O "já enviei" era
+     gravado por orçamento, então quem tinha 2+ orçamentos recebia a mesma
+     sequência uma vez por orçamento (duplicata). Aqui juntamos: o que já foi
+     enviado ao número (passos) e QUANDO foi o último envio (para o cooldown). */
+  const enviadosPorTel = new Map();    // tel8 -> Set(ids de template já enviados)
+  const ultimoEnvioPorTel = new Map(); // tel8 -> ms do follow-up mais recente
+  for (const o of (orcs || [])) {
+    const tel8 = String(o.payload?.telefoneCliente || '').replace(/\D/g, '').slice(-8);
+    if (tel8.length !== 8) continue;
+    if (!enviadosPorTel.has(tel8)) enviadosPorTel.set(tel8, new Set());
+    const set = enviadosPorTel.get(tel8);
+    for (const id of (o.payload?.marketing_sent || [])) set.add(id);
+    for (const e of (o.payload?.followup_auto || [])) {
+      const ms = Date.parse(e?.em || '');
+      if (!Number.isNaN(ms)) ultimoEnvioPorTel.set(tel8, Math.max(ultimoEnvioPorTel.get(tel8) || 0, ms));
+    }
+  }
+  const COOLDOWN_MS = COOLDOWN_DIAS * 24 * 3600 * 1000;
+
   const prazos = await prazosPorTelefone();
   const agora = new Date();
   const fila = [];
@@ -117,14 +141,19 @@ async function montarFila() {
     if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
     if (!o.payload?.telefoneCliente) continue;
     const telNorm = o.payload.telefoneCliente.replace(/\D/g, '');
-    if (compraramTel.has(telNorm.slice(-8)) || compraramNome.has(norm(o.cliente))) continue;
+    const tel8 = telNorm.slice(-8);
+    if (compraramTel.has(tel8) || compraramNome.has(norm(o.cliente))) continue;
     if (o.payload?.follow_up_adiado_ate && new Date(o.payload.follow_up_adiado_ate) > agora) continue;
     if (vistos.has(telNorm)) continue;
 
+    // Cooldown: nunca mandar dois follow-ups seguidos ao mesmo número.
+    const ultimo = ultimoEnvioPorTel.get(tel8) || 0;
+    if (ultimo && (agora.getTime() - ultimo) < COOLDOWN_MS) continue;
+
     const dias = Math.floor(Math.abs(agora - new Date(o.criado_em)) / (24 * 3600 * 1000));
-    const enviados = o.payload?.marketing_sent || [];
+    const enviados = enviadosPorTel.get(tel8) || new Set(); // por TELEFONE, não por orçamento
     for (const t of ativos) {
-      if (dias >= t.dias_delay && !enviados.includes(t.id)) {
+      if (dias >= t.dias_delay && !enviados.has(t.id)) {
         const prazoData = prazos.get(telNorm.slice(-8)) || null;
         fila.push({
           orcamento: o, template: t, prazoData,
