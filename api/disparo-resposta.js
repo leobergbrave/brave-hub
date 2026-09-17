@@ -36,6 +36,46 @@ async function dbPatch(table, filter, data) {
   if (!r.ok) throw new Error(`PATCH ${table}: ${r.status}`);
 }
 
+/* Registro de resposta para o follow-up automatico (fase 2 da trava).
+   Quando o cliente responde QUALQUER coisa, gravamos o telefone (8 ultimos
+   digitos) num JSON no Storage. O motor de follow-up (api/_followup-auto.js)
+   le esse arquivo e PAUSA a sequencia de quem ja respondeu — o Leo assume no
+   manual. Storage (e nao tabela) porque nao dependemos de migration e o motor
+   ja guarda o proprio estado do mesmo jeito. Nunca quebra o webhook: qualquer
+   erro aqui e engolido, o registro e best-effort. */
+const RESP_BUCKET = 'propostas-pdf';
+const RESP_PATH = 'estado/respostas-followup.json';
+const storageObj = () => `${process.env.VITE_SUPABASE_URL}/storage/v1/object`;
+
+async function lerRespostas() {
+  try {
+    const r = await fetch(`${storageObj()}/${RESP_BUCKET}/${RESP_PATH}`, {
+      headers: { apikey: sbKey(), Authorization: `Bearer ${sbKey()}` },
+    });
+    if (r.ok) return await r.json();
+  } catch (_) { /* primeira vez: arquivo ainda nao existe */ }
+  return {};
+}
+
+async function registrarResposta(telRaw) {
+  const tel8 = String(telRaw || '').replace(/\D/g, '').slice(-8);
+  if (tel8.length !== 8) return;
+  try {
+    const mapa = await lerRespostas();
+    mapa[tel8] = new Date().toISOString(); // sempre a resposta mais recente
+    await fetch(`${storageObj()}/${RESP_BUCKET}/${RESP_PATH}`, {
+      method: 'POST',
+      headers: {
+        apikey: sbKey(),
+        Authorization: `Bearer ${sbKey()}`,
+        'Content-Type': 'application/json',
+        'x-upsert': 'true',
+      },
+      body: JSON.stringify(mapa),
+    });
+  } catch (_) { /* best-effort: nunca falhar o webhook por causa do registro */ }
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
@@ -58,6 +98,9 @@ export default async function handler(req) {
     const telComDDI = tel.startsWith('55') ? tel : `55${tel}`;
     const telSemDDI = tel.startsWith('55') && tel.length > 11 ? tel.slice(2) : tel;
     const agora = new Date().toISOString();
+
+    // Pausa o follow-up automatico deste numero, tendo ou nao linha em `leads`.
+    await registrarResposta(tel);
 
     try {
       const orFilter = `or=(telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI})`;
@@ -116,6 +159,9 @@ export default async function handler(req) {
     }
 
     await dbPatch('disparo_fila', `id=eq.${item.id}`, { resposta, respondeu_em: agora });
+
+    // Respondeu/engajou/saiu → tambem pausa o follow-up automatico do numero.
+    if (resposta === 'aceitou' || resposta === 'optout') await registrarResposta(tel);
 
     if (resposta === 'optout') {
       const orFilter = `or=(telefone.eq.${tel},telefone.eq.${telComDDI},telefone.eq.${telSemDDI})`;

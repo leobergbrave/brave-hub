@@ -56,6 +56,19 @@ async function lerEstado() {
 const salvarEstado = (st) => supabaseAdmin.storage.from(BUCKET)
   .upload(ESTADO, Buffer.from(JSON.stringify(st)), { upsert: true, contentType: 'application/json' });
 
+/* Telefones (8 ultimos digitos) que ja responderam. Gravado pelo webhook
+   api/disparo-resposta.js quando o cliente manda qualquer mensagem. Quem esta
+   aqui tem a sequencia PAUSADA: cliente que respondeu vira atendimento manual do
+   Leo, nao alvo de automacao. Mapa tel8 -> ISO da ultima resposta. */
+const RESPOSTAS = 'estado/respostas-followup.json';
+async function lerRespostas() {
+  try {
+    const dl = await supabaseAdmin.storage.from(BUCKET).download(RESPOSTAS);
+    if (!dl.error) return JSON.parse(await dl.data.text());
+  } catch (_) { /* ninguem respondeu ainda: arquivo nao existe */ }
+  return {};
+}
+
 /* Janela em que a data de inauguracao passa a mandar na ordem da fila. Alem de
    90 dias o cliente ainda nao esta decidindo; dentro dela, cada dia conta —
    negocio fechado em ate 50 dias ganha ~47% das vezes contra ~20% depois disso
@@ -133,6 +146,8 @@ async function montarFila() {
   }
   const COOLDOWN_MS = COOLDOWN_DIAS * 24 * 3600 * 1000;
 
+  const respostas = await lerRespostas(); // tel8 -> ISO; quem respondeu fica pausado
+
   const prazos = await prazosPorTelefone();
   const agora = new Date();
   const fila = [];
@@ -143,6 +158,7 @@ async function montarFila() {
     const telNorm = o.payload.telefoneCliente.replace(/\D/g, '');
     const tel8 = telNorm.slice(-8);
     if (compraramTel.has(tel8) || compraramNome.has(norm(o.cliente))) continue;
+    if (respostas[tel8]) continue; // ja respondeu → sequencia pausada, Leo assume no manual
     if (o.payload?.follow_up_adiado_ate && new Date(o.payload.follow_up_adiado_ate) > agora) continue;
     if (vistos.has(telNorm)) continue;
 
