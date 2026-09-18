@@ -245,6 +245,29 @@ const KETTLEBELL_HIBRIDO = ['KBH8', 'KBH12', 'KBH16', 'KBH20', 'KBH24', 'KBH32']
      LB na mesma mensagem tira a base de comparacao do cliente — foi o que o
      Leo mandou corrigir nas Med Balls. A LP crossfit-box apresenta o Collor
      como "Disponivel de 5 a 25 kg", entao o painel segue em KG. */
+/* Dumbbells. Tres linhas escolhidas pelo Leo em 18/09; a Redondo Gym (DBG)
+   ficou de fora. Fora tambem, de proposito:
+   - variantes CAMP (mesmo produto, preco inconsistente: DBO25LBCAMP custa
+     R$ 299 contra R$ 370 do DBO25LB);
+   - a EVO em LIBRAS: 10 pesos com preco irregular (de R$ 11,25 a R$ 14,80 por
+     libra, o de 25LB claramente fora da curva) e o de 10LB sem preco nenhum.
+   Os pesos quebrados (7,5 / 12,5 / 17,5 / 22,5) dependem do rotuloPeso
+   corrigido em 18/09 — antes todos saiam como "5KG". */
+const DUMBBELL_IRON = [
+  'DBF1', 'DBF2', 'DBF3', 'DBF4', 'DBF5', 'DBF6', 'DBF7', 'DBF8', 'DBF9',
+  'DBF10', 'DBF12', 'DBF14', 'DBF15', 'DBF16', 'DBF18', 'DBF20', 'DBF22,5',
+  'DBF24', 'DBF26', 'DBF28', 'DBF30', 'DBF32', 'DBF36', 'DBF38', 'DBF40',
+];
+const DUMBBELL_EVO = [
+  'DBO1', 'DBO2', 'DBO3', 'DBO4', 'DBO5', 'DBO6', 'DBO7', 'DBO7,5', 'DBO8',
+  'DBO9', 'DBO10', 'DBO12,5', 'DBO15', 'DBO17,5', 'DBO20', 'DBO22,5', 'DBO25',
+  'DBO27,5', 'DBO30', 'DBO32,5', 'DBO35', 'DBO40', 'DBO45',
+];
+const DUMBBELL_HYBRID = [
+  'DBHB2,5', 'DBHB5', 'DBHB7,5', 'DBHB10', 'DBHB12,5', 'DBHB15', 'DBHB17,5',
+  'DBHB20', 'DBHB22,5', 'DBHB25', 'DBHB30',
+];
+
 const BUMPER_BLACK = ['2BK05', '2BK10', '2BK15', '2BK20', '2BK25'];
 const BUMPER_COLLOR = ['2AC05', '2AC10', '2AC15', '2AC20', '2AC25'];
 
@@ -274,7 +297,7 @@ async function buscarPorSku(skus) {
 
 /* Ordena por peso REAL: a linha mistura KG e LB, e ordenar pelo numero cru
    colocaria a de 30LB (13,6kg) antes da de 12KG. */
-function pesoEmKg(nome) {
+export function pesoEmKg(nome) {
   const m = String(nome).match(/(\d+(?:[.,]\d+)?)\s*(KG|LB)/i);
   if (!m) return 999;
   const n = Number(m[1].replace(',', '.'));
@@ -283,9 +306,18 @@ function pesoEmKg(nome) {
 
 /* Rotulo do peso como esta no catalogo (02KG, 20LB) — e o que o cliente vera
    na proposta, entao inventar conversao aqui criaria divergencia. */
-const rotuloPeso = (nome) => {
-  const m = String(nome).match(/(\d+)\s*(KG|LB)/i);
-  return m ? `${Number(m[1])}${m[2].toUpperCase()}` : nome;
+export const rotuloPeso = (nome) => {
+  /* Aceita peso QUEBRADO. Antes a regex era /(\d+)\s*(KG|LB)/ e, em "Iron
+     22,5KG", casava so o "5KG" — a linha de dumbbell tem 7,5 / 12,5 / 17,5 /
+     22,5 e a mensagem sairia com quatro "5KG" de precos diferentes. Nenhum
+     produto anterior tinha peso quebrado, por isso nunca apareceu.
+     Travado por scripts/teste-rotulo-peso.mjs. */
+  const m = String(nome).match(/(\d+(?:[.,]\d+)?)\s*(KG|LB)/i);
+  if (!m) return nome;
+  const n = Number(m[1].replace(',', '.'));
+  // Virgula, nao ponto: e o separador decimal que o cliente brasileiro le.
+  const num = Number.isInteger(n) ? String(n) : String(n).replace('.', ',');
+  return `${num}${m[2].toUpperCase()}`;
 };
 
 /* A cor fica no fim do nome, em dois formatos que o catalogo usa:
@@ -420,6 +452,63 @@ function mensagemKettlebellHibrido(kbs) {
   ].join('\n');
 }
 
+/* Dumbbells — fonte de CADA bullet.
+   Iron (LP crossfit-box, "Dumbbell Iron"): tagline "A ferramenta de treino
+   mais fundamental do seu box", features "Produto ecologico de fundicao
+   propria" e "Otimo custo-beneficio". A foto mostra ferro fundido bruto,
+   sextavado, com o peso fundido na cabeca. */
+function mensagemDumbbellIron(dbs) {
+  return [
+    '🏋️ *Dumbbell Sextavado Iron*',
+    'A ferramenta de treino mais fundamental do seu box, do 1kg ao 40kg.',
+    '',
+    '✅ Fundição própria BRAVE',
+    '✅ Produto ecológico, em ferro fundido',
+    '✅ Formato sextavado — não rola pelo chão',
+    '✅ Ótimo custo-benefício',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(dbs, false),
+  ].join('\n');
+}
+
+/* EVO (LP crossfit-box, "Dumbbell Evo Vulcanizado"): tagline "Resistencia e
+   design em corpo unico revestido", features "Importado · borracha virgem" e
+   "Alto nivel em acabamento e ergonomia". O cabo cromado aparece na foto e
+   esta no nome do produto. */
+function mensagemDumbbellEvo(dbs) {
+  return [
+    '💎 *Dumbbell EVO Cromado Vulcanizado*',
+    'Resistência e design em corpo único revestido, do 1kg ao 45kg.',
+    '',
+    '✅ Importado, em borracha virgem',
+    '✅ Cabo cromado',
+    '✅ Alto nível em acabamento e ergonomia',
+    '✅ Formato sextavado — não rola pelo chão',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(dbs, false),
+  ].join('\n');
+}
+
+/* Hybrid Black: NAO tem descricao na LP, no site nem no Bling. So afirma o que
+   a foto do produto mostra (sextavado, cabo com pegada texturizada, peso
+   marcado na face). Os bullets de venda entram quando o Leo passar os
+   diferenciais — ate la, sem fonte, sem bullet. */
+function mensagemDumbbellHybrid(dbs) {
+  return [
+    '⬛ *Dumbbell Hybrid Black*',
+    'Sextavado com pegada texturizada, do 2,5kg ao 30kg.',
+    '',
+    '✅ Formato sextavado — não rola pelo chão',
+    '✅ Cabo com pegada texturizada',
+    '✅ Peso marcado na face',
+    '',
+    '*Pesos e valores:*',
+    ...linhasDePeso(dbs, false),
+  ].join('\n');
+}
+
 /* Anilhas — fonte de CADA bullet: a LP crossfit-box, curada pelo Leo.
    Bumper Black 2.0: tagline "Quique reduzido e design com logo em alto
    relevo", features "Dureza aferida com medidor" e "Alto nivel de
@@ -550,10 +639,12 @@ async function montarItens() {
   }
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
-  const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor] = await Promise.all([
+  const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor,
+         dbIron, dbEvo, dbHybrid] = await Promise.all([
     buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
     buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
     buscarPorSku(BUMPER_BLACK), buscarPorSku(BUMPER_COLLOR),
+    buscarPorSku(DUMBBELL_IRON), buscarPorSku(DUMBBELL_EVO), buscarPorSku(DUMBBELL_HYBRID),
   ]);
   if (medPro.length) {
       itens.push({
@@ -617,6 +708,27 @@ async function montarItens() {
            vermelha) porque nenhuma foto sozinha mostrava a linha — a do Leo
            mostra, e duas fotos viraram repeticao. */
         fotos: [FOTO_LINHA_COLLOR],
+      });
+  }
+  if (dbIron.length) {
+      itens.push({
+        id: 'dbiron', titulo: '🏋️ Dumbbell Sextavado Iron',
+        texto: mensagemDumbbellIron(dbIron), video: '',
+        fotos: fotosDaLinha(dbIron, 1),
+      });
+  }
+  if (dbEvo.length) {
+      itens.push({
+        id: 'dbevo', titulo: '💎 Dumbbell EVO Cromado Vulcanizado',
+        texto: mensagemDumbbellEvo(dbEvo), video: '',
+        fotos: fotosDaLinha(dbEvo, 1),
+      });
+  }
+  if (dbHybrid.length) {
+      itens.push({
+        id: 'dbhybrid', titulo: '⬛ Dumbbell Hybrid Black',
+        texto: mensagemDumbbellHybrid(dbHybrid), video: '',
+        fotos: fotosDaLinha(dbHybrid, 1),
       });
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
