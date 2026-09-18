@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, Share2, Download, Loader2, CheckCircle2, FileText, RefreshCw, Copy, Send, MessageSquareText, Package, Check } from 'lucide-react';
+import { Search, Share2, Download, Loader2, CheckCircle2, FileText, RefreshCw, Copy, Send, MessageSquareText, Package, Check, Target } from 'lucide-react';
 import LogoBrave from '../components/LogoBrave';
 
 /* Central de Atendimento para o CELULAR (/enviar ou /atendimento).
@@ -37,10 +37,58 @@ const ABAS = [
   { id: 'propostas', rotulo: 'Propostas', Icon: FileText },
   { id: 'produtos', rotulo: 'Produtos', Icon: Package },
   { id: 'rapidas', rotulo: 'Rápidas', Icon: MessageSquareText },
+  { id: 'qualificar', rotulo: 'Qualificar', Icon: Target },
 ];
+
+const COR_SINAL = {
+  quente: 'text-orange-400', multithread: 'text-purple-400', preco: 'text-sky-400',
+  marca: 'text-emerald-400', risco: 'text-red-400', escopo: 'text-amber-400',
+};
 
 export default function EnviarPropostaPage() {
   const [aba, setAba] = useState('propostas');
+  /* Qualificacao no celular: o painel do PC le o telefone da tela do FSS, que
+     aqui nao existe — entao o consultor digita (ou toca num cliente da aba
+     Propostas) e o resto e igual: uma pergunta por vez, resposta salva sozinha. */
+  const [qTel, setQTel] = useState('');
+  const [qDados, setQDados] = useState(null);      // { perguntas, respostas, resumo }
+  const [qCarregando, setQCarregando] = useState(false);
+  const [qSalvando, setQSalvando] = useState('');
+
+  const carregarQualificacao = async (tel) => {
+    const limpo = String(tel || '').replace(/\D/g, '');
+    if (limpo.length < 10) { setAviso('Digite o telefone com DDD.'); return; }
+    setQCarregando(true); setQDados(null);
+    try {
+      const r = await fetch(`/api/bling?acao=qualificacao&telefone=${limpo}`);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'não consegui carregar');
+      setQDados(j);
+    } catch (e) { setAviso(`❌ ${e.message}`); }
+    setQCarregando(false);
+  };
+
+  /* Salva UMA resposta. O painel do PC espera 0,9s depois da ultima tecla; no
+     celular isso perderia resposta quando a tela dorme ou o app vai pro fundo,
+     entao aqui grava ao sair do campo e ao tocar numa opcao. */
+  const salvarResposta = async (chave, valor) => {
+    const limpo = String(qTel).replace(/\D/g, '');
+    setQSalvando(chave);
+    try {
+      const r = await fetch('/api/bling?acao=qualificacao_salvar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: limpo, respostas: { [chave]: valor } }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'não salvou');
+      /* A resposta 1 muda QUAIS perguntas valem (compra pontual pede menos),
+         entao recarrega para a lista acompanhar. */
+      const novo = await (await fetch(`/api/bling?acao=qualificacao&telefone=${limpo}`)).json();
+      if (novo.ok) setQDados(novo);
+    } catch (e) { setAviso(`❌ ${e.message}`); }
+    setQSalvando('');
+  };
+
   const [orcamentos, setOrcamentos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
@@ -389,6 +437,100 @@ export default function EnviarPropostaPage() {
               </button>
             </section>
           ))}
+        </main>
+      )}
+
+      {aba === 'qualificar' && (
+        <main className="px-4 pt-3 space-y-3 pb-8">
+          <section className="bg-dark-900 border border-dark-700 rounded-2xl p-4">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-2">
+              Telefone do cliente
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={qTel}
+                onChange={(e) => setQTel(e.target.value)}
+                inputMode="numeric"
+                placeholder="35999295742"
+                className="flex-1 bg-dark-950 border border-dark-700 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:border-neon/50"
+              />
+              <button
+                onClick={() => carregarQualificacao(qTel)}
+                className="px-4 bg-neon/15 border border-neon/40 text-neon font-bold text-sm rounded-xl active:bg-neon/25 cursor-pointer"
+              >
+                {qCarregando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Abrir'}
+              </button>
+            </div>
+          </section>
+
+          {qDados && (
+            <>
+              <section className="bg-dark-900 border border-dark-700 rounded-2xl p-4">
+                <p className="text-sm font-bold">
+                  {qDados.resumo.respondidas}/{qDados.resumo.total} respondidas
+                  {qDados.resumo.trilha ? ` · ${qDados.resumo.trilha}` : ''}
+                </p>
+                {!qDados.resumo.suficiente && (
+                  <p className="text-[11px] text-amber-400 mt-1">
+                    Mínimo de {qDados.resumo.minimo} para orçar com segurança.
+                  </p>
+                )}
+                {(qDados.resumo.sinais || []).map((sn, i) => (
+                  <p key={i} className={`text-[11px] mt-2 leading-snug ${COR_SINAL[sn.tipo] || 'text-zinc-400'}`}>
+                    • {sn.texto}
+                  </p>
+                ))}
+              </section>
+
+              {qDados.perguntas.map((q) => (
+                <section key={q.chave} className="bg-dark-900 border border-dark-700 rounded-2xl p-4">
+                  <h2 className="text-sm font-bold leading-snug">{q.titulo}</h2>
+                  <p className="text-[11px] text-zinc-500 mt-1 leading-snug">{q.porque}</p>
+                  <pre className="text-[11px] text-zinc-300 whitespace-pre-wrap font-sans bg-dark-950 border border-dark-800 rounded-xl p-3 my-3">{q.pergunta}</pre>
+                  <button
+                    onClick={async () => { await copiarTexto(q.pergunta); marcarCopiado(q.chave); }}
+                    className="w-full flex items-center justify-center gap-2 bg-dark-800 border border-dark-600 text-zinc-200 font-bold text-xs py-2.5 rounded-xl active:bg-dark-700 cursor-pointer mb-3"
+                  >
+                    {copiado === q.chave ? <><Check className="w-3 h-3" /> Copiada!</> : <><Copy className="w-3 h-3" /> Copiar pergunta</>}
+                  </button>
+
+                  {/* Resposta por toque na pergunta que classifica o negocio */}
+                  {Array.isArray(q.opcoes) && q.opcoes.length > 0 && (
+                    <div className="flex gap-2 mb-2">
+                      {q.opcoes.map((op) => (
+                        <button
+                          key={op}
+                          onClick={() => salvarResposta(q.chave, op)}
+                          className={`flex-1 text-[11px] font-bold py-2.5 rounded-xl border cursor-pointer ${
+                            qDados.respostas[q.chave] === op
+                              ? 'bg-purple-600 border-purple-500 text-white'
+                              : 'bg-dark-950 border-dark-700 text-zinc-400 active:bg-dark-800'}`}
+                        >
+                          {op}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <textarea
+                    defaultValue={qDados.respostas[q.chave] || ''}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v !== (qDados.respostas[q.chave] || '')) salvarResposta(q.chave, v);
+                    }}
+                    rows={2}
+                    placeholder="anote a resposta dele..."
+                    className="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-neon/50"
+                  />
+                  {qSalvando === q.chave && (
+                    <p className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" /> salvando...
+                    </p>
+                  )}
+                </section>
+              ))}
+            </>
+          )}
         </main>
       )}
     </div>
