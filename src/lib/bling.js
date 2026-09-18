@@ -14,7 +14,13 @@ export function urlPropostaBling(propostaId) {
 export async function salvarVinculoPropostas(slug, data) {
   const av = data?.dataAvista?.data;
   const pz = data?.dataPrazo?.data;
-  if (!av?.id && !pz?.id) return;
+  /* Devolve o resultado em vez de sair calado. O silêncio aqui foi o que
+     escondeu a falha do Bruno Couto em 18/09: as propostas existiam no Bling,
+     o vínculo não era gravado e a tela mostrava sucesso assim mesmo. */
+  if (!av?.id && !pz?.id) {
+    console.error('Bling respondeu sem IDs de proposta — vínculo não gravado:', data);
+    return { ok: false, motivo: 'o Bling respondeu sem o número da proposta' };
+  }
   const { error } = await supabase.from('orcamentos_salvos').update({
     /* Editar o orçamento cria propostas NOVAS no Bling. Os PDFs guardados são
        da proposta anterior, com os valores antigos — precisam ser descartados,
@@ -27,5 +33,9 @@ export async function salvarVinculoPropostas(slug, data) {
        criado_em deixava esse caso invisível para ele (visto em produção). */
     propostas_em: new Date().toISOString(),
   }).eq('slug', slug);
-  if (error) console.error('Falha ao gravar vínculo Bling no orçamento:', error);
+  if (error) {
+    console.error('Falha ao gravar vínculo Bling no orçamento:', error);
+    return { ok: false, motivo: `erro ao gravar no banco: ${error.message}` };
+  }
+  return { ok: true, avista: av?.numero ?? null, prazo: pz?.numero ?? null };
 }

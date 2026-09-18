@@ -86,7 +86,28 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
-    const { cliente, consultor, payload, clienteId } = body;
+    const { slug, cliente, consultor, payload, clienteId } = body;
+
+    /* Grava o vinculo no orcamento assim que CADA proposta nasce, em vez de
+       esperar a resposta chegar ao navegador. Em 18/09/2026 as duas propostas
+       do Bruno Couto (9219 e 9220) foram criadas no Bling e os IDs se perderam
+       no caminho de volta — sem eles o robo nao captura os PDFs, o painel nao
+       acha o contato e o WhatsApp nao tem o que enviar. Aqui dentro o dado ja
+       esta no banco antes de qualquer coisa poder se perder.
+       Falha ao gravar nao interrompe a criacao: a proposta no Bling e o que
+       nao da para desfazer, e o vinculo ainda pode ser refeito depois pelo
+       endpoint religar_proposta. */
+    const vincular = async (campos: Record<string, unknown>) => {
+      if (!slug) return;
+      try {
+        const { error } = await supabaseClient.from('orcamentos_salvos')
+          .update({ ...campos, propostas_em: new Date().toISOString() })
+          .eq('slug', slug);
+        if (error) console.error('[sync-bling-proposal] vinculo nao gravado:', error.message);
+      } catch (e: any) {
+        console.error('[sync-bling-proposal] vinculo nao gravado:', e?.message);
+      }
+    };
 
     if (!payload || !payload.itens) {
       return new Response(JSON.stringify({ error: 'Payload de orçamento inválido' }), {
@@ -393,6 +414,11 @@ Deno.serve(async (req) => {
       throw new Error(`Erro na Bling (Proposta À Vista): ${err}`);
     }
     const dataAvista = await blingResAvista.json();
+    /* Antes da proposta a prazo: se ela falhar, a a vista ja esta vinculada em
+       vez de virar documento orfao no Bling. */
+    if (dataAvista?.data?.id) {
+      await vincular({ bling_avista_id: dataAvista.data.id, bling_avista_pdf: null });
+    }
 
     await sleep(400);
 
@@ -408,6 +434,9 @@ Deno.serve(async (req) => {
       throw new Error(`Erro na Bling (Proposta A Prazo): ${err}`);
     }
     const dataPrazo = await blingResPrazo.json();
+    if (dataPrazo?.data?.id) {
+      await vincular({ bling_prazo_id: dataPrazo.data.id, bling_prazo_pdf: null });
+    }
 
     // O POST devolve apenas o id — nunca o numero (ver BasePostResponse na doc).
     // Mas e o numero que aparece na tela de impressao do Bling, a unica chave
@@ -425,6 +454,15 @@ Deno.serve(async (req) => {
 
     const numeroAvista = await buscarNumero(dataAvista?.data?.id);
     const numeroPrazo = await buscarNumero(dataPrazo?.data?.id);
+    /* O numero e o que aparece na tela de impressao do Bling — e a chave que
+       casa o PDF capturado de volta com este orcamento. So existe depois do
+       GET, entao completa o vinculo aqui. */
+    if (numeroAvista || numeroPrazo) {
+      await vincular({
+        ...(numeroAvista ? { bling_avista_numero: numeroAvista } : {}),
+        ...(numeroPrazo ? { bling_prazo_numero: numeroPrazo } : {}),
+      });
+    }
 
     return new Response(JSON.stringify({
       success: true,

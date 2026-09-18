@@ -722,13 +722,34 @@ export default function App() {
         ? { ...payload, itens: payload.itens.filter((i) => nivelDoItem(i) <= 2) }
         : payload;
 
-      // Envia para a Bling e notifica o resultado
+      /* O `slug` vai no corpo para que a PRÓPRIA função grave o vínculo assim
+         que cria cada proposta, sem depender de a resposta chegar de volta
+         aqui. Em 18/09 as duas propostas do Bruno Couto nasceram no Bling
+         (9219 e 9220) e os IDs se perderam no caminho de volta: os PDFs nunca
+         foram capturados, o painel não achou o contato e o WhatsApp não teve o
+         que enviar. Enquanto a função nova não é publicada, este campo é
+         ignorado e o vínculo segue sendo gravado abaixo. */
       supabase.functions.invoke('sync-bling-proposal', {
-        body: { cliente: nomeCliente, consultor: nomeConsultor, payload: payloadBling, clienteId: clienteSel?.id || null }
-      }).then(({ data, error: blingErr }) => {
+        body: {
+          slug, cliente: nomeCliente, consultor: nomeConsultor,
+          payload: payloadBling, clienteId: clienteSel?.id || null,
+        },
+      }).then(async ({ data, error: blingErr }) => {
         if (blingErr) { showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true); return; }
-        showToastMessage('Proposta enviada ao Bling com sucesso!');
-        salvarVinculoPropostas(slug, data);
+        /* Só anuncia sucesso DEPOIS de gravar o vínculo. Antes o aviso verde
+           saía aqui e a gravação seguia em silêncio — quando ela falhava, a
+           tela dizia que estava tudo certo e o problema só aparecia dias
+           depois, pelo cliente que não recebeu nada. */
+        const vinculo = await salvarVinculoPropostas(slug, data);
+        if (vinculo.ok) {
+          showToastMessage('Proposta enviada ao Bling e vinculada ao orçamento!');
+        } else {
+          showToastMessage(
+            `⚠️ A proposta foi criada no Bling, mas NÃO ficou vinculada (${vinculo.motivo}). `
+            + 'Não gere de novo — isso duplicaria o documento lá. Me passe o número da proposta.',
+            true
+          );
+        }
       }).catch(() => showToastMessage('Orçamento salvo, mas erro ao enviar ao Bling.', true));
 
       // Atualiza o histórico
