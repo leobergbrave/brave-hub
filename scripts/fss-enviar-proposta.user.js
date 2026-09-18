@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.13
+// @version      3.14
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.13'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.14'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -186,6 +186,16 @@
       'padding:10px 12px 12px', 'font:600 13px/1.35 system-ui,sans-serif',
       'box-shadow:0 6px 24px rgba(0,0,0,.35)', 'max-width:330px',
       'display:flex', 'flex-direction:column', 'gap:8px',
+      /* O painel e ancorado embaixo e cresce para CIMA, entao o que passa da
+         tela e o TOPO: com 22 produtos, sumiam a Esteira e o proprio titulo
+         (relatado em 18/09). Limitamos a altura ao que cabe acima da ancora —
+         20px no FSS, 104px no WhatsApp — e a lista passa a rolar. */
+      /* box-sizing explicito: sem ele o max-height vale so para o CONTEUDO e o
+         padding (10px+12px) estoura o limite — o painel ficava 2px acima da
+         tela. E cada site tem seu box-sizing global, entao sem fixar aqui o
+         FSS e o WhatsApp se comportariam diferente. */
+      'box-sizing:border-box',
+      `max-height:calc(100vh - ${WA ? 124 : 40}px)`,
     ].join(';');
 
     const barra = document.createElement('div');
@@ -200,7 +210,13 @@
 
     el = document.createElement('div');
     el.id = ID;
-    el.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+    /* Quem rola e o CONTEUDO, nao o painel inteiro: assim o botao de recolher
+       fica sempre visivel no topo. `min-height:0` e obrigatorio — sem ele um
+       filho de flex nao encolhe abaixo do proprio conteudo e o overflow nunca
+       dispara. `overscroll-behavior:contain` impede que, ao chegar no fim da
+       lista, a rolagem continue na conversa atras. */
+    el.style.cssText = 'display:flex;flex-direction:column;gap:8px;'
+      + 'overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:thin';
 
     wrap.append(barra, el);
     document.body.appendChild(wrap);
