@@ -55,7 +55,7 @@ const telefoneValido = (t) => {
 /* Extrai o que tem formato inequivoco. Procura primeiro os campos ROTULADOS
    ("cpf 123...", "cep 17515220") — sem isso, um CEP de 8 digitos e um telefone
    de 8 digitos disputariam a mesma sequencia. */
-function extrairPorRegras(texto) {
+export function extrairPorRegras(texto) {
   const t = String(texto || '');
   const achado = {};
   const usados = [];  // trechos ja consumidos, para nao reaproveitar digitos
@@ -81,7 +81,10 @@ function extrairPorRegras(texto) {
 
   // ── sem rotulo: varre as sequencias numericas restantes ──
   const resto = usados.reduce((acc, u) => acc.replace(u, ' '), t);
-  for (const m of resto.matchAll(/(?:\+?55)?[\s()\d.\-/]{8,20}/g)) {
+  /* A classe usa [ \t] e NAO \s: com \s a sequencia atravessava a quebra de
+     linha e o numero da casa, o CEP e o telefone colados em linhas seguidas
+     viravam UM bloco de 13 digitos — CEP e telefone se perdiam. */
+  for (const m of resto.matchAll(/(?:\+?55)?[ \t()\d.\-/]{8,20}/g)) {
     const d = soDigitos(m[0]).replace(/^55(?=\d{10,11}$)/, '');
     if (!achado.cpfCnpj && d.length === 11 && cpfValido(d)) { achado.cpfCnpj = d; achado.tipoPessoa = 'F'; continue; }
     if (!achado.cpfCnpj && d.length === 14 && cnpjValido(d)) { achado.cpfCnpj = d; achado.tipoPessoa = 'J'; continue; }
@@ -91,7 +94,22 @@ function extrairPorRegras(texto) {
 
   // ── linhas: nome (so letras) e endereco (logradouro + numero) ──
   const LOGRADOURO = /^(rua|r\.|av|avenida|alameda|al\.|travessa|tv|rod|rodovia|estrada|pra[cç]a)\b/i;
+  /* Linha com ROTULO ("Empresa/Nome: ...", "Endereço: ..."): o rotulo diz o que
+     o valor e, entao nao se adivinha pelo formato. O "Pedir cadastro" passou a
+     mandar esse modelo ao cliente (08/10/2026); sem isto o nome virava
+     "Empresa/João" (a barra reprova no filtro de nome) e o endereco nem era
+     reconhecido, porque a linha comeca com "Endereço:". Rotulo sem valor (campo
+     deixado em branco) e ignorado — nunca se inventa dado. */
+  const ROTULO_LINHA = /^(empresa\s*\/\s*nome|raz[aã]o\s+social|nome(?:\s+completo|\s+da\s+empresa)?|empresa|cliente|endere[cç]o|logradouro)\s*:\s*(.*)$/i;
   for (const linha of t.split(/\r?\n|[;|]/).map((l) => l.trim()).filter(Boolean)) {
+    const rot = linha.match(ROTULO_LINHA);
+    if (rot) {
+      const valor = rot[2].replace(/\s+/g, ' ').trim();
+      const ehEndereco = /^(endere|logradouro)/i.test(rot[1]);
+      if (valor && ehEndereco && !achado.logradouro) Object.assign(achado, separarEndereco(valor));
+      else if (valor && !ehEndereco && !achado.nomeCompleto) achado.nomeCompleto = valor.slice(0, 80);
+      continue;   // linha rotulada nunca cai na heuristica de formato
+    }
     const limpa = linha.replace(/\b(nome|cliente)\b\W*/i, '').trim();
 
     if (!achado.nomeCompleto && limpa.includes(' ')

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.14
+// @version      3.15
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.14'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.15'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -621,6 +621,18 @@
      orcamento. Ficam sempre a mao no painel, porque e justamente nesse momento
      (lead novo, sem proposta) que o consultor mais digita a mesma coisa.
      texto pode ser funcao: avaliada no clique, com o contato aberto na tela. */
+  /* Texto reserva do "Pedir cadastro", usado quando o HUB ainda nao entregou o
+     dele (ou esta fora do ar). Tem que ser IGUAL ao de RAPIDAS em
+     api/_fss-produtos.js — scripts/teste-mensagens-fixas.mjs confere. */
+  const TEXTO_CADASTRO_RESERVA = [
+    'Para gerar seu orçamento personalizado preciso dos seguintes dados:',
+    'Empresa/Nome:',
+    'CNPJ/CPF:',
+    'Endereço:',
+    'CEP:',
+    'WhatsApp:',
+  ].join('\n');
+
   const MENSAGENS_RAPIDAS = [
     {
       id: 'abertura', titulo: '👋 Abertura',
@@ -638,25 +650,15 @@
     },
     {
       id: 'cadastro', titulo: '📋 Pedir cadastro',
-      /* Gera um link com token: a pagina /cadastro busca nome/telefone/e-mail
-         pelo token e preenche sozinha — o cliente completa so CPF e endereco.
-         Sem dados na tela ou HUB fora do ar, cai no link generico de sempre. */
-      texto: async () => {
-        const d = acharDadosContato();
-        if (d.nome || d.email || d.telefone) {
-          try {
-            const r = await hubFetch(`${HUB}/api/bling?acao=cadastro_prefill_criar`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(d),
-            });
-            const j = await r.json();
-            if (j.ok) {
-              const oi = d.nome ? `${primeiroNomeDe(d.nome)}, para` : 'Para';
-              return `${oi} realizar seu orçamento personalizado é só confirmar seu cadastro nesse link — seus dados já estão preenchidos, falta só completar 😉\n${j.url}\nMe avise quando finalizar`;
-            }
-          } catch (_) { /* cai no generico */ }
-        }
-        return 'Para realizar seu orçamento personalizado, por favor preencha esse cadastro\nhttps://brave-hub-two.vercel.app/cadastro\nMe avise quando finalizar';
+      /* Desde 08/10/2026 nao ha mais link: o cadastro pede os dados na propria
+         conversa (Empresa/Nome, CNPJ/CPF, Endereco, CEP, WhatsApp), e a
+         resposta e colada no seletor de cliente do Gerador. O texto vem do HUB,
+         para que mudar a redacao nao obrigue a reinstalar o script.
+         Le o que JA foi carregado, sem esperar rede no clique: o texto e fixo, e
+         um HUB lento nao pode segurar uma mensagem que nao depende dele. */
+      texto: () => {
+        const m = rapidasServidor.find((r) => r.id === 'cadastro');
+        return (m && m.texto) || TEXTO_CADASTRO_RESERVA;
       },
     },
   ];

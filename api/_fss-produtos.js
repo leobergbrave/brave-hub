@@ -38,8 +38,21 @@ export const RAPIDAS = [
     ].join('\n'),
   },
   {
+    /* Desde 08/10/2026 o cadastro NAO manda mais link: pede os dados na propria
+       conversa, e o consultor cola a resposta no seletor de cliente do Gerador
+       (api/_cadastro-colar.js le esse modelo). E-mail nao e pedido — o cadastro
+       interno ja o aceita em branco. O userscript tem uma copia deste texto como
+       reserva para quando o HUB estiver fora do ar; manter as duas iguais
+       (scripts/teste-mensagens-fixas.mjs confere). */
     id: 'cadastro', titulo: '📋 Pedir cadastro',
-    texto: 'Para realizar seu orçamento personalizado, por favor preencha esse cadastro\nhttps://brave-hub-two.vercel.app/cadastro\nMe avise quando finalizar',
+    texto: [
+      'Para gerar seu orçamento personalizado preciso dos seguintes dados:',
+      'Empresa/Nome:',
+      'CNPJ/CPF:',
+      'Endereço:',
+      'CEP:',
+      'WhatsApp:',
+    ].join('\n'),
   },
 ];
 
@@ -124,7 +137,11 @@ function mensagemSledNacional(p) {
   ].join('\n');
 }
 
-function mensagemTurf(cheio, lanes, base) {
+/* So a pista de 12,5m (lanes centrais) e a base. O Turf de 16,5m x 2m deixou de
+   ser vendido (Leo, 08/10/2026): ele saia na mensagem e o consultor apagava a
+   linha a mao a cada envio. Mesmo que o produto continue no catalogo, esta
+   mensagem nao o cita — por isso a funcao nem recebe mais o "cheio". */
+export function mensagemTurf(lanes, base) {
   const l = [
     '🏟️ *TURF Oficial — O Piso das Provas de Corrida Híbrida*',
     'O mesmo piso que o atleta encontra na prova: seu box pronto para treinos de sled, lunges e carries.',
@@ -133,7 +150,7 @@ function mensagemTurf(cheio, lanes, base) {
     "✅ Ideal para sled push/pull, lunges e farmer's carry",
     '✅ Transforma qualquer corredor em estação de treino',
   ];
-  if (cheio) l.push('', `📏 *16,5m x 2m* — ${linhaPreco(cheio.preco_avista, cheio.preco)}`);
+  if (lanes || base) l.push('');
   if (lanes) l.push(`📏 *12,5m x 2m (lanes centrais)* — ${linhaPreco(lanes.preco_avista, lanes.preco)}`);
   if (base)  l.push(`➕ Opcional: *Base do atleta 1,8m x 2m* — ${fmtBR(base.preco_avista)} à vista`);
   return l.join('\n');
@@ -612,11 +629,11 @@ async function montarItens() {
         video: por.slednac.video || '',
       });
   }
-  if (por.turf || por.turflanes) {
+  if (por.turflanes) {
       itens.push({
         id: 'turf', titulo: '🏟️ Turf Oficial de Competição',
-        texto: mensagemTurf(por.turf, por.turflanes, por.turfbase),
-        video: por.turflanes?.video || por.turf?.video || '',
+        texto: mensagemTurf(por.turflanes, por.turfbase),
+        video: por.turflanes.video || '',
       });
   }
   if (por.gramp10 || por.gramp16) {
