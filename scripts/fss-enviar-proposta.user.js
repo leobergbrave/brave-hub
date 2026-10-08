@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.15
+// @version      3.16
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.15'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.16'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -633,6 +633,36 @@
     'WhatsApp:',
   ].join('\n');
 
+  /* Reservas dos dados de pagamento e da chave Pix. Mesmo criterio do cadastro:
+     iguais ao servidor (o teste confere) e usadas quando o HUB nao respondeu.
+     Aqui a reserva pesa mais — e exatamente num dia de HUB lento que o cliente
+     pede os dados para pagar, e eles nao podem depender da rede. */
+  const TEXTO_PAGAMENTO_RESERVA = [
+    'Segue nossos dados para Pagamento:',
+    '',
+    '➡️ Para pagamento via transferência: Conta: BTG',
+    'Banco btg : 208',
+    'Agência: 0050',
+    'C corrente: 437636-6',
+    'Cnpj: 33167844000180',
+    'Razão Social: Brave Fitness Equipamentos ltda',
+    '',
+    '➡️ Para Pagamento via Pix:',
+    'Chave Pix: contato@bravefitness.com.br',
+    'Confirmando nome: Brave Fitness Equipamentos Ltda',
+    '',
+    '(Após o pagamento, favor enviar comprovante)',
+  ].join('\n');
+  const CHAVE_PIX_RESERVA = 'contato@bravefitness.com.br';
+
+  /* Texto do HUB se ja carregado, senao a reserva. Nao espera rede no clique: o
+     texto e fixo, e um HUB lento nao pode segurar uma mensagem que nao depende
+     dele. */
+  const textoDoServidor = (id, reserva) => {
+    const m = rapidasServidor.find((r) => r.id === id);
+    return (m && m.texto) || reserva;
+  };
+
   const MENSAGENS_RAPIDAS = [
     {
       id: 'abertura', titulo: '👋 Abertura',
@@ -656,10 +686,20 @@
          para que mudar a redacao nao obrigue a reinstalar o script.
          Le o que JA foi carregado, sem esperar rede no clique: o texto e fixo, e
          um HUB lento nao pode segurar uma mensagem que nao depende dele. */
-      texto: () => {
-        const m = rapidasServidor.find((r) => r.id === 'cadastro');
-        return (m && m.texto) || TEXTO_CADASTRO_RESERVA;
-      },
+      texto: () => textoDoServidor('cadastro', TEXTO_CADASTRO_RESERVA),
+    },
+    {
+      id: 'pagamento', titulo: '💳 Dados de pagamento',
+      // O Pix vai em OUTRA mensagem (abaixo): o aviso lembra o proximo passo.
+      dica: 'Agora envie a 🔑 Chave Pix, sozinha, para o cliente copiar.',
+      texto: () => textoDoServidor('pagamento', TEXTO_PAGAMENTO_RESERVA),
+    },
+    {
+      /* So a chave, em texto puro: o WhatsApp nao tem botao "Copiar" em mensagem
+         comum, entao ela precisa ser a mensagem inteira — o cliente segura o
+         balao e toca em Copiar. */
+      id: 'pix', titulo: '🔑 Chave Pix (só a chave)',
+      texto: () => textoDoServidor('pix', CHAVE_PIX_RESERVA),
     },
   ];
 
@@ -913,9 +953,11 @@
         const ok = escreverMensagem(texto);
         const extra = m.titulo.includes('Abertura')
           ? (ultimoNomeAchado ? ` para ${ultimoNomeAchado}` : ' (sem nome na tela)') : '';
-        status(ok ? `✅ ${m.titulo} escrita${extra} — revise e envie.` : '❌ Nao achei o campo de mensagem.',
+        const dica = ok && m.dica ? ` ${m.dica}` : '';
+        status(ok ? `✅ ${m.titulo} escrita${extra} — revise e envie.${dica}` : '❌ Nao achei o campo de mensagem.',
           ok ? '#4ade80' : '#fca5a5');
-        setTimeout(voltar, 4000);
+        // Com aviso de proximo passo, a tela fica mais tempo: da para ler.
+        setTimeout(voltar, dica ? 8000 : 4000);
     });
 
     /* ORDEM DO PAINEL = ordem real da conversa (pedido do Leo, 08/09/2026):

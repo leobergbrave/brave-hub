@@ -8,6 +8,11 @@ import { createClient } from '@supabase/supabase-js';
 import { loadCatalog } from './_ergo-fetch.js';
 import { bcFetch, telefoneWhatsappBR } from './_proposta-pdf.js';
 
+/* Chave Pix da BRAVE (e-mail). Fica numa constante so porque aparece em DUAS
+   mensagens — os dados de pagamento e a mensagem so com a chave — e as duas
+   nao podem divergir: cliente que paga na chave errada nao tem como desfazer. */
+const CHAVE_PIX = 'contato@bravefitness.com.br';
+
 /* Mensagens de inicio de conversa — mesma fonte para o userscript do PC e a
    central mobile (/enviar). */
 export const RAPIDAS = [
@@ -53,6 +58,36 @@ export const RAPIDAS = [
       'CEP:',
       'WhatsApp:',
     ].join('\n'),
+  },
+  {
+    // Texto como o Leo passou (08/10/2026); so a chave Pix ganhou linha propria.
+    id: 'pagamento', titulo: '💳 Dados de pagamento',
+    texto: [
+      'Segue nossos dados para Pagamento:',
+      '',
+      '➡️ Para pagamento via transferência: Conta: BTG',
+      'Banco btg : 208',
+      'Agência: 0050',
+      'C corrente: 437636-6',
+      'Cnpj: 33167844000180',
+      'Razão Social: Brave Fitness Equipamentos ltda',
+      '',
+      '➡️ Para Pagamento via Pix:',
+      `Chave Pix: ${CHAVE_PIX}`,
+      'Confirmando nome: Brave Fitness Equipamentos Ltda',
+      '',
+      '(Após o pagamento, favor enviar comprovante)',
+    ].join('\n'),
+  },
+  {
+    /* So a chave, em TEXTO PURO, numa mensagem propria. O WhatsApp nao tem botao
+       "Copiar" em mensagem comum (so em modelo da API oficial, que a BRAVE nao
+       usa), entao o jeito de deixar a chave copiavel e ela ser a mensagem
+       inteira: o cliente segura o balao e toca em Copiar. Nada de asteriscos,
+       crases ou aspas: a formatacao entra na copia e o app do banco recusa a
+       chave com os marcadores colados. */
+    id: 'pix', titulo: '🔑 Chave Pix (só a chave)',
+    texto: CHAVE_PIX,
   },
 ];
 
