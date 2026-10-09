@@ -1243,7 +1243,7 @@ export default function App() {
                   <select value={origemLead} onChange={e => setOrigemLead(e.target.value)}
                     className="w-full bg-dark-900 border border-dark-600 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all">
                     <option value="">Selecione a origem...</option>
-                    <option value="FSS">FSS — veio da central (envia PDFs + apresentação)</option>
+                    <option value="FSS">FSS — veio da central (só pelo FSS, não manda WhatsApp)</option>
                     <option value="WHATSAPP">WhatsApp BRAVE — já em conversa (envia PDFs)</option>
                     <option value="VENDA DIRETA">Venda Direta (envia PDFs)</option>
                     <option value="SOMENTE BLING">Gerar no Bling — eu mesmo imprimo (não envia nada)</option>

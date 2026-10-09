@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.16
+// @version      3.17
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.16'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.17'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -700,6 +700,18 @@
          balao e toca em Copiar. */
       id: 'pix', titulo: '🔑 Chave Pix (só a chave)',
       texto: () => textoDoServidor('pix', CHAVE_PIX_RESERVA),
+    },
+    {
+      /* Enviada logo após mandar o link de pagamento (cartão, pela Barte). Avisa
+         do 3DS — a verificação que mais derruba cartão próprio na hora de pagar —
+         e pede a confirmação. Texto fixo no script; não depende do HUB. */
+      id: 'link', titulo: '🔗 Link enviado (3DS)',
+      dica: 'Avise que o cliente deve confirmar o pagamento depois.',
+      texto: () => [
+        '✅Link enviado',
+        '🚨Usamos sistema de verificação 3DS, precisa de cartão próprio e liberação no app do seu banco',
+        '🙋‍♂️Após realizar o pagamento nos avise',
+      ].join('\n'),
     },
   ];
 

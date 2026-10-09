@@ -76,12 +76,18 @@ function linkPdf(orc, t, versao) {
   return { tipo: t.tipo, nome, url: `${base}/pdf/${orc.slug}/${t.tipo}/v${v}/${encodeURIComponent(nome)}` };
 }
 
-/* Canais em que o cliente recebe as propostas sozinho, assim que os dois PDFs
-   ficam prontos. Nos demais (Uairox, Indicação, Personalizado) o envio continua
-   sendo decisão do consultor, pelo botão "Enviar ao cliente".
+/* Canais em que o cliente recebe as propostas sozinho pelo WhatsApp (BotConversa),
+   assim que os dois PDFs ficam prontos. Nos demais (Uairox, Indicação,
+   Personalizado) o envio continua sendo decisão do consultor, pelo botão
+   "Enviar ao cliente".
+   FSS NÃO entra aqui (decisão do Léo, 2026-10-09): o lead da central recebe as
+   propostas pelo próprio chat do FSS (o userscript anexa os PDFs na conversa),
+   então mandar também pelo WhatsApp duplicava. Os PDFs continuam sendo capturados
+   normalmente (FSS não está em ORIGENS_SEM_CAPTURA) — só o disparo automático de
+   WhatsApp fica de fora.
    TIAGO é o nome antigo do canal WhatsApp BRAVE — segue aqui para os orçamentos
    criados antes da renomeação continuarem funcionando. */
-const ORIGENS_AUTOMATICAS = ['FSS', 'WHATSAPP', 'VENDA DIRETA', 'TIAGO'];
+const ORIGENS_AUTOMATICAS = ['WHATSAPP', 'VENDA DIRETA', 'TIAGO'];
 
 /* "SOMENTE BLING": o orcamento vira proposta no Bling e para por ai — o
    consultor imprime e guarda o PDF por conta propria. Fica de fora da fila do
