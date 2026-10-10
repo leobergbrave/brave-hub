@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.17
+// @version      3.19
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.17'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.19'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -57,13 +57,25 @@
         data: opts.body,
         responseType: 'blob',
         timeout: 60_000,
-        onload: (r) => resolve({
-          ok: r.status >= 200 && r.status < 300,
-          status: r.status,
-          blob: async () => r.response,
-          text: async () => r.response.text(),
-          json: async () => JSON.parse(await r.response.text()),
-        }),
+        onload: (r) => {
+          /* Com responseType:'blob', r.response normalmente e um Blob (tem
+             .text()). Mas em alguns casos o GM entrega o corpo como string (em
+             r.responseText ou no proprio r.response) — ai Blob.text() nao existe
+             e dava "r.response.text is not a function". Lemos de forma tolerante. */
+          const lerTexto = async () => {
+            if (r.response && typeof r.response.text === 'function') return await r.response.text();
+            if (typeof r.responseText === 'string' && r.responseText.length) return r.responseText;
+            if (typeof r.response === 'string') return r.response;
+            return '';
+          };
+          resolve({
+            ok: r.status >= 200 && r.status < 300,
+            status: r.status,
+            blob: async () => r.response,
+            text: lerTexto,
+            json: async () => JSON.parse(await lerTexto()),
+          });
+        },
         onerror: () => reject(new Error('falha de rede')),
         ontimeout: () => reject(new Error('tempo esgotado')),
       });
@@ -673,9 +685,14 @@
            equipamentos: perguntar "quais equipamentos" ja empurra a conversa
            para um orcamento grande, e orcamento de 10+ itens fecha 8,4% contra
            26,4% do de 1 item. Quem qualifica o escopo agora e o botao 🎯. */
+        /* Handoff IA -> humano (2026-10-10): o lead vem de um atendimento feito
+           por IA, entao a abertura deixa explicito que agora quem assume e o Leo,
+           pessoalmente, de forma personalizada. "Pessoalmente/de perto/sob medida"
+           eleva o valor percebido antes de qualificar; o "ja conhece a BRAVE?" no
+           fim segue abrindo espaco pra apresentacao. */
         return nome
-          ? `Fala ${nome}, tudo bem? Aqui é o Léo Berg 👊 Você já conhece a BRAVE?`
-          : 'Oi, tudo bem? Aqui é o Léo Berg 👊 Você já conhece a BRAVE?';
+          ? `Fala ${nome}! 👊 Aqui é o Léo Berg, da BRAVE. A partir de agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Pra começar: você já conhece a BRAVE?`
+          : 'Opa, tudo bem? 👊 Aqui é o Léo Berg, da BRAVE. Agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Pra começar: você já conhece a BRAVE?';
       },
     },
     {
@@ -953,6 +970,95 @@
     }));
   }
 
+  /* ── Montar musculação: lista do lead -> comparativo por linha ────────────
+     O lead manda uma lista genérica ("01 cross, 01 leg press, 01 peck deck...")
+     e a mesma máquina existe em várias linhas, com preço e estoque diferentes.
+     O HUB faz a conta (api/_musculacao-montador.js) e devolve o texto pronto;
+     aqui só se cola a lista, confere e escreve no chat. Quem escolhe a linha é o
+     Leo — só UMA proposta por cliente vai ao Bling. Reaproveita a trava de
+     remonte da qualificação: colar a lista não pode ser apagado por um remonte. */
+  async function montarMusculacao() {
+    emQualificacao = true;
+    const p = painel();
+    p.innerHTML = '';
+
+    const titulo = document.createElement('div');
+    titulo.textContent = '🏋️ Montar musculação';
+    titulo.style.cssText = 'font-weight:700;font-size:12px;color:#e2e8f0';
+    p.appendChild(titulo);
+
+    const dica = document.createElement('div');
+    dica.textContent = 'Cole a lista de máquinas que o lead mandou:';
+    dica.style.cssText = 'font:600 10px/1.3 system-ui;color:#94a3b8';
+    p.appendChild(dica);
+
+    const lista = document.createElement('textarea');
+    lista.rows = 5;
+    lista.placeholder = '01 cross\n01 leg press\n01 peck deck\n2 extensoras...';
+    lista.style.cssText = 'width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;'
+      + 'border-radius:6px;color:#e2e8f0;font:500 11px/1.35 system-ui;padding:5px 6px;resize:vertical';
+    p.appendChild(lista);
+
+    const todasLabel = document.createElement('label');
+    todasLabel.style.cssText = 'display:flex;gap:6px;align-items:center;font:600 10px/1.2 system-ui;color:#94a3b8;cursor:pointer';
+    const todas = document.createElement('input');
+    todas.type = 'checkbox';
+    todasLabel.append(todas, document.createTextNode('Incluir Plate Loaded e todas as linhas'));
+    p.appendChild(todasLabel);
+
+    const aviso = document.createElement('div');
+    aviso.style.cssText = 'font:600 10px/1.3 system-ui;color:#64748b;min-height:12px';
+    p.appendChild(aviso);
+
+    const saida = document.createElement('textarea');
+    saida.rows = 10;
+    saida.readOnly = true;
+    saida.style.cssText = 'display:none;width:100%;box-sizing:border-box;background:#0f172a;'
+      + 'border:1px solid #334155;border-radius:6px;color:#e2e8f0;font:500 11px/1.35 system-ui;'
+      + 'padding:5px 6px;resize:vertical';
+    p.appendChild(saida);
+
+    const escrever = botao('✍️ Escrever no chat', '#0e7490', () => {
+      const ok = escreverMensagem(saida.value);
+      aviso.textContent = ok ? '✅ Escrito no chat — revise e envie.' : '❌ Nao achei o campo de mensagem.';
+      aviso.style.color = ok ? '#4ade80' : '#fca5a5';
+    });
+    escrever.style.display = 'none';
+
+    const montar = botao('🧮 Montar opções', '#b45309', async () => {
+      if (!lista.value.trim()) { aviso.textContent = 'Cole a lista primeiro.'; aviso.style.color = '#fca5a5'; return; }
+      aviso.textContent = '⏳ montando...'; aviso.style.color = '#64748b';
+      montar.disabled = true;
+      try {
+        const r = await hubFetch(`${HUB}/api/bling?acao=montar_musculacao`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto: lista.value, linhas: todas.checked ? 'todas' : '' }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'o HUB recusou');
+        saida.value = j.mensagem;
+        saida.style.display = 'block';
+        escrever.style.display = 'block';
+        const n = (j.linhas || []).length;
+        const semEstoque = j.estoque_ok ? '' : ' · ⚠️ estoque nao conferido (texto diz "a confirmar")';
+        aviso.textContent = `✅ ${n} linha(s) montada(s)${semEstoque}`;
+        aviso.style.color = j.estoque_ok ? '#4ade80' : '#fbbf24';
+      } catch (e) {
+        aviso.textContent = '❌ ' + e.message;
+        aviso.style.color = '#fca5a5';
+      } finally {
+        montar.disabled = false;
+      }
+    });
+    p.append(montar, escrever);
+
+    p.appendChild(botao('↩︎ Voltar ao painel', '#334155', () => {
+      emQualificacao = false;
+      ultimoTelefone = null;
+      voltar();
+    }));
+  }
+
   function adicionarAtalhos(painelEl) {
     const linha = document.createElement('div');
     linha.textContent = 'Mensagens prontas';
@@ -989,6 +1095,7 @@
     painelEl.appendChild(vaga);
     painelEl.appendChild(botao('🎯 Qualificar cliente', '#7c3aed', montarQualificacao));
     painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
+    painelEl.appendChild(botao('🏋️ Montar musculação (lista do lead)', '#b45309', montarMusculacao));
     if (porId.has('cadastro')) painelEl.appendChild(criarBotao(porId.get('cadastro')));
 
     // Qualquer mensagem local nova entra no fim, sem precisar mexer aqui.

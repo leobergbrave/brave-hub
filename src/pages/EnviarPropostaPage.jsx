@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Search, Share2, Download, Loader2, CheckCircle2, FileText, RefreshCw, Copy, Send, MessageSquareText, Package, Check, Target } from 'lucide-react';
+import { Search, Share2, Download, Loader2, CheckCircle2, FileText, RefreshCw, Copy, Send, MessageSquareText, Package, Check, Target, Dumbbell } from 'lucide-react';
 import LogoBrave from '../components/LogoBrave';
 
 /* Central de Atendimento para o CELULAR (/enviar ou /atendimento).
@@ -38,6 +38,7 @@ const ABAS = [
   { id: 'produtos', rotulo: 'Produtos', Icon: Package },
   { id: 'rapidas', rotulo: 'Rápidas', Icon: MessageSquareText },
   { id: 'qualificar', rotulo: 'Qualificar', Icon: Target },
+  { id: 'musculacao', rotulo: 'Musculação', Icon: Dumbbell },
 ];
 
 const COR_SINAL = {
@@ -54,6 +55,34 @@ export default function EnviarPropostaPage() {
   const [qDados, setQDados] = useState(null);      // { perguntas, respostas, resumo }
   const [qCarregando, setQCarregando] = useState(false);
   const [qSalvando, setQSalvando] = useState('');
+
+  /* Montar musculação: o lead manda uma lista genérica de máquinas e a mesma
+     máquina existe em várias linhas, com preço e estoque diferentes. O HUB faz a
+     conta (api/_musculacao-montador.js) e devolve o texto pronto — aqui só cola,
+     confere e copia. Quem escolhe a linha é o consultor: só UMA proposta por
+     cliente vai ao Bling. */
+  const [musTexto, setMusTexto] = useState('');
+  const [musTodas, setMusTodas] = useState(false);
+  const [musRes, setMusRes] = useState(null);
+  const [musCarregando, setMusCarregando] = useState(false);
+
+  const montarMusculacao = async () => {
+    if (!musTexto.trim()) { setAviso('Cole a lista de máquinas do lead.'); return; }
+    setMusCarregando(true); setAviso(''); setMusRes(null);
+    try {
+      const r = await fetch('/api/bling?acao=montar_musculacao', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: musTexto, linhas: musTodas ? 'todas' : '' }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'o HUB recusou');
+      setMusRes(j);
+    } catch (e) {
+      setAviso(`Não consegui montar: ${e.message}`);
+    } finally {
+      setMusCarregando(false);
+    }
+  };
 
   const carregarQualificacao = async (tel) => {
     const limpo = String(tel || '').replace(/\D/g, '');
@@ -437,6 +466,59 @@ export default function EnviarPropostaPage() {
               </button>
             </section>
           ))}
+        </main>
+      )}
+
+      {aba === 'musculacao' && (
+        <main className="px-4 pt-3 space-y-3 pb-8">
+          <section className="bg-dark-900 border border-dark-700 rounded-2xl p-4">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-2">
+              Lista de máquinas do lead
+            </label>
+            <textarea
+              value={musTexto}
+              onChange={(e) => setMusTexto(e.target.value)}
+              rows={6}
+              placeholder={'01 cross\n01 leg press\n01 peck deck\n2 extensoras'}
+              className="w-full bg-dark-950 border border-dark-700 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:border-neon/50"
+            />
+            <label className="flex items-center gap-2 mt-3 text-xs text-zinc-400 cursor-pointer">
+              <input type="checkbox" checked={musTodas} onChange={(e) => setMusTodas(e.target.checked)} />
+              Incluir Plate Loaded e todas as linhas
+            </label>
+            <button
+              onClick={montarMusculacao}
+              disabled={musCarregando}
+              className="w-full mt-3 flex items-center justify-center gap-2 bg-neon/15 border border-neon/40 text-neon font-bold text-sm py-3 rounded-xl active:bg-neon/25 cursor-pointer disabled:opacity-50"
+            >
+              {musCarregando ? <><Loader2 className="w-4 h-4 animate-spin" /> Montando...</> : <><Dumbbell className="w-4 h-4" /> Montar opções</>}
+            </button>
+          </section>
+
+          {musRes && (
+            <section className="bg-dark-900 border border-dark-700 rounded-2xl p-4">
+              {!musRes.estoque_ok && (
+                <p className="text-[11px] text-amber-400 mb-2">Estoque não conferido agora — o texto diz &quot;estoque a confirmar&quot;.</p>
+              )}
+              {(musRes.linhas || []).length > 0 && (
+                <ul className="mb-3 space-y-1">
+                  {musRes.linhas.map((l) => (
+                    <li key={l.linha} className="flex justify-between text-xs text-zinc-300">
+                      <span className="font-bold">{l.linha === 'avulsa' ? 'Sem linha' : l.rotulo}{l.cobre < l.de ? ` (${l.cobre}/${l.de})` : ''}</span>
+                      <span className="text-neon font-bold">R$ {Number(l.total_avista).toLocaleString('pt-BR')} à vista</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <pre className="text-[11px] text-zinc-300 whitespace-pre-wrap font-sans bg-dark-950 border border-dark-800 rounded-xl p-3 mb-3">{musRes.mensagem}</pre>
+              <button
+                onClick={async () => { await copiarTexto(musRes.mensagem); marcarCopiado('musculacao'); }}
+                className="w-full flex items-center justify-center gap-2 bg-neon/15 border border-neon/40 text-neon font-bold text-sm py-3 rounded-xl active:bg-neon/25 cursor-pointer"
+              >
+                {copiado === 'musculacao' ? <><Check className="w-4 h-4" /> Copiado!</> : <><Copy className="w-4 h-4" /> Copiar mensagem</>}
+              </button>
+            </section>
+          )}
         </main>
       )}
 

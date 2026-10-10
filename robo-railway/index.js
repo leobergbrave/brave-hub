@@ -454,6 +454,29 @@ async function tiqueDisparo() {
   }
 }
 
+/* Estoque das maquinas de musculacao para o montador de orcamento: o HUB le o
+   saldo no Bling (somente leitura) e guarda num arquivo de estado. De hora em
+   hora basta — estoque zerado vira "sob encomenda", entao horas de defasagem nao
+   mudam a oferta — e o proprio HUB ignora se o cache tem menos de 10 min. Se o
+   robo estiver fora do ar, o montador atualiza na hora do pedido (cache > 3h). */
+const INTERVALO_ESTOQUE_MS = 60 * 60 * 1000;
+let ultimoEstoque = 0;
+async function tiqueEstoque() {
+  if (Date.now() - ultimoEstoque < INTERVALO_ESTOQUE_MS) return;
+  ultimoEstoque = Date.now();
+  try {
+    const r = await fetch(`${HUB}/api/bling?acao=estoque_musculacao_atualizar`);
+    const j = await r.json().catch(() => ({}));
+    if (j.ok && !j.pulado) {
+      log(`estoque musculacao: ${j.com_saldo}/${j.maquinas} com saldo (${j.com_estoque} com estoque, origem ${j.origem}, erros ${j.erros})`);
+    } else if (!j.ok) {
+      log('estoque musculacao falhou:', j.error || `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    log('estoque musculacao: erro ao chamar o HUB:', e.message);
+  }
+}
+
 async function principal() {
   log(`robô iniciado — ronda a cada ${INTERVALO_MS / 1000}s`);
 
@@ -479,6 +502,7 @@ async function principal() {
       navegador = null; pagina = null;
     }
     await tiqueDisparo();  // campanhas + follow-up, independente da captura de PDF
+    await tiqueEstoque();  // saldo das maquinas de musculacao (1x por hora)
     await sleep(INTERVALO_MS);
   }
 }

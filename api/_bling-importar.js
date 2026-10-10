@@ -37,7 +37,7 @@ async function refreshBlingToken(config) {
   return tokenData.access_token;
 }
 
-async function getValidToken(isProductQuery = false) {
+export async function getValidToken(isProductQuery = false) {
   const config = await getBlingToken();
   if (!config) return null;
   
