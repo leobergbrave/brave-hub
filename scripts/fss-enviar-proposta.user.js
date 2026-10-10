@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.19
+// @version      3.20
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.19'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.20'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -1018,12 +1018,43 @@
       + 'padding:5px 6px;resize:vertical';
     p.appendChild(saida);
 
+    let linhaFotos = null; // {rotulo, arquivos:[{url,sku}]} da linha recomendada
+
     const escrever = botao('✍️ Escrever no chat', '#0e7490', () => {
       const ok = escreverMensagem(saida.value);
       aviso.textContent = ok ? '✅ Escrito no chat — revise e envie.' : '❌ Nao achei o campo de mensagem.';
       aviso.style.color = ok ? '#4ade80' : '#fca5a5';
     });
     escrever.style.display = 'none';
+
+    /* Fotos das maquinas da linha recomendada (a primeira do comparativo), uma
+       por maquina. As fotos vivem no bucket publico produtos_media (ja no
+       @connect), entao baixam e anexam igual aos videos de Produtos. So aparece
+       quando a linha tem pelo menos uma foto. Pensado pro chat do FSS (onde o
+       lead de musculacao vive); no WhatsApp o anexo por DOM pode nao pegar. */
+    const fotos = botao('📷 Enviar fotos das máquinas', '#be185d', async () => {
+      if (!linhaFotos || !linhaFotos.arquivos.length) {
+        aviso.textContent = 'Sem fotos disponíveis nesta linha.'; aviso.style.color = '#fca5a5'; return;
+      }
+      fotos.disabled = true;
+      aviso.textContent = `⏳ baixando ${linhaFotos.arquivos.length} foto(s)...`; aviso.style.color = '#64748b';
+      try {
+        const files = [];
+        for (const a of linhaFotos.arquivos) {
+          const { ext, mime } = tipoDaUrl(a.url);
+          files.push(await baixarComoArquivo(a.url, `${a.sku || 'maquina'}.${ext || 'jpg'}`, mime));
+        }
+        if (!document.querySelector('input[type="file"]')) await esperarCampoAnexo();
+        entregarAoChat(files);
+        aviso.textContent = `✅ ${files.length} foto(s) anexada(s) — ${linhaFotos.rotulo}. Revise e envie.`;
+        aviso.style.color = '#4ade80';
+      } catch (e) {
+        aviso.textContent = '❌ ' + e.message; aviso.style.color = '#fca5a5';
+      } finally {
+        fotos.disabled = false;
+      }
+    });
+    fotos.style.display = 'none';
 
     const montar = botao('🧮 Montar opções', '#b45309', async () => {
       if (!lista.value.trim()) { aviso.textContent = 'Cole a lista primeiro.'; aviso.style.color = '#fca5a5'; return; }
@@ -1039,6 +1070,12 @@
         saida.value = j.mensagem;
         saida.style.display = 'block';
         escrever.style.display = 'block';
+        // Fotos da linha recomendada (primeira do comparativo), uma por máquina.
+        const rec = (j.linhas || [])[0];
+        const arqs = rec ? rec.itens.map((i) => (i.produto && i.produto.foto)
+          ? { url: i.produto.foto, sku: i.produto.sku } : null).filter(Boolean) : [];
+        linhaFotos = arqs.length ? { rotulo: rec.rotulo, arquivos: arqs } : null;
+        fotos.style.display = linhaFotos ? 'block' : 'none';
         const n = (j.linhas || []).length;
         const semEstoque = j.estoque_ok ? '' : ' · ⚠️ estoque nao conferido (texto diz "a confirmar")';
         aviso.textContent = `✅ ${n} linha(s) montada(s)${semEstoque}`;
@@ -1050,7 +1087,7 @@
         montar.disabled = false;
       }
     });
-    p.append(montar, escrever);
+    p.append(montar, escrever, fotos);
 
     p.appendChild(botao('↩︎ Voltar ao painel', '#334155', () => {
       emQualificacao = false;
