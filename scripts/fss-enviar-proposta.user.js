@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.21
+// @version      3.22
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -29,7 +29,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.21'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.22'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -362,6 +362,55 @@
     }
     const r = radiografia();
     throw new Error(`sem campo de anexo (arquivos:${r.files} textareas:${r.textareas} editaveis:${r.editaveis})`);
+  }
+
+  /* Junta varias fotos numa IMAGEM so (grade com o nome de cada maquina embaixo).
+     Por que colagem e nao album: o chat do FSS/WhatsApp manda cada anexo como uma
+     mensagem separada — 5 fotos viravam 5 mensagens repetidas. Uma imagem = uma
+     mensagem. Recebe [{file, nome}] (arquivos ja baixados por GM, viram objectURL
+     para nao esbarrar no CSP ao desenhar no canvas). Devolve um File JPEG. */
+  async function montarColagemFotos(entradas) {
+    const imgs = [];
+    for (const e of entradas) {
+      const url = URL.createObjectURL(e.file);
+      const img = new Image();
+      img.src = url;
+      try { await img.decode(); imgs.push({ img, url, nome: e.nome }); }
+      catch (_) { URL.revokeObjectURL(url); } // foto quebrada: pula
+    }
+    if (!imgs.length) return null;
+    const n = imgs.length;
+    const cols = n === 1 ? 1 : (n <= 4 ? 2 : 3);
+    const rows = Math.ceil(n / cols);
+    const cellW = 500, imgH = 380, labelH = 46, gap = 12;
+    const W = cols * cellW + (cols + 1) * gap;
+    const H = rows * (imgH + labelH) + (rows + 1) * gap;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+    imgs.forEach(({ img, nome }, k) => {
+      const c = k % cols, rr = Math.floor(k / cols);
+      const x = gap + c * (cellW + gap);
+      const y = gap + rr * (imgH + labelH + gap);
+      const escala = Math.min(cellW / img.width, imgH / img.height);
+      const w = img.width * escala, h = img.height * escala;
+      ctx.fillStyle = '#f1f5f9'; ctx.fillRect(x, y, cellW, imgH);
+      ctx.drawImage(img, x + (cellW - w) / 2, y + (imgH - h) / 2, w, h);
+      ctx.fillStyle = '#0f172a'; ctx.fillRect(x, y + imgH, cellW, labelH);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '600 22px system-ui, Arial';
+      ctx.textBaseline = 'middle';
+      let nm = String(nome || '');
+      if (ctx.measureText(nm).width > cellW - 20) {
+        while (nm.length && ctx.measureText(nm + '…').width > cellW - 20) nm = nm.slice(0, -1);
+        nm += '…';
+      }
+      ctx.fillText(nm, x + 12, y + imgH + labelH / 2);
+    });
+    imgs.forEach(({ url }) => URL.revokeObjectURL(url));
+    const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.9));
+    return blob ? new File([blob], 'linha.jpg', { type: 'image/jpeg' }) : null;
   }
 
   /* Escreve no campo de mensagem do chat.
@@ -1033,27 +1082,34 @@
     const linhasBox = document.createElement('div');
     linhasBox.style.cssText = 'display:flex;flex-direction:column;gap:4px';
 
+    const nomeCurto = (nome) => String(nome || '').split(' - ')[0].trim(); // tira o " - HardBrave"
+
     async function enviarLinhaMusc(L, btn) {
-      const arquivos = (L.itens || [])
-        .map((i) => (i.produto && i.produto.foto) ? { url: i.produto.foto, sku: i.produto.sku } : null)
-        .filter(Boolean);
+      const comFoto = (L.itens || []).filter((i) => i.produto && i.produto.foto);
       btn.disabled = true;
-      aviso.textContent = `⏳ ${L.rotulo}: baixando ${arquivos.length} foto(s)...`; aviso.style.color = '#64748b';
+      aviso.textContent = `⏳ ${L.rotulo}: baixando ${comFoto.length} foto(s)...`; aviso.style.color = '#64748b';
       try {
-        const files = [];
-        for (const a of arquivos) {
-          const { ext, mime } = tipoDaUrl(a.url);
-          files.push(await baixarComoArquivo(a.url, `${a.sku || 'maquina'}.${ext || 'jpg'}`, mime));
+        const entradas = [];
+        for (const i of comFoto) {
+          const { ext, mime } = tipoDaUrl(i.produto.foto);
+          const file = await baixarComoArquivo(i.produto.foto, `${i.produto.sku || 'maquina'}.${ext || 'jpg'}`, mime);
+          entradas.push({ file, nome: nomeCurto(i.produto.nome) });
         }
-        if (files.length) {
-          if (!document.querySelector('input[type="file"]')) await esperarCampoAnexo();
-          entregarAoChat(files);
-          await dormir(600); // o FSS remonta o editor logo apos o anexo
+        let anexou = 0;
+        if (entradas.length) {
+          aviso.textContent = `⏳ ${L.rotulo}: montando a imagem...`;
+          const colagem = await montarColagemFotos(entradas);
+          if (colagem) {
+            if (!document.querySelector('input[type="file"]')) await esperarCampoAnexo();
+            entregarAoChat([colagem]); // UMA imagem com todas as fotos = UMA mensagem
+            await dormir(600); // o FSS remonta o editor logo apos o anexo
+            anexou = entradas.length;
+          }
         }
         const ok = escreverMensagem(L.mensagem || '');
         aviso.textContent = ok
-          ? `✅ ${L.rotulo}: ${files.length} foto(s) + texto — revise e envie.`
-          : `⚠️ ${L.rotulo}: ${files.length} foto(s) anexada(s), mas nao achei o campo de mensagem.`;
+          ? `✅ ${L.rotulo}: imagem com ${anexou} foto(s) + texto — revise e envie.`
+          : `⚠️ ${L.rotulo}: imagem anexada, mas nao achei o campo de mensagem.`;
         aviso.style.color = ok ? '#4ade80' : '#fbbf24';
       } catch (e) {
         aviso.textContent = `❌ ${L.rotulo}: ${e.message}`; aviso.style.color = '#fca5a5';
