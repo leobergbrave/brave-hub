@@ -344,6 +344,23 @@ const FOTO_LINHA_COLLOR = `${BUCKET_PUBLICO}/linhas/linha-bumper-collor-2.0.jpg`
 const BARRAS_EVOBLACK = ['BLACK10', 'BLACK15', 'BLACK20'];
 export const VIDEO_BARRAS_EVOBLACK = `${BUCKET_PUBLICO}/linhas/linha-barras-evoblack-8.mp4`;
 
+/* Videos montados das fotos do catalogo para os itens que NAO tinham video
+   (detectados em 10/10/2026 comparando o painel no ar: 12 de 23). Cada um tem
+   o titulo, uma linha de apoio e a faixa de pesos — so o que a propria mensagem
+   do painel ja afirma — sobre as fotos distintas da linha.
+   Mesma especificacao dos videos que ja chegam pelo WhatsApp: 720x1280, H.264
+   Baseline, yuv420p, AAC. Ficam em linhas/video-<id>.mp4.
+   Video PROPRIO do catalogo (esteira, remo...) sempre vence: so entra o de
+   linha quando o item nao trouxe nenhum. NAO apagar linhas/ ao limpar o bucket
+   (se o arquivo sumir a BotConversa recusa a midia e o envio aborta antes do
+   texto). Item novo sem video: gerar o arquivo e acrescentar o id aqui. */
+export const IDS_COM_VIDEO_DE_LINHA = [
+  'corda', 'medballpro', 'medballcor', 'kbiron', 'kbtex', 'kbhib',
+  'bumperblack', 'bumpercollor', 'dbiron', 'dbevo', 'dbhybrid', 'sandbag',
+];
+export const videoDeLinha = (id) => (IDS_COM_VIDEO_DE_LINHA.includes(id)
+  ? `${BUCKET_PUBLICO}/linhas/video-${id}.mp4` : '');
+
 async function buscarPorSku(skus) {
   try {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -847,6 +864,8 @@ async function montarItens() {
      painel instalado baixa esse campo assumindo .mp4; `midia` idem, para as
      versoes do painel anteriores a esta. */
   for (const item of itens) {
+    // Video do catalogo vence; so o item sem nenhum ganha o montado das fotos.
+    if (!item.video) item.video = videoDeLinha(item.id);
     item.midias = item.video ? [item.video] : (item.fotos || [item.foto]).filter(Boolean);
     item.midia = item.midias[0] || '';
   }

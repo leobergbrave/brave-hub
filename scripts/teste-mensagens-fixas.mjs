@@ -14,6 +14,7 @@ process.env.VITE_SUPABASE_URL ||= 'https://x.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'x';
 const {
   mensagemTurf, RAPIDAS, mensagemBarras, linhasDePeso, VIDEO_BARRAS_EVOBLACK,
+  videoDeLinha, IDS_COM_VIDEO_DE_LINHA,
 } = await import('../api/_fss-produtos.js');
 
 // ── 1) Turf ─────────────────────────────────────────────────────────────────
@@ -109,6 +110,23 @@ assert.deepEqual(linhasDePeso([{ nome: 'Med Ball 08LB - Verde', preco: 419 }], t
   ['*8LB* Verde — 💰 *R$ 377 à vista* ou 10x de R$ 41,90 sem juros']);
 assert.deepEqual(linhasDePeso([{ nome: 'Dumbbell Sextavado Iron 22,5KG', preco: 360 }], false),
   ['*22,5KG* — 💰 *R$ 324 à vista* ou 10x de R$ 36 sem juros']);
+
+// ── 2d) Vídeos montados das fotos (itens que não tinham vídeo) ────────────────
+// Os 12 itens detectados em 10/10/2026 como "sem vídeo". Lista fixa de propósito:
+// se um id sumir ou entrar sem querer, o teste avisa.
+const SEM_VIDEO_EM_10_10 = ['corda', 'medballpro', 'medballcor', 'kbiron', 'kbtex', 'kbhib',
+  'bumperblack', 'bumpercollor', 'dbiron', 'dbevo', 'dbhybrid', 'sandbag'];
+assert.deepEqual([...IDS_COM_VIDEO_DE_LINHA].sort(), [...SEM_VIDEO_EM_10_10].sort());
+assert.equal(new Set(IDS_COM_VIDEO_DE_LINHA).size, IDS_COM_VIDEO_DE_LINHA.length, 'id repetido');
+
+for (const id of IDS_COM_VIDEO_DE_LINHA) {
+  assert.match(videoDeLinha(id),
+    new RegExp(`/storage/v1/object/public/produtos_media/linhas/video-${id}\\.mp4$`), `url do vídeo de ${id}`);
+}
+// Quem tem vídeo PRÓPRIO no catálogo (esteira, remo...) ou não está na lista não ganha o de linha.
+for (const id of ['esteira', 'escada', 'remo', 'skierg', 'bikeerg', 'storm', 'sledimp', 'slednac', 'turf', 'grama', 'barras', 'xyz']) {
+  assert.equal(videoDeLinha(id), '', `"${id}" não deveria ganhar vídeo de linha`);
+}
 
 // ── 3) Userscript: reserva igual ao servidor, sem o fluxo antigo, versão coerente ──
 const user = fs.readFileSync(new URL('./fss-enviar-proposta.user.js', import.meta.url), 'utf8');
