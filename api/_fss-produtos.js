@@ -334,6 +334,16 @@ const BUCKET_PUBLICO = `${process.env.VITE_SUPABASE_URL || ''}/storage/v1/object
 const FOTO_LINHA_BLACK = `${BUCKET_PUBLICO}/linhas/linha-bumper-black-2.0.jpg`;
 const FOTO_LINHA_COLLOR = `${BUCKET_PUBLICO}/linhas/linha-bumper-collor-2.0.jpg`;
 
+/* Barras olimpicas EvoBlack 8.0: 10kg Iniciante, 15kg Feminina e 20kg Masculina.
+   Ficam de fora as ZINCADAS (ZINC15 / ZINC20): outro acabamento, outro preco.
+   O VIDEO foi montado das fotos do catalogo (BLACK10 e BLACK15 sao a mesma
+   imagem, as tres barras juntas; BLACK20 e outra, vista de cima) — 720x1280,
+   H.264 Baseline, yuv420p e AAC, a mesma especificacao dos videos de produto
+   que ja chegam pelo WhatsApp. NAO apagar linhas/ ao limpar o bucket: se o
+   arquivo sumir, a BotConversa recusa a midia e o envio aborta antes do texto. */
+const BARRAS_EVOBLACK = ['BLACK10', 'BLACK15', 'BLACK20'];
+export const VIDEO_BARRAS_EVOBLACK = `${BUCKET_PUBLICO}/linhas/linha-barras-evoblack-8.mp4`;
+
 async function buscarPorSku(skus) {
   try {
     const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -389,7 +399,9 @@ const corDoItem = (nome) => {
    vista e anunciar "10x" no rodape fazia o cliente dividir o numero errado: a
    parcela sai do preco A PRAZO (R$ 419 = 10x de R$ 41,90), nao do a vista
    (R$ 377). Preco do catalogo e o a prazo; a vista tem 10% de desconto. */
-function linhasDePeso(bolas, comCor) {
+/* `rotulo` (opcional) devolve o texto que acompanha o peso quando nao ha cor —
+   ex.: "Iniciante" nas barras. Sem ele, o comportamento e o de sempre. */
+export function linhasDePeso(bolas, comCor, rotulo) {
   return bolas
     .slice()
     .sort((a, b) => pesoEmKg(a.nome) - pesoEmKg(b.nome))
@@ -397,7 +409,7 @@ function linhasDePeso(bolas, comCor) {
       // Reais inteiros: e como os precos a vista aparecem no catalogo
       // (R$ 449, R$ 629) — centavos quebrados denunciam conta automatica.
       const avista = Math.round(Number(b.preco) * 0.9);
-      const cor = comCor ? corDoItem(b.nome) : '';
+      const cor = comCor ? corDoItem(b.nome) : (rotulo ? rotulo(b) : '');
       return `*${rotuloPeso(b.nome)}*${cor ? ` ${cor}` : ''} — ${linhaPreco(avista, b.preco)}`;
     });
 }
@@ -561,6 +573,32 @@ function mensagemDumbbellHybrid(dbs) {
   ].join('\n');
 }
 
+/* Barras EvoBlack 8.0 — fonte de CADA bullet: a LP crossfit-box.
+   So entra o que a LP afirma das TRES barras: "rolamento agulha" (as tres) e
+   "tratamento Black Chrome" (as tres: a Masculina diz "Chrome Black"). O resto
+   fica de fora porque a LP so o atribui a parte delas — "aco testado ate
+   210.000 psi" e "recartilho para LPO" so na Masculina, "dimensoes IWF" so na
+   Feminina, e a garantia de 1 ano so na Masculina e na Iniciante.
+   A LP chama as duas menores de "EvoChrome"; o catalogo e o Bling dizem
+   "EvoBlack" nas tres, que e o nome usado aqui. A tagline e a do card da
+   Feminina na LP ("um upgrade de resistencia e durabilidade..."). */
+export function mensagemBarras(barras) {
+  const modelo = (b) => {
+    const m = String(b.nome).match(/\b(iniciante|feminina|masculina)\b/i);
+    return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : '';
+  };
+  return [
+    '🏋️ *Barras Olímpicas EvoBlack 8.0*',
+    'Um upgrade de resistência e durabilidade para treinos intensos.',
+    '',
+    '✅ Rolamento agulha',
+    '✅ Tratamento Black Chrome',
+    '',
+    '*Modelos e valores:*',
+    ...linhasDePeso(barras, false, modelo),
+  ].join('\n');
+}
+
 /* Anilhas — fonte de CADA bullet: a LP crossfit-box, curada pelo Leo.
    Bumper Black 2.0: tagline "Quique reduzido e design com logo em alto
    relevo", features "Dureza aferida com medidor" e "Alto nivel de
@@ -692,11 +730,12 @@ async function montarItens() {
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
   const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor,
-         dbIron, dbEvo, dbHybrid] = await Promise.all([
+         dbIron, dbEvo, dbHybrid, barras] = await Promise.all([
     buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
     buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
     buscarPorSku(BUMPER_BLACK), buscarPorSku(BUMPER_COLLOR),
     buscarPorSku(DUMBBELL_IRON), buscarPorSku(DUMBBELL_EVO), buscarPorSku(DUMBBELL_HYBRID),
+    buscarPorSku(BARRAS_EVOBLACK),
   ]);
   if (medPro.length) {
       itens.push({
@@ -760,6 +799,16 @@ async function montarItens() {
            vermelha) porque nenhuma foto sozinha mostrava a linha — a do Leo
            mostra, e duas fotos viraram repeticao. */
         fotos: [FOTO_LINHA_COLLOR],
+      });
+  }
+  // Logo depois das anilhas: barra e anilha se vendem juntas.
+  if (barras.length) {
+      itens.push({
+        id: 'barras', titulo: '🏋️ Barras Olímpicas EvoBlack 8.0',
+        texto: mensagemBarras(barras),
+        // Com video, e ele o anexo do envio (item.midias = video, senao fotos).
+        video: VIDEO_BARRAS_EVOBLACK,
+        fotos: fotosDaLinha(barras, 1),
       });
   }
   if (dbIron.length) {
