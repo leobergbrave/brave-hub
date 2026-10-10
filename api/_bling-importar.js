@@ -612,6 +612,10 @@ export default async function handler(req, res) {
                diferenciais (15/09) — se estiverem no Bling, vem daqui.
                Somente leitura: nada e gravado nem apagado no Bling. */
             midia: d.midia || null,
+            /* Estoque (saldoFisicoTotal / saldoVirtualTotal): para saber se o
+               Bling e a fonte confiavel de "tem em estoque" antes de montar
+               qualquer checagem automatica em cima dele. Somente leitura. */
+            estoque: d.estoque || null,
             descricaoCurta: typeof d.descricaoCurta === 'string' ? d.descricaoCurta.slice(0, 2000) : null,
             descricaoComplementar: typeof d.descricaoComplementar === 'string' ? d.descricaoComplementar.slice(0, 2000) : null,
             camposDetalhe: Object.keys(d),
