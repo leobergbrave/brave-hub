@@ -14,7 +14,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { getValidToken } from './_bling-importar.js';
 import {
-  classificarProduto, interpretarLista, montarOpcoes, escolherLinhas, mensagemComparativa,
+  classificarProduto, interpretarLista, montarOpcoes, escolherLinhas, mensagemComparativa, mensagemLinha,
 } from './_musculacao-montador.js';
 
 const supabaseAdmin = createClient(
@@ -179,7 +179,7 @@ export async function montarMusculacao(req, res) {
       ok: true,
       itens: itens.map((i) => ({ equip: i.equip, rotulo: i.rotulo, qtd: i.qtd, original: i.original })),
       desconhecidos,
-      linhas: escolha.linhas,
+      linhas: escolha.linhas.map((L) => ({ ...L, mensagem: mensagemLinha(L, { estoqueEm }) })),
       complementos: escolha.complementos,
       nao_encontrados: escolha.naoEncontrados,
       mensagem,

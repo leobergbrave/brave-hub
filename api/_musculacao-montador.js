@@ -13,10 +13,23 @@
  *    quando a linha tem a Dual;
  *  - só UMA proposta por cliente vai ao Bling: aqui só se compara, quem escolhe a
  *    linha é o consultor.
- * Preço do catálogo (`preco`) é o a prazo em 10x; à vista = preco x 0,90. */
+ * Preço do catálogo (`preco`) é a base; o desconto por linha (abaixo) sai dele. */
 
 export const PRAZO_ENCOMENDA_DIAS = 120;
-const FATOR_AVISTA = 0.9;
+
+/* Desconto por linha, direto sobre o preço de catálogo (decisão do Léo,
+   10/10/2026). Light é a linha de entrada e desconta menos; as demais puxam
+   mais. Dois preços: à vista (desconto maior) e a prazo em 10x sem juros. */
+const DESCONTO = {
+  light: { avista: 0.15, prazo: 0.05 },
+};
+const DESCONTO_PADRAO = { avista: 0.30, prazo: 0.15 }; // hard, classic, tech, premium, plate loaded...
+const fatoresLinha = (linha) => {
+  const d = DESCONTO[linha] || DESCONTO_PADRAO;
+  return { avista: 1 - d.avista, prazo: 1 - d.prazo };
+};
+const precoAvista = (preco, linha) => Math.round(Number(preco) * fatoresLinha(linha).avista);
+const precoPrazo = (preco, linha) => Math.round(Number(preco) * fatoresLinha(linha).prazo);
 /* Peça de reposição e item de teste do catálogo (Paleteira R$ 100, Tubo R$ 5...)
    não é máquina: fora da matriz. A máquina mais barata do catálogo é um banco de R$ 2.880. */
 const PRECO_MINIMO_MAQUINA = 1000;
@@ -234,7 +247,7 @@ const PARES_COMBO = [
   { a: 'puxada_alta', b: 'remada_baixa', combo: 'puxada_remada' },
 ];
 
-const avista = (preco) => Math.round(Number(preco) * FATOR_AVISTA);
+/* preços por linha: ver precoAvista/precoPrazo no topo do arquivo. */
 const fotoValida = (u) => (/^https?:\/\//i.test(String(u || '')) && String(u).toUpperCase() !== 'SEM_FOTO_BLING' ? u : null);
 
 function indexarCatalogo(catalogo) {
@@ -322,7 +335,9 @@ export function montarOpcoes(itens, catalogo, estoque = {}) {
         trocou: !!m.trocou, pedido: m.trocou ? m.pedido : undefined,
         produto: {
           sku: m.produto.codigo_sku, nome: m.produto.nome, preco: m.produto.preco,
-          avista: avista(m.produto.preco), foto: fotoValida(m.produto.url_imagem),
+          avista: precoAvista(m.produto.preco, linha),
+          prazo: precoPrazo(m.produto.preco, linha),
+          foto: fotoValida(m.produto.url_imagem),
         },
         estoque: situacaoEstoque(m.qtd, saldo),
       };
@@ -330,7 +345,7 @@ export function montarOpcoes(itens, catalogo, estoque = {}) {
     resultado.push({
       linha, rotulo: LINHAS[linha]?.rotulo || linha, familia: LINHAS[linha]?.familia || '',
       itens: linhasOrc, faltando,
-      total_prazo: linhasOrc.reduce((s, i) => s + i.produto.preco * i.qtd, 0),
+      total_prazo: linhasOrc.reduce((s, i) => s + i.produto.prazo * i.qtd, 0),
       total_avista: linhasOrc.reduce((s, i) => s + i.produto.avista * i.qtd, 0),
       cobre: itens.length - faltando.length,
       de: itens.length,
@@ -415,8 +430,25 @@ export function mensagemComparativa(resultado, { desconhecidos = [], maxLinhas =
     out.push(`Para confirmar com você: ${desconhecidos.join('; ')}`);
   }
   out.push('');
-  out.push('Valores à vista com 10% de desconto; a prazo em até 10x sem juros.');
+  out.push('Preços à vista e a prazo (10x sem juros) já com o desconto de cada linha.');
   if (estoqueEm) out.push(`Estoque conferido em ${estoqueEm}.`);
   out.push('Qual linha faz mais sentido para o seu espaço?');
+  return out.join('\n');
+}
+
+/* Texto de UMA linha, para mandar junto com as fotos daquela linha (o consultor
+   envia linha por linha, cada uma como uma mensagem com suas máquinas e fotos). */
+export function mensagemLinha(L, { estoqueEm = null } = {}) {
+  const titulo = L.linha === 'avulsa' ? 'Outras opções (sem linha definida)' : `Linha ${L.rotulo}`;
+  const out = [`*${titulo}*`, ''];
+  for (const i of L.itens) {
+    const q = i.qtd > 1 ? `${i.qtd}x ` : '';
+    const no_lugar = i.trocou ? ` (opção para "${i.pedido}")` : '';
+    out.push(`• ${q}${i.produto.nome}${no_lugar} — ${brl(i.produto.avista)} à vista · ${textoEstoque(i.estoque, i.qtd)}`);
+  }
+  if (L.faltando.length) out.push(`Não tem nesta linha: ${L.faltando.join(', ')}`);
+  out.push('');
+  out.push(`Total: ${brl(L.total_avista)} à vista ou 10x de ${brl(L.total_prazo / 10)} (sem juros).`);
+  if (estoqueEm) out.push(`Estoque conferido em ${estoqueEm}.`);
   return out.join('\n');
 }

@@ -1,6 +1,6 @@
 // scripts/teste-musculacao-montador.mjs — trava as regras do montador de orçamento
 // de musculação (10/10/2026): linha pelo nome, máquina Dual quando a linha tem,
-// estoque zero = sob encomenda 120 dias, à vista = preço x 0,90.
+// estoque zero = sob encomenda 120 dias; desconto por linha (Light 15%/5%, demais 30%/15%).
 //
 // Catálogo e estoque são FICTÍCIOS (nomes e preços copiados do cadastro real,
 // saldos inventados) — o teste não toca em Bling nem em banco.
@@ -156,11 +156,15 @@ assert.equal(hpl.variantes, 1);
 // Lixo não entra em linha nenhuma.
 assert.ok(!res.some((r) => r.itens.some((i) => ['PLT', 'BH08B'].includes(i.produto.sku))));
 
-// Preço: à vista = preco x 0,90 arredondado; total = soma.
+// Preço por linha (decisão 10/10/2026): Light 15%/5%, demais 30%/15% sobre o catálogo.
 const ext = linha('hard').itens.find((i) => i.produto.sku === 'HS13');
-assert.equal(ext.produto.avista, 15066);
-assert.equal(linha('hard').total_prazo, 16740 * 3 + 17460);
-assert.equal(linha('hard').total_avista, 15066 * 3 + Math.round(17460 * 0.9));
+assert.equal(ext.produto.avista, Math.round(16740 * 0.70)); // hard: à vista 30% off
+assert.equal(ext.produto.prazo, Math.round(16740 * 0.85));  // hard: a prazo 15% off
+assert.equal(linha('hard').total_prazo, Math.round(16740 * 0.85) * 3 + Math.round(17460 * 0.85));
+assert.equal(linha('hard').total_avista, Math.round(16740 * 0.70) * 3 + Math.round(17460 * 0.70));
+const lgt = linha('light').itens[0];
+assert.equal(lgt.produto.avista, Math.round(lgt.produto.preco * 0.85)); // light: à vista 15% off
+assert.equal(lgt.produto.prazo, Math.round(lgt.produto.preco * 0.95));  // light: a prazo 5% off
 
 // Estoque: saldo 0 = encomenda, saldo suficiente = pronta, ausente = consultar.
 assert.equal(linha('hard').itens.find((i) => i.produto.sku === 'HS13').estoque.status, 'encomenda');
@@ -190,7 +194,7 @@ const msg = mensagemComparativa(res, { desconhecidos: ['2 esteiras'] });
 // Valor literal de propósito: é a regra do Léo (120 dias), não um espelho da constante.
 assert.equal(PRAZO_ENCOMENDA_DIAS, 120);
 assert.ok(msg.includes('sob encomenda (120 dias)'), 'sob encomenda tem que dizer o prazo');
-assert.ok(msg.includes('R$ 15.066 à vista'));
+assert.ok(msg.includes('R$ 11.718 à vista')); // HS13 na hard: 16740 × 0,70 (30% off)
 assert.ok(msg.includes('2 esteiras'));
 assert.match(msg, /Não tem nesta linha: Remada Baixa/);
 assert.match(msg, /\(cobre 5 de 6\)/);
