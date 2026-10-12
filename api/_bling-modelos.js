@@ -101,6 +101,7 @@ export async function importar(req, res) {
   //    Os filtros por número do Bling não funcionam, então paginamos até
   //    achar todos os alvos ou passar do menor número pedido.
   const menorAlvo = Math.min(...alvos);
+  const scanTudo = !!req.body?.scanTudo; // diagnostico: ignora o break de ordem, varre ate o fim
   /* Sem filtro de data, a lista do Bling só devolve as propostas recentes (a
      varredura esgotava por volta de #5000). Propostas antigas — criadas no
      início do ano, como os modelos Box Full — ficam de fora. O filtro de data
@@ -137,7 +138,7 @@ export async function importar(req, res) {
       if (/FULL BRAVE|\bBOX\b|HYROX|H[IÍ]BRIDO/i.test(nomeP)) boxMatches.push({ numero: n, nome: nomeP, total: p.total });
     }
     if (encontradas.size >= alvos.length) { motivoFim = 'todos_achados'; break; }
-    if (minNum < menorAlvo) { motivoFim = 'passou_do_menor'; break; }
+    if (!scanTudo && minNum < menorAlvo) { motivoFim = 'passou_do_menor'; break; }
     pagina += 1;
     await sleep(360);
   }
