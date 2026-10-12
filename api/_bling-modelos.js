@@ -109,19 +109,23 @@ export async function importar(req, res) {
   const LIMITE = 100;
   const MAX_PAG = 120; // janela maior: com o filtro de data a lista fica mais longa
   let pagina = 1;
+  let maiorVisto = 0, menorVisto = Infinity, totalListados = 0, motivoFim = 'max_paginas';
   while (pagina <= MAX_PAG) {
     const r = await blingGet(`${BLING_API}/propostas-comerciais?limite=${LIMITE}&pagina=${pagina}${filtroData}`, token);
-    if (!r.ok) break;
+    if (!r.ok) { motivoFim = `http_${r.status}`; break; }
     const lista = (await r.json()).data || [];
-    if (lista.length === 0) break;
+    if (lista.length === 0) { motivoFim = 'lista_vazia'; break; }
+    totalListados += lista.length;
     let minNum = Infinity;
     for (const p of lista) {
       const n = Number(p.numero);
       if (n < minNum) minNum = n;
+      if (n > maiorVisto) maiorVisto = n;
+      if (n < menorVisto) menorVisto = n;
       if (alvos.includes(n) && !encontradas.has(n)) encontradas.set(n, p);
     }
-    if (encontradas.size >= alvos.length) break;
-    if (minNum < menorAlvo) break;
+    if (encontradas.size >= alvos.length) { motivoFim = 'todos_achados'; break; }
+    if (minNum < menorAlvo) { motivoFim = 'passou_do_menor'; break; }
     pagina += 1;
     await sleep(360);
   }
@@ -213,7 +217,13 @@ export async function importar(req, res) {
     });
   }
 
-  return res.status(200).json({ ok: true, resultados, paginasVarridas: pagina });
+  return res.status(200).json({
+    ok: true, resultados, paginasVarridas: pagina,
+    debug: {
+      dataInicial, dataFinal, totalListados, motivoFim,
+      maiorVisto, menorVisto: menorVisto === Infinity ? null : menorVisto,
+    },
+  });
 }
 
 // ── Resolve CEP → estado/zona (mesma lógica de auto-orcamento.js) ──
