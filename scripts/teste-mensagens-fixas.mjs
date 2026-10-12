@@ -14,7 +14,7 @@ process.env.VITE_SUPABASE_URL ||= 'https://x.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'x';
 const {
   mensagemTurf, RAPIDAS, mensagemBarras, linhasDePeso, VIDEO_BARRAS_EVOBLACK,
-  videoDeLinha, IDS_COM_VIDEO_DE_LINHA,
+  videoDeLinha, IDS_COM_VIDEO_DE_LINHA, mensagemPiso,
 } = await import('../api/_fss-produtos.js');
 
 // ── 1) Turf ─────────────────────────────────────────────────────────────────
@@ -115,7 +115,8 @@ assert.deepEqual(linhasDePeso([{ nome: 'Dumbbell Sextavado Iron 22,5KG', preco: 
 // Os 12 itens detectados em 10/10/2026 como "sem vídeo". Lista fixa de propósito:
 // se um id sumir ou entrar sem querer, o teste avisa.
 const SEM_VIDEO_EM_10_10 = ['corda', 'medballpro', 'medballcor', 'kbiron', 'kbtex', 'kbhib',
-  'bumperblack', 'bumpercollor', 'dbiron', 'dbevo', 'dbhybrid', 'sandbag'];
+  'bumperblack', 'bumpercollor', 'dbiron', 'dbevo', 'dbhybrid', 'sandbag',
+  'piso']; // + piso (P1M), acrescentado em 12/10/2026
 assert.deepEqual([...IDS_COM_VIDEO_DE_LINHA].sort(), [...SEM_VIDEO_EM_10_10].sort());
 assert.equal(new Set(IDS_COM_VIDEO_DE_LINHA).size, IDS_COM_VIDEO_DE_LINHA.length, 'id repetido');
 
@@ -127,6 +128,20 @@ for (const id of IDS_COM_VIDEO_DE_LINHA) {
 for (const id of ['esteira', 'escada', 'remo', 'skierg', 'bikeerg', 'storm', 'sledimp', 'slednac', 'turf', 'grama', 'barras', 'xyz']) {
   assert.equal(videoDeLinha(id), '', `"${id}" não deveria ganhar vídeo de linha`);
 }
+
+// ── 2e) Piso de borracha P1M ────────────────────────────────────────────────
+const msgPiso = mensagemPiso({ codigo_sku: 'P1M', preco: 105 });
+assert.ok(msgPiso.includes('100x100'), 'dimensão da placa');
+assert.ok(msgPiso.includes('15mm'), 'espessura');
+// Preço: catálogo é o a prazo; à vista = preço x 0,90 em reais inteiros.
+assert.ok(msgPiso.includes('R$ 95 à vista'), 'à vista = round(105 x 0,9)');
+assert.ok(msgPiso.includes('10x de R$ 10,50 sem juros'));
+// Só o que a LP crossfit-box afirma do piso: nada de garantia, densidade ou norma.
+for (const semFonte of [/garantia/i, /densidade/i, /norma/i, /antiderrapante/i, /kg\/m/i]) {
+  assert.ok(!semFonte.test(msgPiso), `afirmação sem fonte no piso: ${semFonte}`);
+}
+assert.ok(!/hyrox/i.test(msgPiso), 'marca de terceiro');
+assert.ok(msgPiso.includes('Outras cores e espessuras sob consulta'));
 
 // ── 3) Userscript: reserva igual ao servidor, sem o fluxo antigo, versão coerente ──
 const user = fs.readFileSync(new URL('./fss-enviar-proposta.user.js', import.meta.url), 'utf8');

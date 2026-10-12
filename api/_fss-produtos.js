@@ -342,6 +342,12 @@ const FOTO_LINHA_COLLOR = `${BUCKET_PUBLICO}/linhas/linha-bumper-collor-2.0.jpg`
    que ja chegam pelo WhatsApp. NAO apagar linhas/ ao limpar o bucket: se o
    arquivo sumir, a BotConversa recusa a midia e o envio aborta antes do texto. */
 const BARRAS_EVOBLACK = ['BLACK10', 'BLACK15', 'BLACK20'];
+
+/* Piso de borracha 100x100x15mm preto (P1M). So este: as outras espessuras e
+   cores (P1M25, P1M30, P1MBEGE) a propria LP trata como "sob consulta". Sem
+   video: e uma foto so, e a foto vai como anexo (mesmo caminho dos itens que
+   nao tem video). */
+const PISO_P1M = ['P1M'];
 export const VIDEO_BARRAS_EVOBLACK = `${BUCKET_PUBLICO}/linhas/linha-barras-evoblack-8.mp4`;
 
 /* Videos montados das fotos do catalogo para os itens que NAO tinham video
@@ -357,6 +363,7 @@ export const VIDEO_BARRAS_EVOBLACK = `${BUCKET_PUBLICO}/linhas/linha-barras-evob
 export const IDS_COM_VIDEO_DE_LINHA = [
   'corda', 'medballpro', 'medballcor', 'kbiron', 'kbtex', 'kbhib',
   'bumperblack', 'bumpercollor', 'dbiron', 'dbevo', 'dbhybrid', 'sandbag',
+  'piso', // 12/10/2026: piso de borracha P1M (uma foto so, video de 7s)
 ];
 export const videoDeLinha = (id) => (IDS_COM_VIDEO_DE_LINHA.includes(id)
   ? `${BUCKET_PUBLICO}/linhas/video-${id}.mp4` : '');
@@ -616,6 +623,29 @@ export function mensagemBarras(barras) {
   ].join('\n');
 }
 
+/* Piso de borracha — fonte de CADA bullet: a LP crossfit-box (card "Piso de
+   Borracha"): tagline "100x100 · 15mm, com absorcao maxima de impacto",
+   features "Alto nivel de aglomerante" e "Acabamento fino e controle de
+   qualidade", nota "Preco por placa · outras cores/espessuras sob consulta".
+   Nao afirmamos garantia, densidade nem norma: nao estao em lugar nenhum. */
+export function mensagemPiso(piso) {
+  const avista = Math.round(Number(piso.preco) * 0.9);
+  return [
+    '⬛ *Piso de Borracha de Alto Impacto*',
+    'Placa 100x100cm, 15mm de espessura, com absorção máxima de impacto.',
+    '',
+    '✅ Alta absorção de impacto',
+    '✅ Alto nível de aglomerante',
+    '✅ Acabamento fino e controle de qualidade',
+    '✅ Cor preta',
+    '',
+    '*Valor por placa (100x100x15mm):*',
+    linhaPreco(avista, piso.preco),
+    '',
+    'Outras cores e espessuras sob consulta.',
+  ].join('\n');
+}
+
 /* Anilhas — fonte de CADA bullet: a LP crossfit-box, curada pelo Leo.
    Bumper Black 2.0: tagline "Quique reduzido e design com logo em alto
    relevo", features "Dureza aferida com medidor" e "Alto nivel de
@@ -747,12 +777,12 @@ async function montarItens() {
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
   const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor,
-         dbIron, dbEvo, dbHybrid, barras] = await Promise.all([
+         dbIron, dbEvo, dbHybrid, barras, piso] = await Promise.all([
     buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
     buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
     buscarPorSku(BUMPER_BLACK), buscarPorSku(BUMPER_COLLOR),
     buscarPorSku(DUMBBELL_IRON), buscarPorSku(DUMBBELL_EVO), buscarPorSku(DUMBBELL_HYBRID),
-    buscarPorSku(BARRAS_EVOBLACK),
+    buscarPorSku(BARRAS_EVOBLACK), buscarPorSku(PISO_P1M),
   ]);
   if (medPro.length) {
       itens.push({
@@ -848,6 +878,17 @@ async function montarItens() {
         texto: mensagemDumbbellHybrid(dbHybrid), video: '',
         fotos: fotosDaLinha(dbHybrid, 1),
       });
+  }
+  if (piso.length) {
+      // Logo depois da grama: sao os dois itens de "piso" do painel.
+      const item = {
+        id: 'piso', titulo: '⬛ Piso de Borracha 15mm',
+        texto: mensagemPiso(piso[0]),
+        video: '',
+        foto: primeiraFoto(piso[0]),
+      };
+      const aposGrama = itens.findIndex((i) => i.id === 'grama');
+      if (aposGrama >= 0) itens.splice(aposGrama + 1, 0, item); else itens.push(item);
   }
   if (por.hy10p || por.hy20p || por.hy30p) {
       itens.push({
