@@ -102,9 +102,13 @@ export async function importar(req, res) {
      traz todas desde `dataInicial` (default largo), para alcançar os números
      baixos. Formato YYYY-MM-DD (mesmo de _analise-vendedores.js). */
   const hoje = new Date().toISOString().slice(0, 10);
-  const dataInicial = String(req.body?.dataInicial || '2024-01-01').slice(0, 10);
+  /* ATENCAO: a lista de propostas-comerciais devolve VAZIO quando recebe
+     dataInicial/dataFinal (esse filtro so vale no endpoint de pedidos/vendas).
+     Por isso o filtro de data e OPCIONAL e so entra se vier explicito no body —
+     o default e SEM filtro, que devolve a lista completa. */
+  const dataInicial = req.body?.dataInicial ? String(req.body.dataInicial).slice(0, 10) : null;
   const dataFinal = String(req.body?.dataFinal || hoje).slice(0, 10);
-  const filtroData = `&dataInicial=${dataInicial}&dataFinal=${dataFinal}`;
+  const filtroData = dataInicial ? `&dataInicial=${dataInicial}&dataFinal=${dataFinal}` : '';
   const encontradas = new Map();
   const LIMITE = 100;
   const MAX_PAG = 120; // janela maior: com o filtro de data a lista fica mais longa
