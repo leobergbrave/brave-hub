@@ -54,7 +54,7 @@ async function blingGet(path, token, tentativas = 4) {
 }
 
 /* Achata o contato do Bling (lista ou detalhe) no formato que o motor guarda.
-   Campos que só existem no detalhe (email, endereço, tipo) ficam null na lista. */
+   Campos que só existem no detalhe (email, endereço completo, tipo) ficam null na lista. */
 export function mapearContato(c) {
   const doc = String(c.numeroDocumento || '').replace(/\D/g, '');
   const end = c.endereco?.geral || c.endereco || {};
@@ -68,6 +68,10 @@ export function mapearContato(c) {
     email: c.email || null,
     telefone: c.celular || c.telefone || null,
     telefone2: c.celular && c.telefone && c.celular !== c.telefone ? c.telefone : null,
+    endereco: end.endereco || null,
+    numero: end.numero ? String(end.numero) : null,
+    bairro: end.bairro || null,
+    cep: String(end.cep || '').replace(/\D/g, '') || null,
     cidade: end.municipio || null,
     uf: end.uf || null,
     situacao: c.situacao || null,
