@@ -885,7 +885,8 @@ async function montarItens() {
         id: 'piso', titulo: '⬛ Piso de Borracha 15mm',
         texto: mensagemPiso(piso[0]),
         video: '',
-        foto: primeiraFoto(piso[0]),
+        // Reserva se o video sumir do bucket: mesma regra dos itens vindos de buscarPorSku.
+        fotos: fotosDaLinha(piso, 1),
       };
       const aposGrama = itens.findIndex((i) => i.id === 'grama');
       if (aposGrama >= 0) itens.splice(aposGrama + 1, 0, item); else itens.push(item);
