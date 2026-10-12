@@ -59,8 +59,13 @@ async function getValidToken() {
   if (test.status === 401) return await refreshBlingToken(config);
   return config.access_token;
 }
-function blingGet(url, token) {
-  return fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: '1.0' } });
+async function blingGet(url, token, tentativas = 4) {
+  for (let i = 1; i <= tentativas; i++) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: '1.0' } });
+    if (r.status === 429) { await sleep(1200 * i); continue; } // Bling rate limit: espera e tenta de novo
+    return r;
+  }
+  return { ok: false, status: 429 };
 }
 
 // ── Catálogo local indexado por bling_id e codigo_sku ──
@@ -114,6 +119,7 @@ export async function importar(req, res) {
   const MAX_PAG = 120; // janela maior: com o filtro de data a lista fica mais longa
   let pagina = 1;
   let maiorVisto = 0, menorVisto = Infinity, totalListados = 0, motivoFim = 'max_paginas';
+  const boxMatches = []; // diagnostico: propostas cujo contato parece Box Full/HYROX
   while (pagina <= MAX_PAG) {
     const r = await blingGet(`${BLING_API}/propostas-comerciais?limite=${LIMITE}&pagina=${pagina}${filtroData}`, token);
     if (!r.ok) { motivoFim = `http_${r.status}`; break; }
@@ -127,6 +133,8 @@ export async function importar(req, res) {
       if (n > maiorVisto) maiorVisto = n;
       if (n < menorVisto) menorVisto = n;
       if (alvos.includes(n) && !encontradas.has(n)) encontradas.set(n, p);
+      const nomeP = p.contato?.nome || p.nome || '';
+      if (/FULL BRAVE|\bBOX\b|HYROX|H[IÍ]BRIDO/i.test(nomeP)) boxMatches.push({ numero: n, nome: nomeP, total: p.total });
     }
     if (encontradas.size >= alvos.length) { motivoFim = 'todos_achados'; break; }
     if (minNum < menorAlvo) { motivoFim = 'passou_do_menor'; break; }
@@ -226,6 +234,7 @@ export async function importar(req, res) {
     debug: {
       dataInicial, dataFinal, totalListados, motivoFim,
       maiorVisto, menorVisto: menorVisto === Infinity ? null : menorVisto,
+      boxMatches: boxMatches.sort((a, b) => a.numero - b.numero),
     },
   });
 }
