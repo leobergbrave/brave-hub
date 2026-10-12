@@ -96,12 +96,21 @@ export async function importar(req, res) {
   //    Os filtros por número do Bling não funcionam, então paginamos até
   //    achar todos os alvos ou passar do menor número pedido.
   const menorAlvo = Math.min(...alvos);
+  /* Sem filtro de data, a lista do Bling só devolve as propostas recentes (a
+     varredura esgotava por volta de #5000). Propostas antigas — criadas no
+     início do ano, como os modelos Box Full — ficam de fora. O filtro de data
+     traz todas desde `dataInicial` (default largo), para alcançar os números
+     baixos. Formato YYYY-MM-DD (mesmo de _analise-vendedores.js). */
+  const hoje = new Date().toISOString().slice(0, 10);
+  const dataInicial = String(req.body?.dataInicial || '2024-01-01').slice(0, 10);
+  const dataFinal = String(req.body?.dataFinal || hoje).slice(0, 10);
+  const filtroData = `&dataInicial=${dataInicial}&dataFinal=${dataFinal}`;
   const encontradas = new Map();
   const LIMITE = 100;
-  const MAX_PAG = 80;
+  const MAX_PAG = 120; // janela maior: com o filtro de data a lista fica mais longa
   let pagina = 1;
   while (pagina <= MAX_PAG) {
-    const r = await blingGet(`${BLING_API}/propostas-comerciais?limite=${LIMITE}&pagina=${pagina}`, token);
+    const r = await blingGet(`${BLING_API}/propostas-comerciais?limite=${LIMITE}&pagina=${pagina}${filtroData}`, token);
     if (!r.ok) break;
     const lista = (await r.json()).data || [];
     if (lista.length === 0) break;
