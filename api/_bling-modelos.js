@@ -97,6 +97,23 @@ export async function importar(req, res) {
   const token = await getValidToken();
   if (!token) return res.status(500).json({ ok: false, error: 'Sem token Bling. Reconecte nas configurações.' });
 
+  /* 0) Caminho rápido: tenta o filtro ?numero= por alvo. A doc antiga dizia que
+     o Bling ignora, mas re-testamos — se funcionar, dispensa varrer a lista (hoje
+     com >9800 propostas, que não cabe no tempo da função). Só vale se a proposta
+     retornada tiver EXATAMENTE o número pedido (se vier a lista toda, o filtro foi
+     ignorado e caímos na varredura). */
+  const encontradas = new Map();
+  let viaFiltro = 0;
+  for (const num of alvos) {
+    const rr = await blingGet(`${BLING_API}/propostas-comerciais?numero=${num}&limite=20`, token);
+    if (rr.ok) {
+      const dados = (await rr.json()).data || [];
+      const achou = dados.find((p) => Number(p.numero) === num);
+      if (achou && dados.length <= 5) { encontradas.set(num, achou); viaFiltro++; }
+    }
+    await sleep(340);
+  }
+
   // 1) Varre a lista (desc por número) montando índice numero → proposta.
   //    Os filtros por número do Bling não funcionam, então paginamos até
   //    achar todos os alvos ou passar do menor número pedido.
@@ -115,13 +132,12 @@ export async function importar(req, res) {
   const dataInicial = req.body?.dataInicial ? String(req.body.dataInicial).slice(0, 10) : null;
   const dataFinal = String(req.body?.dataFinal || hoje).slice(0, 10);
   const filtroData = dataInicial ? `&dataInicial=${dataInicial}&dataFinal=${dataFinal}` : '';
-  const encontradas = new Map();
   const LIMITE = 100;
   const MAX_PAG = 120; // janela maior: com o filtro de data a lista fica mais longa
   let pagina = 1;
   let maiorVisto = 0, menorVisto = Infinity, totalListados = 0, motivoFim = 'max_paginas';
   const boxMatches = []; // diagnostico: propostas cujo contato parece Box Full/HYROX
-  while (pagina <= MAX_PAG) {
+  while (pagina <= MAX_PAG && encontradas.size < alvos.length) {
     const r = await blingGet(`${BLING_API}/propostas-comerciais?limite=${LIMITE}&pagina=${pagina}${filtroData}`, token);
     if (!r.ok) { motivoFim = `http_${r.status}`; break; }
     const lista = (await r.json()).data || [];
@@ -233,7 +249,7 @@ export async function importar(req, res) {
   return res.status(200).json({
     ok: true, resultados, paginasVarridas: pagina,
     debug: {
-      dataInicial, dataFinal, totalListados, motivoFim,
+      viaFiltro, dataInicial, dataFinal, totalListados, motivoFim,
       maiorVisto, menorVisto: menorVisto === Infinity ? null : menorVisto,
       boxMatches: boxMatches.sort((a, b) => a.numero - b.numero),
     },
