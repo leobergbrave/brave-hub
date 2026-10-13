@@ -87,13 +87,16 @@ const ISO = (s) => { const t = Date.parse(s || ''); return Number.isNaN(t) ? nul
 
 /* Uma linha por CLIENTE (telefone), a partir das vendas aprovadas. */
 export function montarBase({ orcamentos, clientes }) {
+  /* `clientes` repete telefone (41 duplicados em 12/10/2026, 20 com classificação
+     conflitante: um CNPJ e um CPF do mesmo número). Pegar "o primeiro" depende da
+     ordem das linhas e muda de uma leitura para outra. Por isso guardamos TODOS os
+     registros do telefone e decidimos por regra: qualquer um de negócio vale. */
   const porTel = new Map();
   const porNome = new Map();
+  const guardar = (mapa, chave, c) => { if (chave) (mapa.get(chave) || mapa.set(chave, []).get(chave)).push(c); };
   for (const c of clientes || []) {
-    const t = tel8(c.telefone);
-    if (t && !porTel.has(t)) porTel.set(t, c);
-    const n = norm(c.nome);
-    if (n && !porNome.has(n)) porNome.set(n, c);
+    guardar(porTel, tel8(c.telefone), c);
+    guardar(porNome, norm(c.nome), c);
   }
 
   const base = new Map();
@@ -116,11 +119,12 @@ export function montarBase({ orcamentos, clientes }) {
   }
 
   for (const c of base.values()) {
-    const reg = porTel.get(c.tel8) || porNome.get(norm(c.nome)) || null;
-    const tipoNeg = reg?.tipo_negocio || '';
-    c.usoProprio = tipoNeg === 'uso_proprio';
-    c.negocio = reg ? (reg.tipo_pessoa === 'J' || ['box', 'academia', 'studio'].includes(tipoNeg)) : false;
-    c.noCadastro = !!reg;
+    const regs = porTel.get(c.tel8) || porNome.get(norm(c.nome)) || [];
+    const ehNegocio = (r) => r.tipo_pessoa === 'J' || ['box', 'academia', 'studio'].includes(r.tipo_negocio || '');
+    c.negocio = regs.some(ehNegocio);
+    // Uso próprio só vale quando nenhum registro do mesmo número é de negócio.
+    c.usoProprio = !c.negocio && regs.some((r) => r.tipo_negocio === 'uso_proprio');
+    c.noCadastro = regs.length > 0;
     c.itemDeProva = temItemDeProva(c.itens.join(' | '));
   }
   return [...base.values()];

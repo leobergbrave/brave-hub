@@ -77,6 +77,30 @@ assert.equal(por['33333333'].itemDeProva, true);
 assert.equal(por['44444444'].usoProprio, true);
 assert.equal(por['77777777'].noCadastro, false, 'fora de clientes: segue pela regra do item');
 
+// ── telefone repetido em `clientes`: a ordem das linhas NÃO pode mudar o resultado ──
+{
+  const dupA = [
+    { nome: 'Ivo Dono', telefone: '11988880000', tipo_pessoa: 'F', tipo_negocio: null },
+    { nome: 'Ivo Dono Ltda', telefone: '11988880000', tipo_pessoa: 'J', tipo_negocio: null },
+  ];
+  const o = [orc('Ivo Dono', '11988880000', 'Aprovado', dias(30), ['Cadeira Flexora'])];
+  const r1 = montarBase({ orcamentos: o, clientes: dupA })[0];
+  const r2 = montarBase({ orcamentos: o, clientes: [...dupA].reverse() })[0];
+  assert.equal(r1.negocio, true, 'qualquer registro de negócio do mesmo número vale');
+  assert.equal(r2.negocio, true, 'a ordem das linhas não muda o resultado');
+  // uso próprio num registro e CNPJ em outro: negócio vence
+  const mix = [
+    { nome: 'Ivo', telefone: '11988880000', tipo_pessoa: 'F', tipo_negocio: 'uso_proprio' },
+    { nome: 'Ivo Ltda', telefone: '11988880000', tipo_pessoa: 'J', tipo_negocio: null },
+  ];
+  const m = montarBase({ orcamentos: o, clientes: mix })[0];
+  assert.equal(m.negocio, true);
+  assert.equal(m.usoProprio, false, 'com um registro de negócio, uso próprio não exclui');
+  // só uso próprio: exclui
+  const so = montarBase({ orcamentos: o, clientes: [mix[0]] })[0];
+  assert.equal(so.usoProprio, true);
+}
+
 // ── seleção ─────────────────────────────────────────────────────────────────
 const sel = (extra = {}) => selecionar({
   base, optouts: new Set(), respostas: {}, estado: { contatos: {} }, agora: AGORA, ...extra,

@@ -56,19 +56,32 @@ async function lerJson(caminho, padrao) {
 const salvarEstado = (st) => supabaseAdmin.storage.from(BUCKET)
   .upload(ESTADO, Buffer.from(JSON.stringify(st)), { upsert: true, contentType: 'application/json' });
 
+/* O PostgREST devolve no máximo 1000 linhas por pedido, mesmo com .limit(3000):
+   os orçamentos já são 987 e passariam do corte em silêncio. Aqui se pagina por
+   faixa, com ordem fixa, até acabar. */
+async function lerTudo(consulta, passo = 1000) {
+  const out = [];
+  for (let de = 0; ; de += passo) {
+    const { data, error } = await consulta().range(de, de + passo - 1);
+    if (error) throw new Error(error.message);
+    out.push(...(data || []));
+    if (!data || data.length < passo) return out;
+  }
+}
+
 async function carregarContexto() {
   const [orc, cli, cont, respostas, estado] = await Promise.all([
-    supabaseAdmin.from('orcamentos_salvos')
-      .select('cliente, criado_em, aprovado_em, payload')
-      .order('criado_em', { ascending: false }).limit(1500),
-    supabaseAdmin.from('clientes').select('nome, telefone, tipo_pessoa, tipo_negocio').limit(3000),
-    supabaseAdmin.from('contatos').select('telefone_norm').eq('optout', true).limit(3000),
+    lerTudo(() => supabaseAdmin.from('orcamentos_salvos')
+      .select('cliente, criado_em, aprovado_em, payload').order('criado_em', { ascending: false }).order('id')),
+    lerTudo(() => supabaseAdmin.from('clientes')
+      .select('nome, telefone, tipo_pessoa, tipo_negocio').order('id')),
+    lerTudo(() => supabaseAdmin.from('contatos')
+      .select('telefone_norm').eq('optout', true).order('id')),
     lerJson(RESPOSTAS, {}),
     lerJson(ESTADO, {}),
   ]);
-  if (orc.error) throw new Error(`orçamentos: ${orc.error.message}`);
-  const optouts = new Set((cont.data || []).map((c) => String(c.telefone_norm || '').replace(/\D/g, '').slice(-8)).filter(Boolean));
-  const base = montarBase({ orcamentos: orc.data || [], clientes: cli.data || [] });
+  const optouts = new Set(cont.map((c) => String(c.telefone_norm || '').replace(/\D/g, '').slice(-8)).filter(Boolean));
+  const base = montarBase({ orcamentos: orc, clientes: cli });
   return { base, optouts, respostas, estado };
 }
 
