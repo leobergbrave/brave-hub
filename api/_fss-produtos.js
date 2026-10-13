@@ -266,6 +266,14 @@ const MEDBALL_PRO = ['M8P', 'M10P', 'M14P', 'M16P', 'M20P', 'M30P'];
    for corrigido. */
 const MEDBALL_COR = ['M4L', 'M8C', 'M10C', 'M12C', 'M14C', 'M16C', 'M18B', 'M20C', 'M30C'];
 
+/* Alvos de Wall Ball — dois itens SEPARADOS (pedido do Leo, 13/10): o padrao
+   (circulo / haste+circulo) e o custom hibrido (chapa / +haste). O ALVOHY vem
+   do catalogo como "Alvo Custom Hyrox + Haste"; HYROX e marca de terceiro e nao
+   pode aparecer pro cliente, entao a mensagem troca "Hyrox" por "Hibrido"
+   (ver linhasAlvo). O ALVOHRX (Hyrox sem haste, sem foto) ficou de fora. */
+const ALVO_WALLBALL = ['ALVO2', 'WBRKCP'];
+const ALVO_HIBRIDO = ['ALVOHYCHAPA', 'ALVOHY'];
+
 /* Kettlebell Iron: a linha da fundicao propria, do 4 ao 32kg de 2 em 2.
    ATENCAO KB26: custa R$ 390 no catalogo, fora da regra de R$ 16/kg das
    outras catorze (seria R$ 416). Na lista isso aparece como +R$ 5 do 24 para o
@@ -646,6 +654,39 @@ export function mensagemPiso(piso) {
   ].join('\n');
 }
 
+/* Alvos: lista cada modelo por NOME (trocando "Hyrox" por "Híbrido") e preço,
+   do mais barato ao mais caro. Sem bullets de spec — não há fonte curada ainda;
+   o Leo adiciona depois se quiser (mesma regra das outras mensagens). */
+function linhasAlvo(alvos) {
+  return [...alvos]
+    .sort((a, b) => (Number(a.preco) || 0) - (Number(b.preco) || 0))
+    .map((a) => {
+      const avista = Math.round(Number(a.preco) * 0.9);
+      const nome = String(a.nome || '').replace(/hyrox/gi, 'Híbrido').trim();
+      return `*${nome}* — ${linhaPreco(avista, a.preco)}`;
+    });
+}
+
+function mensagemAlvoWallball(alvos) {
+  return [
+    '🎯 *Alvo de Wall Ball*',
+    'Alvo para os arremessos de wall ball, para instalar na parede do box.',
+    '',
+    '*Opções e valores:*',
+    ...linhasAlvo(alvos),
+  ].join('\n');
+}
+
+function mensagemAlvoHibrido(alvos) {
+  return [
+    '🎯 *Alvo Híbrido*',
+    'Alvo no padrão das provas de corrida híbrida.',
+    '',
+    '*Opções e valores:*',
+    ...linhasAlvo(alvos),
+  ].join('\n');
+}
+
 /* Anilhas — fonte de CADA bullet: a LP crossfit-box, curada pelo Leo.
    Bumper Black 2.0: tagline "Quique reduzido e design com logo em alto
    relevo", features "Dureza aferida com medidor" e "Alto nivel de
@@ -777,12 +818,13 @@ async function montarItens() {
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
   const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor,
-         dbIron, dbEvo, dbHybrid, barras, piso] = await Promise.all([
+         dbIron, dbEvo, dbHybrid, barras, piso, alvoWb, alvoHib] = await Promise.all([
     buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
     buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
     buscarPorSku(BUMPER_BLACK), buscarPorSku(BUMPER_COLLOR),
     buscarPorSku(DUMBBELL_IRON), buscarPorSku(DUMBBELL_EVO), buscarPorSku(DUMBBELL_HYBRID),
     buscarPorSku(BARRAS_EVOBLACK), buscarPorSku(PISO_P1M),
+    buscarPorSku(ALVO_WALLBALL), buscarPorSku(ALVO_HIBRIDO),
   ]);
   if (medPro.length) {
       itens.push({
@@ -798,6 +840,23 @@ async function montarItens() {
         texto: mensagemMedBallColorida(medCor),
         video: '',
         fotos: fotosDaLinha(medCor, 2),
+      });
+  }
+  // Alvos de Wall Ball logo depois das med balls: é o mesmo canto do box.
+  if (alvoWb.length) {
+      itens.push({
+        id: 'alvowb', titulo: '🎯 Alvo de Wall Ball',
+        texto: mensagemAlvoWallball(alvoWb),
+        video: '',
+        fotos: fotosDaLinha(alvoWb, 2),
+      });
+  }
+  if (alvoHib.length) {
+      itens.push({
+        id: 'alvohib', titulo: '🎯 Alvo Híbrido',
+        texto: mensagemAlvoHibrido(alvoHib),
+        video: '',
+        fotos: fotosDaLinha(alvoHib, 2),
       });
   }
   if (kbIron.length) {
