@@ -17,6 +17,7 @@ import { religarProposta } from './_proposta-religar.js';
 import { processarFollowups } from './_followup-auto.js';
 import exportarContatos from './_bling-contatos-export.js';
 import { montarMusculacao, atualizarEstoqueMusculacao } from './_musculacao-api.js';
+import { processarMetodo, statusMetodo } from './_metodo-corrida.js';
 
 /* ═══════════════════════════════════════════════
    BRAVE HUB — API: Bling (função consolidada)
@@ -79,6 +80,8 @@ export default async function handler(req, res) {
     case 'cadastro_prefill':       return lerPrefill(req, res);
     case 'exportar_contatos':      return exportarContatos(req, res);
     case 'montar_musculacao':      return montarMusculacao(req, res);
+    case 'processar_metodo':       return processarMetodo(req, res);
+    case 'metodo_status':          return statusMetodo(req, res);
     case 'estoque_musculacao_atualizar': return atualizarEstoqueMusculacao(req, res);
     default:
       return res.status(400).json({ ok: false, error: `Ação Bling inválida: ${acao || '(vazia)'}` });

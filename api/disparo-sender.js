@@ -142,7 +142,22 @@ async function run(req) {
     followup = { ok: false, error: e.message };
   }
 
-  const respondCom = (data) => respond({ ...data, followup });
+  /* Apresentacao do metodo corridahibrida.com.br aos clientes atendidos pelo Leo:
+     mesmo molde do follow-up, no mesmo tique. Desligada por padrao no proprio
+     motor (LIGADO em _metodo-corrida.js) — falha aqui nunca derruba os disparos. */
+  let metodo = null;
+  try {
+    const base = new URL(req.url).origin;
+    const mr = await fetch(`${base}/api/bling?acao=processar_metodo`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': req.headers.get('x-cron-secret') || '' },
+    });
+    metodo = await mr.json();
+  } catch (e) {
+    metodo = { ok: false, error: e.message };
+  }
+
+  const respondCom = (data) => respond({ ...data, followup, metodo });
 
   const cfgArr = await dbSelect('disparo_config', 'limit=1');
   if (!cfgArr?.length) return respondCom({ ok: true, skipped: 'configuração não encontrada' });
