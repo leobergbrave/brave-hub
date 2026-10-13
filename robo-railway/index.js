@@ -103,7 +103,11 @@ const TOKEN = process.env.HUB_PDF_TOKEN;
 const BLING_USUARIO = process.env.BLING_USUARIO;
 const BLING_SENHA = process.env.BLING_SENHA;
 
-const INTERVALO_MS = Number(process.env.INTERVALO_SEGUNDOS || 60) * 1000;
+/* Ronda a cada 20s (era 60): o poll de pendências bate no HUB, não no Bling, e o
+   login/captura só acontecem quando HÁ proposta — então checar mais vezes não
+   aumenta o risco de bloqueio, só faz a proposta aparecer no FSS mais rápido. O
+   Léo pode baixar ainda mais pela env INTERVALO_SEGUNDOS no Railway. */
+const INTERVALO_MS = Number(process.env.INTERVALO_SEGUNDOS || 20) * 1000;
 const ESPERA_PROPOSTA_MS = 75_000;
 const MAX_FALHAS_LOGIN = 3;
 const BACKOFF_CF_MS = 20 * 60 * 1000; // Cloudflare bloqueando: espera 20min p/ o IP esfriar
@@ -440,7 +444,14 @@ async function ronda() {
    sem ninguem perceber. Agora pegam carona neste robo, que ja roda 24/7: se o robo
    esta de pe, rodam. Os dois se auto-limitam no HUB (janela, teto diario, intervalo).
    Falha aqui NUNCA pode atrapalhar a captura de PDF — por isso o try/catch proprio. */
+/* Com a ronda a cada 20s, o disparo/follow-up NÃO precisa rodar toda ronda:
+   mantemos a cadência de ~60s (os dois já se auto-limitam no HUB, mas chamar
+   3x mais seria gasto à toa). A captura de PDF é que ficou mais frequente. */
+const INTERVALO_DISPARO_MS = 60_000;
+let ultimoDisparo = 0;
 async function tiqueDisparo() {
+  if (Date.now() - ultimoDisparo < INTERVALO_DISPARO_MS) return;
+  ultimoDisparo = Date.now();
   try {
     // O disparo-sender processa as campanhas de disparo em massa E dispara o
     // follow-up internamente (uma chamada cobre as duas). Ambos se auto-limitam.

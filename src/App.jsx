@@ -77,7 +77,7 @@ export default function App() {
   const [cepInfo, setCepInfo] = useState(null); // { localidade, uf, logradouro, bairro }
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [nomeConsultor, setNomeConsultor] = useState('Léo Berg');
-  const [origemLead, setOrigemLead] = useState('');
+  const [origemLead, setOrigemLead] = useState('FSS'); // padrão FSS (pedido do Léo); troca manual se precisar
   const [dataCriacaoCustom, setDataCriacaoCustom] = useState('');
   const [itens, setItens] = useState([]);
   const [linkGerado, setLinkGerado] = useState('');
