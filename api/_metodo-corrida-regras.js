@@ -99,6 +99,18 @@ export function montarBase({ orcamentos, clientes }) {
     guardar(porNome, norm(c.nome), c);
   }
 
+  /* Canal do cliente: o FSS tem número próprio, então quem conversa lá não pode ser
+     alcançado pela BotConversa (decisão do Léo, 09/10/2026: "FSS só pelo FSS"). A
+     origem é lida de TODOS os orçamentos do telefone, não só dos aprovados: um
+     orçamento de FSS que não fechou já mostra onde a conversa acontece. */
+  const origemPorTel = new Map();
+  for (const o of orcamentos || []) {
+    const t = tel8(o.payload?.telefoneCliente);
+    const og = String(o.origem_lead || '').toUpperCase().trim();
+    if (!t || !og) continue;
+    (origemPorTel.get(t) || origemPorTel.set(t, new Set()).get(t)).add(og);
+  }
+
   const base = new Map();
   for (const o of orcamentos || []) {
     const pl = o.payload || {};
@@ -126,6 +138,7 @@ export function montarBase({ orcamentos, clientes }) {
     c.usoProprio = !c.negocio && regs.some((r) => r.tipo_negocio === 'uso_proprio');
     c.noCadastro = regs.length > 0;
     c.itemDeProva = temItemDeProva(c.itens.join(' | '));
+    c.noFss = (origemPorTel.get(c.tel8) || new Set()).has('FSS');
   }
   return [...base.values()];
 }
@@ -134,17 +147,20 @@ export function montarBase({ orcamentos, clientes }) {
 export function selecionar({ base, optouts, respostas, estado, agora }) {
   const nowMs = agora instanceof Date ? agora.getTime() : agora;
   const contatos = estado?.contatos || {};
-  const fora = { usoProprio: 0, semItemDeProva: 0, optout: 0, respondeu: 0, aguardandoDias: 0, concluido: 0, falhou: 0 };
+  const fora = { fss: 0, semConversa: 0, usoProprio: 0, semItemDeProva: 0, optout: 0, respondeu: 0, aguardandoDias: 0, concluido: 0, falhou: 0 };
   const etapa1 = [];
   const etapa2 = [];
 
   for (const c of base) {
+    if (c.noFss) { fora.fss += 1; continue; }
     if (c.usoProprio) { fora.usoProprio += 1; continue; }
     if (!c.negocio && !c.itemDeProva) { fora.semItemDeProva += 1; continue; }
     if (optouts?.has(c.tel8)) { fora.optout += 1; continue; }
     if (respostas && respostas[c.tel8]) { fora.respondeu += 1; continue; }
 
     const h = contatos[c.tel8];
+    // Não é contato do número (conferido na BotConversa): quem nunca falou com ele não recebe.
+    if (h?.semConversa) { fora.semConversa += 1; continue; }
     const dias = (ms) => (nowMs - ms) / 86400000;
     if (!h || !h.e1) {
       if ((h?.tent || 0) >= 2) { fora.falhou += 1; continue; }

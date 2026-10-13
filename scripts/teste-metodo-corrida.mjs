@@ -101,6 +101,35 @@ assert.equal(por['77777777'].noCadastro, false, 'fora de clientes: segue pela re
   assert.equal(so.usoProprio, true);
 }
 
+// ── "FSS só pelo FSS": quem conversa no FSS não recebe pela BotConversa ───────
+{
+  const comOrigem = (cliente, tel, status, quando, itens, origem) => ({
+    ...orc(cliente, tel, status, quando, itens), origem_lead: origem,
+  });
+  const clis = [{ nome: 'Joana Box', telefone: '11900001111', tipo_pessoa: 'J', tipo_negocio: 'box' }];
+  // venda fechada com origem FSS
+  let b = montarBase({ orcamentos: [comOrigem('Joana Box', '11900001111', 'Aprovado', dias(30), ['SkiErg'], 'FSS')], clientes: clis })[0];
+  assert.equal(b.noFss, true);
+  assert.equal(selecionar({ base: [b], optouts: new Set(), respostas: {}, estado: { contatos: {} }, agora: AGORA }).fora.fss, 1);
+  // origem FSS num orçamento que NÃO fechou: o canal do cliente é o mesmo
+  b = montarBase({
+    orcamentos: [
+      comOrigem('Joana Box', '11900001111', 'Aprovado', dias(30), ['SkiErg'], 'WHATSAPP'),
+      comOrigem('Joana Box', '11900001111', 'Pendente', dias(60), ['Remo'], 'fss'),
+    ],
+    clientes: clis,
+  })[0];
+  assert.equal(b.noFss, true, 'qualquer orçamento FSS do número vale, em maiúsculas ou minúsculas');
+  // WhatsApp puro continua elegível
+  b = montarBase({ orcamentos: [comOrigem('Joana Box', '11900001111', 'Aprovado', dias(30), ['SkiErg'], 'WHATSAPP')], clientes: clis })[0];
+  assert.equal(b.noFss, false);
+  const ok = selecionar({ base: [b], optouts: new Set(), respostas: {}, estado: { contatos: {} }, agora: AGORA });
+  assert.equal(ok.etapa1.length, 1);
+  // origem desconhecida não exclui (decisão pendente do Léo)
+  b = montarBase({ orcamentos: [comOrigem('Joana Box', '11900001111', 'Aprovado', dias(30), ['SkiErg'], '')], clientes: clis })[0];
+  assert.equal(b.noFss, false);
+}
+
 // ── seleção ─────────────────────────────────────────────────────────────────
 const sel = (extra = {}) => selecionar({
   base, optouts: new Set(), respostas: {}, estado: { contatos: {} }, agora: AGORA, ...extra,
@@ -142,6 +171,16 @@ assert.equal(r.fora.concluido, 1);
 r = sel({ estado: { contatos: { 11111111: { tent: 2 } } } });
 assert.ok(!t8s(r.fila).includes('11111111'));
 assert.equal(r.fora.falhou, 1);
+
+// ── "só fala com quem já é contato do número" (a conferência é do motor; aqui, o efeito) ──
+{
+  const um = base.find((c) => c.tel8 === '11111111');
+  const com = (contatos) => selecionar({ base: [um], optouts: new Set(), respostas: {}, estado: { contatos }, agora: AGORA });
+  assert.equal(com({}).etapa1.length, 1);
+  const r2 = com({ 11111111: { semConversa: dias(1) } });
+  assert.equal(r2.fila.length, 0, 'quem nunca falou com o número não entra na fila');
+  assert.equal(r2.fora.semConversa, 1);
+}
 
 // ── texto ───────────────────────────────────────────────────────────────────
 const p = mensagem({ etapa: 1, variante: 'principal', nome: 'Carla' });
