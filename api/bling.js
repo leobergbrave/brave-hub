@@ -9,6 +9,7 @@ import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
 import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
 import { interpretarColagem } from './_cadastro-colar.js';
 import { analiseVendedores } from './_analise-vendedores.js';
+import { vendasLista } from './_vendas-lista.js';
 import { lerQualificacao, salvarQualificacao } from './_qualificacao.js';
 import { sugerirQualificacao } from './_qualificacao-sugerir.js';
 import { reautorizarBling } from './_bling-reauth.js';
@@ -68,6 +69,7 @@ export default async function handler(req, res) {
     case 'cadastro_prefill_criar': return criarPrefill(req, res);
     case 'cadastro_interpretar':   return interpretarColagem(req, res);
     case 'analise_vendedores':     return analiseVendedores(req, res);
+    case 'vendas_lista':           return vendasLista(req, res);
     case 'qualificacao':           return lerQualificacao(req, res);
     case 'qualificacao_salvar':    return salvarQualificacao(req, res);
     case 'qualificacao_sugerir':   return sugerirQualificacao(req, res);
