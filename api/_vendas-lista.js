@@ -45,6 +45,11 @@ const semAcento = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, ''
 const CANCELADO = 12;
 
 export async function vendasLista(req, res) {
+  // Expõe nome de cliente + valor por venda (PII): exige o token interno,
+  // igual ao vendas_periodo. Sem isso, qualquer um leria a carteira inteira.
+  if (req.headers['x-hub-token'] !== process.env.HUB_PDF_TOKEN) {
+    return res.status(401).json({ ok: false, error: 'Token invalido.' });
+  }
   try {
     const hoje = new Date().toISOString().slice(0, 10);
     const ini = String(req.query?.ini || '').slice(0, 10);
