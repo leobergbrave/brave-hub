@@ -52,6 +52,34 @@ export function calcularFreteComRegra(pesoTotal, regra) {
   return Math.max(fretePorPeso, regra.valor_minimo || 0);
 }
 
+// ─── Frete fixo do Turf (teto da faixa por região) — vigente 13/10/2026 ───
+// O Turf tem peso/volumetria alta e frete próprio: quando a proposta tem Turf,
+// o frete é um valor fixo por região e IGNORA o cálculo por kg.
+// Chaveado pela UF crua (GO, DF, PB…); normaliza as chaves de exibição
+// (ex.: "GO/DF" → "GO", "PB (João Pessoa)" → "PB") com slice(0,2).
+const TURF_FRETE_REGIAO = {
+  SP: 300,
+  RJ: 350, MG: 350, ES: 350, GO: 350, DF: 350,
+  MT: 400, MS: 400, PR: 400, RS: 400, SC: 400,
+  // Norte + Nordeste
+  AC: 500, AP: 500, AM: 500, PA: 500, RO: 500, RR: 500, TO: 500,
+  AL: 500, BA: 500, CE: 500, MA: 500, PB: 500, PE: 500, PI: 500, RN: 500, SE: 500,
+};
+const RE_TURF_SKU = /turf|grama/i;
+
+// Detecta se a lista de itens contém Turf/Grama (produto de frete especial).
+export function temTurf(itens) {
+  return (itens || []).some(
+    (i) => RE_TURF_SKU.test(i.codigo_sku || '') || /\b(turf|grama)\b/i.test(i.nome || '')
+  );
+}
+
+// Frete fixo do Turf para o estado (ou null se o estado não estiver mapeado).
+export function freteTurf(estado) {
+  const uf = String(estado || '').slice(0, 2).toUpperCase();
+  return TURF_FRETE_REGIAO[uf] ?? null;
+}
+
 // ─── Extrair estados e zonas únicos de um array de regras ───
 export function extrairEstadosEZonas(regras) {
   const estadosSet = new Set();

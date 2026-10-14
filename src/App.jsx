@@ -10,7 +10,7 @@ import imageCompression from 'browser-image-compression';
 import { sugerirNiveis, nivelDoItem, temPacotes, itensDoNivel, NIVEIS } from './lib/pacotes';
 import {
   fetchProdutos, fetchRegrasFrete, extrairEstadosEZonas,
-  calcularFreteComRegra, formatCurrency, formatWeight, parseMediaUrl
+  calcularFreteComRegra, temTurf, freteTurf, formatCurrency, formatWeight, parseMediaUrl
 } from './data';
 import { supabase } from './lib/supabase';
 import { salvarVinculoPropostas } from './lib/bling';
@@ -328,10 +328,16 @@ export default function App() {
     setFreteEditado(null);
   }, [pesoTotal, regraAtual]);
 
+  // Turf tem frete fixo por região (teto da faixa) e ignora o cálculo por kg.
+  const freteTurfAtivo = useMemo(
+    () => (temTurf(itens) ? freteTurf(estado) : null),
+    [itens, estado]
+  );
   const freteFinal = useMemo(() => {
     if (freteEditado !== null) return freteEditado;
+    if (freteTurfAtivo !== null) return freteTurfAtivo;
     return calcularFreteComRegra(pesoTotal, regraAtual);
-  }, [pesoTotal, regraAtual, freteEditado]);
+  }, [pesoTotal, regraAtual, freteEditado, freteTurfAtivo]);
   const totalProjeto = subtotalEquip + freteFinal;
   const temItemSemPeso = useMemo(
     () => itens.some((i) => !i.peso_kg),
@@ -2009,6 +2015,11 @@ export default function App() {
                   <div className="flex items-center gap-2 text-zinc-400">
                     <Truck className="w-4 h-4" />
                     <span className="text-xs font-medium">Frete Final ({estado} · {zona})</span>
+                    {freteEditado === null && freteTurfAtivo !== null && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide bg-neon/15 text-neon rounded px-1.5 py-0.5" title="Turf tem frete fixo por região — ignora o cálculo por kg">
+                        Turf · fixo
+                      </span>
+                    )}
                     {freteEditado !== null && (
                       <button onClick={() => setFreteEditado(null)} className="text-[10px] text-zinc-500 hover:text-white" title="Restaurar frete calculado">
                         <RotateCcw className="w-3 h-3" />
