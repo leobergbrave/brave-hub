@@ -143,7 +143,10 @@ export default function EnviarPropostaPage() {
   useEffect(() => { carregar(); }, []);
 
   useEffect(() => {
-    fetch('/api/bling?acao=produtos_fss')
+    // no-store: o celular guardava a resposta antiga no cache do navegador e
+    // mostrava mensagens/preços desatualizados mesmo depois do deploy. Força
+    // revalidar sempre (o CDN já protege a API do Bling do excesso de chamadas).
+    fetch('/api/bling?acao=produtos_fss', { cache: 'no-store' })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setCatalogo(j); })
       .catch(() => {});
