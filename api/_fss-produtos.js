@@ -57,6 +57,7 @@ export const RAPIDAS = [
       'Endereço:',
       'CEP:',
       'WhatsApp:',
+      'E-mail:',
     ].join('\n'),
   },
   {

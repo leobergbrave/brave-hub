@@ -46,6 +46,7 @@ assert.deepEqual(cadastro.texto.split('\n'), [
   'Endereço:',
   'CEP:',
   'WhatsApp:',
+  'E-mail:',
 ]);
 assert.ok(!/https?:|brave-hub|\blink\b/i.test(cadastro.texto), 'não manda mais link de cadastro');
 

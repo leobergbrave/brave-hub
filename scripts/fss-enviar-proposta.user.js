@@ -692,6 +692,7 @@
     'Endereço:',
     'CEP:',
     'WhatsApp:',
+    'E-mail:',
   ].join('\n');
 
   /* Reservas dos dados de pagamento e da chave Pix. Mesmo criterio do cadastro:
