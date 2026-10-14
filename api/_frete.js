@@ -21,10 +21,12 @@ const TURF_FRETE_REGIAO = {
 };
 const RE_TURF_SKU = /turf|grama/i;
 
+export function ehTurf(item) {
+  return RE_TURF_SKU.test(item?.codigo_sku || '') || /\b(turf|grama)\b/i.test(item?.nome || '');
+}
+
 export function temTurf(itens) {
-  return (itens || []).some(
-    (i) => RE_TURF_SKU.test(i.codigo_sku || '') || /\b(turf|grama)\b/i.test(i.nome || '')
-  );
+  return (itens || []).some(ehTurf);
 }
 
 export function freteTurf(estado) {

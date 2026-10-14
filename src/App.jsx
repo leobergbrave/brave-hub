@@ -10,7 +10,7 @@ import imageCompression from 'browser-image-compression';
 import { sugerirNiveis, nivelDoItem, temPacotes, itensDoNivel, NIVEIS } from './lib/pacotes';
 import {
   fetchProdutos, fetchRegrasFrete, extrairEstadosEZonas,
-  calcularFreteComRegra, temTurf, freteTurf, formatCurrency, formatWeight, parseMediaUrl
+  calcularFreteComRegra, temTurf, ehTurf, freteTurf, formatCurrency, formatWeight, parseMediaUrl
 } from './data';
 import { supabase } from './lib/supabase';
 import { salvarVinculoPropostas } from './lib/bling';
@@ -328,16 +328,24 @@ export default function App() {
     setFreteEditado(null);
   }, [pesoTotal, regraAtual]);
 
-  // Turf tem frete fixo por região (teto da faixa) e ignora o cálculo por kg.
+  // Turf tem frete fixo por região (teto da faixa) que SOMA ao frete por kg
+  // do restante do pedido (itens não-Turf). O peso do Turf sai do cálculo por kg
+  // (senão seria cobrado duas vezes). Se o pedido é só Turf, o resto é 0 e não
+  // aplica o mínimo do estado.
   const freteTurfAtivo = useMemo(
     () => (temTurf(itens) ? freteTurf(estado) : null),
     [itens, estado]
   );
   const freteFinal = useMemo(() => {
     if (freteEditado !== null) return freteEditado;
-    if (freteTurfAtivo !== null) return freteTurfAtivo;
+    if (freteTurfAtivo !== null) {
+      const naoTurf = itens.filter((i) => !ehTurf(i));
+      const pesoNaoTurf = naoTurf.reduce((a, i) => a + (i.peso_kg || 0) * i.quantidade, 0);
+      const freteResto = naoTurf.length ? calcularFreteComRegra(pesoNaoTurf, regraAtual) : 0;
+      return freteResto + freteTurfAtivo;
+    }
     return calcularFreteComRegra(pesoTotal, regraAtual);
-  }, [pesoTotal, regraAtual, freteEditado, freteTurfAtivo]);
+  }, [itens, pesoTotal, regraAtual, freteEditado, freteTurfAtivo]);
   const totalProjeto = subtotalEquip + freteFinal;
   const temItemSemPeso = useMemo(
     () => itens.some((i) => !i.peso_kg),
@@ -2016,8 +2024,8 @@ export default function App() {
                     <Truck className="w-4 h-4" />
                     <span className="text-xs font-medium">Frete Final ({estado} · {zona})</span>
                     {freteEditado === null && freteTurfAtivo !== null && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide bg-neon/15 text-neon rounded px-1.5 py-0.5" title="Turf tem frete fixo por região — ignora o cálculo por kg">
-                        Turf · fixo
+                      <span className="text-[9px] font-bold uppercase tracking-wide bg-neon/15 text-neon rounded px-1.5 py-0.5" title={`Frete do Turf (${formatCurrency(freteTurfAtivo)}, fixo por região) somado ao frete por kg do restante`}>
+                        + Turf {formatCurrency(freteTurfAtivo)}
                       </span>
                     )}
                     {freteEditado !== null && (
