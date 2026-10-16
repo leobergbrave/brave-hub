@@ -105,8 +105,12 @@ async function prazosPorTelefone() {
 }
 
 /* Mesma elegibilidade da tela Follow Up LEADS (MarketingTab.load). Qualquer
-   mudanca de regra deve valer nos dois lugares. */
-async function montarFila() {
+   mudanca de regra deve valer nos dois lugares.
+   opts.somenteFSS: por padrao (false) a fila é do WhatsApp e EXCLUI leads FSS
+   (o robo nunca cobra FSS por WhatsApp). Com true, inverte: traz SÓ os leads
+   FSS — é a fila que alimenta o follow-up manual pelo próprio FSS. */
+async function montarFila(opts = {}) {
+  const { somenteFSS = false } = opts;
   const { data: tData } = await supabaseAdmin.from('marketing_templates').select('*');
   const ativos = (tData || []).filter((t) => t.ativo).sort((a, b) => b.dias_delay - a.dias_delay);
   if (!ativos.length) return [];
@@ -157,7 +161,9 @@ async function montarFila() {
     // Lead da central (FSS) NÃO recebe follow-up por WhatsApp: a proposta foi
     // só pelo chat do FSS, e cobrar no WhatsApp expõe o cliente (ele nunca falou
     // com a BRAVE por lá). O follow-up do FSS é feito à mão, pelo próprio FSS.
-    if (String(o.origem_lead || '').toUpperCase() === 'FSS') continue;
+    // No modo somenteFSS a regra inverte: a fila é EXATAMENTE a dos leads FSS.
+    const ehFSS = String(o.origem_lead || '').toUpperCase() === 'FSS';
+    if (somenteFSS ? !ehFSS : ehFSS) continue;
     if (!o.payload?.telefoneCliente) continue;
     const telNorm = o.payload.telefoneCliente.replace(/\D/g, '');
     const tel8 = telNorm.slice(-8);
@@ -198,6 +204,73 @@ async function montarFila() {
     return a.diasAteData - b.diasAteData;
   });
   return fila;
+}
+
+/* Monta o bloco de instrução para a IA do FSS: ela envia a mensagem no lugar do
+   Léo, mas precisa dos dados do cliente + o texto exato. Um lugar só para o
+   formato — fácil de ajustar se a IA do FSS esperar outro jeito. */
+function mensagemParaIaFss({ cliente, telefone, slug, mensagem }) {
+  return [
+    'Envie uma mensagem de follow-up para este cliente:',
+    `• Cliente: ${cliente}`,
+    `• WhatsApp: ${telefone}`,
+    slug ? `• Proposta: ${slug}` : '',
+    '',
+    'Mensagem a enviar (envie exatamente este texto):',
+    mensagem,
+  ].filter((l) => l !== '').join('\n');
+}
+
+/* Fila de follow-up dos leads FSS (os que o WhatsApp não cobra). Mesma
+   elegibilidade/cooldown/dedup do robô — só muda o canal (manual, pelo FSS).
+   Devolve a mensagem já pronta e o bloco para a IA do FSS.
+   GET /api/bling?acao=followup_fss */
+export async function followupFssPendentes(req, res) {
+  try {
+    const fila = await montarFila({ somenteFSS: true });
+    const itens = fila.map(({ orcamento: o, template: t, prazoData, diasAteData }) => {
+      const cliente = o.cliente || '';
+      const telefone = o.payload?.telefoneCliente || '';
+      const mensagem = String(t.mensagem || '').replace(/{cliente}/g, cliente);
+      const dias = Math.floor(Math.abs(Date.now() - new Date(o.criado_em)) / 86400000);
+      return {
+        id: o.id, slug: o.slug, cliente, telefone,
+        passo: t.nome, templateId: t.id,
+        dias, prazoData: prazoData || null, diasAteData,
+        mensagem, media_url: t.media_url || '',
+        mensagemIA: mensagemParaIaFss({ cliente, telefone, slug: o.slug, mensagem }),
+      };
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: true, total: itens.length, itens });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+}
+
+/* Marca um passo do follow-up FSS como enviado (depois que o Léo mandou pelo
+   FSS). Grava igual ao robô: marketing_sent tira o passo da fila, e um registro
+   em followup_auto com a data faz o cooldown de 7 dias valer também no FSS.
+   POST /api/bling?acao=followup_fss_marcar  body {id, templateId, passo?} */
+export async function followupFssMarcar(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  const id = req.body?.id;
+  const templateId = req.body?.templateId;
+  if (!id || !templateId) return res.status(400).json({ ok: false, error: 'id e templateId obrigatórios.' });
+  const { data: o, error: eSel } = await supabaseAdmin.from('orcamentos_salvos')
+    .select('id, payload').eq('id', id).single();
+  if (eSel || !o) return res.status(404).json({ ok: false, error: 'Orçamento não encontrado.' });
+  const enviados = o.payload?.marketing_sent || [];
+  if (!enviados.includes(templateId)) enviados.push(templateId);
+  const payload = {
+    ...o.payload,
+    marketing_sent: enviados,
+    followup_auto: [...(o.payload?.followup_auto || []),
+      { template: req.body?.passo || templateId, em: new Date().toISOString(), canal: 'FSS' }],
+  };
+  const { error } = await supabaseAdmin.from('orcamentos_salvos').update({ payload }).eq('id', id);
+  if (error) return res.status(500).json({ ok: false, error: error.message });
+  return res.status(200).json({ ok: true });
 }
 
 export async function processarFollowups(req, res) {

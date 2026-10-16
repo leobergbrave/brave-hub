@@ -15,7 +15,7 @@ import { sugerirQualificacao } from './_qualificacao-sugerir.js';
 import { reautorizarBling } from './_bling-reauth.js';
 import { registrarEscolhaPacote } from './_pacote-escolha.js';
 import { religarProposta } from './_proposta-religar.js';
-import { processarFollowups } from './_followup-auto.js';
+import { processarFollowups, followupFssPendentes, followupFssMarcar } from './_followup-auto.js';
 import exportarContatos from './_bling-contatos-export.js';
 import { montarMusculacao, atualizarEstoqueMusculacao } from './_musculacao-api.js';
 import { processarMetodo, statusMetodo } from './_metodo-corrida.js';
@@ -79,6 +79,8 @@ export default async function handler(req, res) {
     case 'enviar_mensagem_cliente': return enviarMensagemCliente(req, res);
     case 'sincronizar_vendas':  return sincronizarVendas(req, res);
     case 'processar_followups': return processarFollowups(req, res);
+    case 'followup_fss':        return followupFssPendentes(req, res);
+    case 'followup_fss_marcar': return followupFssMarcar(req, res);
     case 'cadastro_prefill':       return lerPrefill(req, res);
     case 'exportar_contatos':      return exportarContatos(req, res);
     case 'montar_musculacao':      return montarMusculacao(req, res);
