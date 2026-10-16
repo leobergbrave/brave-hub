@@ -35,17 +35,28 @@ async function refreshBlingToken(supabase: any, config: any) {
 }
 
 async function fetchBling(url: string, supabase: any, tokenRef: { token: string }) {
-  let res = await fetch(url, {
+  const get = () => fetch(url, {
     method: 'GET',
     headers: { 'Authorization': `Bearer ${tokenRef.token}`, 'Accept': '1.0' }
   });
+
+  let res = await get();
   if (res.status === 401) {
     const config = await getBlingToken(supabase);
     tokenRef.token = await refreshBlingToken(supabase, config);
-    res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${tokenRef.token}`, 'Accept': '1.0' }
-    });
+    res = await get();
+  }
+
+  // Bling limita a 3 requisicoes/segundo; no estouro responde 429 TOO_MANY_REQUESTS.
+  // Antes so o 401 era tratado — a pagina que batia no limite virava um throw
+  // "Erro na Bling pagina X", e, na auto-recursao disparada pela UI, o runtime
+  // abortava a funcao com texto puro ("An error o...") em vez de JSON, travando o
+  // import inteiro (e deixando produtos novos sem sincronizar). Agora espera e
+  // tenta de novo, com backoff crescente — mesmo padrao do blingGet (ranking) e
+  // do sleep(1100) do modo 'pesos'.
+  for (let tentativa = 1; res.status === 429 && tentativa <= 5; tentativa++) {
+    await sleep(1500 * tentativa);
+    res = await get();
   }
   return res;
 }
