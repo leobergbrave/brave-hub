@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.22
+// @version      3.23
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
+// @grant        GM_setClipboard
 // @connect      brave-hub-two.vercel.app
 // @connect      jisbvqrnnujqgbsfondy.supabase.co
 // ==/UserScript==
@@ -29,7 +30,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.22'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.23'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -446,6 +447,137 @@
     campo.textContent = texto;
     campo.dispatchEvent(new InputEvent('input', { bubbles: true, data: texto }));
     return true;
+  }
+
+  /* ── Follow-up FSS ─────────────────────────────────────────────────────────
+     Leads da central (FSS) NAO recebem follow-up por WhatsApp (o cliente so
+     falou com a BRAVE pelo FSS). O HUB lista os vencidos — mesmas mensagens e
+     prazos da tela Follow Up LEADS — e aqui o Leo manda pelo proprio FSS:
+     escreve no chat, ou copia o bloco pra IA do FSS enviar. Depois marca como
+     enviado (grava no HUB, respeitando cooldown/dedup). */
+  let _fupCache = { em: 0, itens: [] };
+  async function followupsFss(forcar) {
+    if (!forcar && Date.now() - _fupCache.em < 60000) return _fupCache.itens;
+    try {
+      const r = await hubFetch(`${HUB}/api/bling?acao=followup_fss`);
+      const j = await r.json();
+      if (j.ok) _fupCache = { em: Date.now(), itens: j.itens || [] };
+    } catch (_) { /* mantem o cache anterior */ }
+    return _fupCache.itens;
+  }
+  const _tel8 = (t) => String(t || '').replace(/\D/g, '').slice(-8);
+  async function followupDoContato(tels) {
+    const alvos = new Set((tels || []).map(_tel8).filter((t) => t.length === 8));
+    if (!alvos.size) return null;
+    const itens = await followupsFss();
+    return itens.find((it) => alvos.has(_tel8(it.telefone))) || null;
+  }
+  async function marcarFollowupFss(item) {
+    try {
+      const r = await hubFetch(`${HUB}/api/bling?acao=followup_fss_marcar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, templateId: item.templateId, passo: item.passo }),
+      });
+      const j = await r.json();
+      if (j.ok) _fupCache.itens = _fupCache.itens.filter((x) => x.id !== item.id);
+      return j.ok;
+    } catch (_) { return false; }
+  }
+  function copiar(texto) {
+    if (typeof GM_setClipboard !== 'undefined') {
+      GM_setClipboard(texto, { type: 'text', mimetype: 'text/plain' });
+      return true;
+    }
+    try { navigator.clipboard.writeText(texto); return true; } catch (_) { return false; }
+  }
+
+  /* Bloco contextual: aparece no topo do painel quando o contato ABERTO tem
+     follow-up FSS vencido. aoFim = o que fazer depois de uma acao (re-render). */
+  function blocoFollowupFss(container, item, aoFim) {
+    const cx = document.createElement('div');
+    cx.style.cssText = 'border:1px solid #f59e0b55;background:#f59e0b14;border-radius:10px;padding:8px;margin:2px 0;display:flex;flex-direction:column;gap:6px';
+    const tit = document.createElement('div');
+    tit.textContent = `⏰ Follow-up FSS pendente — ${item.passo}`;
+    tit.style.cssText = 'font:700 11px system-ui;color:#fbbf24';
+    cx.appendChild(tit);
+    cx.appendChild(botao('✍️ Escrever no chat', '#b45309', () => {
+      const ok = escreverMensagem(item.mensagem);
+      status(ok ? '✅ Follow-up escrito — revise e envie no FSS.' : '❌ Nao achei o campo de mensagem.', ok ? '#4ade80' : '#fca5a5');
+      setTimeout(aoFim, 4000);
+    }));
+    cx.appendChild(botao('🤖 Mensagem p/ IA do FSS (copiar)', '#7c3aed', () => {
+      const ok = copiar(item.mensagemIA);
+      status(ok ? '✅ Bloco copiado — cole pra IA do FSS enviar.' : '❌ Nao consegui copiar.', ok ? '#4ade80' : '#fca5a5');
+      setTimeout(aoFim, 4000);
+    }));
+    cx.appendChild(botao('✅ Marcar como enviado', '#166534', async () => {
+      status('⏳ Marcando como enviado...');
+      const ok = await marcarFollowupFss(item);
+      status(ok ? '✅ Marcado como enviado.' : '❌ Nao consegui marcar.', ok ? '#4ade80' : '#fca5a5');
+      setTimeout(aoFim, 2500);
+    }));
+    container.appendChild(cx);
+  }
+
+  /* Insere o bloco contextual no painel ja montado, se o contato aberto casar
+     com algum follow-up FSS pendente. Assincrono: nao segura o render. */
+  async function mostrarFollowupDoContato(painelEl) {
+    const chaveAoChamar = ultimoTelefone; // se o contato trocar durante o fetch, aborta
+    try {
+      const item = await followupDoContato(acharTelefones());
+      if (!item || ultimoTelefone !== chaveAoChamar || !painelEl.isConnected) return;
+      const bloco = document.createElement('div');
+      blocoFollowupFss(bloco, item, () => verificar(true));
+      painelEl.insertBefore(bloco, painelEl.children[1] || null);
+    } catch (_) { /* contexto nao-critico: silencia */ }
+  }
+
+  /* Lista completa dos follow-ups FSS pendentes (visao geral). */
+  async function montarListaFollowupFss() {
+    const p = status('⏳ Buscando follow-ups FSS...');
+    const itens = await followupsFss(true);
+    p.innerHTML = '';
+    const t = document.createElement('div');
+    t.textContent = `📋 Follow-ups FSS pendentes (${itens.length})`;
+    t.style.cssText = 'font:700 12px system-ui;color:#e2e8f0';
+    p.appendChild(t);
+    p.appendChild(botao('← Voltar', '#334155', () => verificar(true)));
+    const lista = document.createElement('div');
+    lista.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto;margin-top:4px';
+    p.appendChild(lista);
+    if (!itens.length) {
+      const vazio = document.createElement('div');
+      vazio.textContent = 'Nenhum follow-up FSS pendente 🎉';
+      vazio.style.cssText = 'font-size:11px;color:#94a3b8';
+      lista.appendChild(vazio);
+      return;
+    }
+    for (const item of itens) {
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid #334155;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px';
+      const h = document.createElement('div');
+      h.textContent = `${item.cliente} · ${item.passo}`;
+      h.style.cssText = 'font:700 11px system-ui;color:#e2e8f0';
+      const sub = document.createElement('div');
+      sub.textContent = `${item.telefone} · ${item.dias}d${item.prazoData ? (' · data ' + item.prazoData) : ''}`;
+      sub.style.cssText = 'font-size:10px;color:#94a3b8';
+      card.appendChild(h);
+      card.appendChild(sub);
+      card.appendChild(botao('🤖 Copiar p/ IA do FSS', '#7c3aed', () => {
+        const ok = copiar(item.mensagemIA);
+        h.textContent = ok ? `${item.cliente} · copiado ✅` : `${item.cliente} · falhou ❌`;
+      }));
+      card.appendChild(botao('💬 Copiar mensagem', '#1e40af', () => {
+        const ok = copiar(item.mensagem);
+        h.textContent = ok ? `${item.cliente} · mensagem copiada ✅` : `${item.cliente} · falhou ❌`;
+      }));
+      card.appendChild(botao('✅ Marcar enviado', '#166534', async () => {
+        h.textContent = `${item.cliente} · marcando...`;
+        const ok = await marcarFollowupFss(item);
+        if (ok) card.remove(); else h.textContent = `${item.cliente} · falhou ❌`;
+      }));
+      lista.appendChild(card);
+    }
   }
 
   /* Uma proposta por vez, ESCOLHIDA no painel — antes era uma fila fixa
@@ -1161,6 +1293,12 @@
   }
 
   function adicionarAtalhos(painelEl) {
+    // Follow-ups FSS pendentes (lista geral). O contador chega em seguida.
+    const bFup = botao('📋 Follow-ups FSS pendentes', '#92400e', montarListaFollowupFss);
+    painelEl.appendChild(bFup);
+    followupsFss().then((itens) => {
+      if (bFup.isConnected) bFup.textContent = `📋 Follow-ups FSS pendentes (${itens.length})`;
+    });
     const linha = document.createElement('div');
     linha.textContent = 'Mensagens prontas';
     linha.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px';
@@ -1219,6 +1357,7 @@
     t.style.cssText = 'font-weight:700;font-size:11px;color:#94a3b8;line-height:1.35';
     p.appendChild(t);
     adicionarAtalhos(p);
+    mostrarFollowupDoContato(p);
   }
 
   function montarMenu() {
@@ -1250,14 +1389,15 @@
     }
     p.appendChild(botao('📲 Enviar pelo WhatsApp', '#334155', enviarPeloWhatsApp));
     adicionarAtalhos(p);
+    mostrarFollowupDoContato(p);
   }
 
-  async function verificar() {
+  async function verificar(forcar) {
     // Qualificacao aberta: nao remonta o painel por baixo de quem esta digitando.
     if (emQualificacao) return;
     const tels = acharTelefones();
     const chave = tels.join(',');
-    if (chave === ultimoTelefone) return; // mesma tela, ja avaliada
+    if (!forcar && chave === ultimoTelefone) return; // mesma tela, ja avaliada
     ultimoTelefone = chave;
 
     if (!tels.length) {
