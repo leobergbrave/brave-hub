@@ -275,6 +275,13 @@ const MEDBALL_COR = ['M4L', 'M8C', 'M10C', 'M12C', 'M14C', 'M16C', 'M18B', 'M20C
 const ALVO_WALLBALL = ['ALVO2', 'WBRKCP'];
 const ALVO_HIBRIDO = ['ALVOHYCHAPA', 'ALVOHY'];
 
+/* Hybrid Rigs: a familia e numerada no Bling (HYRIG2, HYRIG4, ... e crescendo),
+   entao e buscada por PREFIXO de SKU, nao por lista fixa — modelo novo cadastrado
+   no Bling entra na mensagem assim que sincroniza. Os produtos precisam existir na
+   base local (Admin > Produtos > "Importar do Bling"); ate la a familia so nao
+   aparece no painel. */
+const HYBRID_RIG_PREFIXO = 'HYRIG';
+
 /* Kettlebell Iron: a linha da fundicao propria, do 4 ao 32kg de 2 em 2.
    ATENCAO KB26: custa R$ 390 no catalogo, fora da regra de R$ 16/kg das
    outras catorze (seria R$ 416). Na lista isso aparece como +R$ 5 do 24 para o
@@ -387,6 +394,24 @@ async function buscarPorSku(skus) {
     return data || [];
   } catch (_) {
     return [];   // sem catalogo a familia simplesmente nao aparece no menu
+  }
+}
+
+/* Como buscarPorSku, mas por PREFIXO de codigo (HYRIG%). As outras familias tem
+   lista fixa de SKU porque um filtro por nome pegaria itens vizinhos; a dos Hybrid
+   Rigs e numerada e cresce (HYRIG2, HYRIG4, ...) — o Leo cria modelo novo no Bling
+   e ele entra na mensagem assim que sincroniza, sem mexer aqui. O prefixo so pega
+   essa familia, entao nao ha o risco que justifica a lista fixa nas outras. */
+async function buscarPorPrefixo(prefixo) {
+  try {
+    const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { data } = await supabase
+      .from('produtos')
+      .select('codigo_sku, nome, preco, url_imagem')
+      .ilike('codigo_sku', `${prefixo}%`);
+    return data || [];
+  } catch (_) {
+    return [];
   }
 }
 
@@ -688,6 +713,33 @@ function mensagemAlvoHibrido(alvos) {
   ].join('\n');
 }
 
+/* Hybrid Rigs — familia HYRIG* do Bling: estruturas de treino hibrido (rig/rack
+   com colunas, alvos e storage). Lista cada modelo pelo NOME do catalogo (que ja
+   traz colunas/alvos/metragem) e preco, do menor numero de SKU ao maior — HYRIG2,
+   HYRIG4, ... — que e a ordem natural da familia, do menor rig ao maior. Sem
+   bullets de spec: nao ha fonte curada, e o nome ja descreve. "Hyrox" -> "Hibrido"
+   pela regra de marca (so UAIROX/HTC ou o termo generico podem aparecer). */
+function linhasRig(rigs) {
+  const numSku = (s) => { const m = String(s).match(/(\d+)/); return m ? Number(m[1]) : 9999; };
+  return [...rigs]
+    .sort((a, b) => numSku(a.codigo_sku) - numSku(b.codigo_sku))
+    .map((r) => {
+      const avista = Math.round(Number(r.preco) * 0.9);
+      const nome = String(r.nome || '').replace(/hyrox/gi, 'Híbrido').trim();
+      return `*${nome}* — ${linhaPreco(avista, r.preco)}`;
+    });
+}
+
+export function mensagemHybridRig(rigs) {
+  return [
+    '🏗️ *Hybrid Rigs BRAVE*',
+    'Estruturas para treino híbrido e funcional — rigs e racks sob medida pro seu espaço.',
+    '',
+    '*Modelos e valores:*',
+    ...linhasRig(rigs),
+  ].join('\n');
+}
+
 /* Anilhas — fonte de CADA bullet: a LP crossfit-box, curada pelo Leo.
    Bumper Black 2.0: tagline "Quique reduzido e design com logo em alto
    relevo", features "Dureza aferida com medidor" e "Alto nivel de
@@ -819,13 +871,14 @@ async function montarItens() {
   /* Med balls vem do catalogo geral, nao do combo — busca em paralelo para
      nao somar duas idas ao banco no tempo de resposta do painel. */
   const [medPro, medCor, kbIron, kbTex, kbHib, bmpBlack, bmpCollor,
-         dbIron, dbEvo, dbHybrid, barras, piso, alvoWb, alvoHib] = await Promise.all([
+         dbIron, dbEvo, dbHybrid, barras, piso, alvoWb, alvoHib, rigs] = await Promise.all([
     buscarPorSku(MEDBALL_PRO), buscarPorSku(MEDBALL_COR), buscarPorSku(KETTLEBELL_IRON),
     buscarPorSku(KETTLEBELL_TEXTURIZADO), buscarPorSku(KETTLEBELL_HIBRIDO),
     buscarPorSku(BUMPER_BLACK), buscarPorSku(BUMPER_COLLOR),
     buscarPorSku(DUMBBELL_IRON), buscarPorSku(DUMBBELL_EVO), buscarPorSku(DUMBBELL_HYBRID),
     buscarPorSku(BARRAS_EVOBLACK), buscarPorSku(PISO_P1M),
     buscarPorSku(ALVO_WALLBALL), buscarPorSku(ALVO_HIBRIDO),
+    buscarPorPrefixo(HYBRID_RIG_PREFIXO),
   ]);
   if (medPro.length) {
       itens.push({
@@ -957,6 +1010,15 @@ async function montarItens() {
         texto: mensagemSandbag(por.hy10p, por.hy20p, por.hy30p),
         video: por.hy20p?.video || por.hy10p?.video || por.hy30p?.video || '',
         foto: primeiraFoto(por.hy20p, por.hy10p, por.hy30p),
+      });
+  }
+  if (rigs.length) {
+      itens.push({
+        id: 'hybridrig', titulo: '🏗️ Hybrid Rigs',
+        texto: mensagemHybridRig(rigs),
+        video: '',
+        // Ate as imagens sincronizarem (sync-bling-images), vai so o texto.
+        fotos: fotosDaLinha(rigs, 2),
       });
   }
 

@@ -14,7 +14,7 @@ process.env.VITE_SUPABASE_URL ||= 'https://x.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'x';
 const {
   mensagemTurf, RAPIDAS, mensagemBarras, linhasDePeso, VIDEO_BARRAS_EVOBLACK,
-  videoDeLinha, IDS_COM_VIDEO_DE_LINHA, mensagemPiso,
+  videoDeLinha, IDS_COM_VIDEO_DE_LINHA, mensagemPiso, mensagemHybridRig,
 } = await import('../api/_fss-produtos.js');
 
 // ── 1) Turf ─────────────────────────────────────────────────────────────────
@@ -143,6 +143,24 @@ for (const semFonte of [/garantia/i, /densidade/i, /norma/i, /antiderrapante/i, 
 }
 assert.ok(!/hyrox/i.test(msgPiso), 'marca de terceiro');
 assert.ok(msgPiso.includes('Outras cores e espessuras sob consulta'));
+
+// ── 2f) Hybrid Rigs (família HYRIG*, por prefixo) ───────────────────────────
+const rigs = [
+  { codigo_sku: 'HYRIG4', nome: 'Hybrid Rig 4 Colunas + 4 Alvos', preco: 24900 },
+  { codigo_sku: 'HYRIG2', nome: 'Hybrid Rig 2 Colunas Hyrox', preco: 11000 },
+];
+const msgRig = mensagemHybridRig(rigs);
+// Ordena pelo NÚMERO do SKU (2 antes de 4), não pela ordem recebida nem pelo preço.
+assert.ok(msgRig.indexOf('2 Colunas') < msgRig.indexOf('4 Colunas'),
+  'ordena pelo número do SKU: HYRIG2 antes de HYRIG4');
+// À vista = preço x 0,90 em reais inteiros (mesma convenção do resto do painel).
+assert.ok(msgRig.includes('R$ 9.900 à vista'), 'HYRIG2 à vista = round(11000 x 0,9)');
+assert.ok(msgRig.includes('10x de R$ 1.100 sem juros'), 'HYRIG2 em 10x');
+// "Hyrox" é marca de terceiro: tem que virar "Híbrido" e nunca vazar.
+assert.ok(!/hyrox/i.test(msgRig), 'marca de terceiro não pode aparecer');
+assert.ok(msgRig.includes('Híbrido'), 'Hyrox trocado por Híbrido');
+// Lista vazia (família ainda não sincronizada): só o cabeçalho, sem quebrar.
+assert.ok(mensagemHybridRig([]).includes('Hybrid Rigs BRAVE'), 'sem rigs ainda assim monta');
 
 // ── 3) Userscript: reserva igual ao servidor, sem o fluxo antigo, versão coerente ──
 const user = fs.readFileSync(new URL('./fss-enviar-proposta.user.js', import.meta.url), 'utf8');
