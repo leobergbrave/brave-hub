@@ -257,6 +257,11 @@ export async function followupFssMarcar(req, res) {
   const id = req.body?.id;
   const templateId = req.body?.templateId;
   if (!id || !templateId) return res.status(400).json({ ok: false, error: 'id e templateId obrigatórios.' });
+  // templateId tem que ser um template real: impede gravar lixo em marketing_sent
+  // e define o nome do registro (não confiamos num "passo" livre do cliente).
+  const { data: tpl } = await supabaseAdmin.from('marketing_templates')
+    .select('id, nome').eq('id', templateId).maybeSingle();
+  if (!tpl) return res.status(400).json({ ok: false, error: 'templateId inexistente.' });
   const { data: o, error: eSel } = await supabaseAdmin.from('orcamentos_salvos')
     .select('id, payload').eq('id', id).single();
   if (eSel || !o) return res.status(404).json({ ok: false, error: 'Orçamento não encontrado.' });
@@ -266,7 +271,7 @@ export async function followupFssMarcar(req, res) {
     ...o.payload,
     marketing_sent: enviados,
     followup_auto: [...(o.payload?.followup_auto || []),
-      { template: req.body?.passo || templateId, em: new Date().toISOString(), canal: 'FSS' }],
+      { template: tpl.nome, em: new Date().toISOString(), canal: 'FSS' }],
   };
   const { error } = await supabaseAdmin.from('orcamentos_salvos').update({ payload }).eq('id', id);
   if (error) return res.status(500).json({ ok: false, error: error.message });
