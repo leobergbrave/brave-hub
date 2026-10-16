@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.23
+// @version      3.24
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -30,7 +30,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.23'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.24'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -456,6 +456,7 @@
      escreve no chat, ou copia o bloco pra IA do FSS enviar. Depois marca como
      enviado (grava no HUB, respeitando cooldown/dedup). */
   let _fupCache = { em: 0, itens: [] };
+  let emFollowupLista = false;   // trava o remonte automatico de verificar() com a lista aberta
   async function followupsFss(forcar) {
     if (!forcar && Date.now() - _fupCache.em < 60000) return _fupCache.itens;
     try {
@@ -532,8 +533,21 @@
     } catch (_) { /* contexto nao-critico: silencia */ }
   }
 
+  /* Texto ÚNICO com TODOS os pendentes, pra mandar de uma vez pra IA do FSS
+     disparar cada um. */
+  function textoGeralIaFss(itens) {
+    const blocos = itens.map((it, i) =>
+      `${i + 1}) ${it.cliente} — WhatsApp ${it.telefone}\n${it.mensagem}`);
+    return [
+      `Envie as ${itens.length} mensagens de follow-up abaixo — uma para cada cliente, no WhatsApp indicado. Envie exatamente o texto de cada uma:`,
+      '',
+      blocos.join('\n\n'),
+    ].join('\n');
+  }
+
   /* Lista completa dos follow-ups FSS pendentes (visao geral). */
   async function montarListaFollowupFss() {
+    emFollowupLista = true;   // segura o painel: verificar() nao remonta por baixo
     const p = status('⏳ Buscando follow-ups FSS...');
     const itens = await followupsFss(true);
     p.innerHTML = '';
@@ -541,7 +555,13 @@
     t.textContent = `📋 Follow-ups FSS pendentes (${itens.length})`;
     t.style.cssText = 'font:700 12px system-ui;color:#e2e8f0';
     p.appendChild(t);
-    p.appendChild(botao('← Voltar', '#334155', () => verificar(true)));
+    p.appendChild(botao('← Voltar', '#334155', () => { emFollowupLista = false; verificar(true); }));
+    if (itens.length) {
+      p.appendChild(botao(`🤖 Copiar TODOS pra IA do FSS (${itens.length})`, '#7c3aed', () => {
+        const ok = copiar(textoGeralIaFss(itens));
+        t.textContent = ok ? `✅ ${itens.length} follow-ups copiados — cole pra IA do FSS` : '❌ Nao consegui copiar';
+      }));
+    }
     const lista = document.createElement('div');
     lista.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto;margin-top:4px';
     p.appendChild(lista);
@@ -1393,8 +1413,8 @@
   }
 
   async function verificar(forcar) {
-    // Qualificacao aberta: nao remonta o painel por baixo de quem esta digitando.
-    if (emQualificacao) return;
+    // Qualificacao ou lista de follow-up aberta: nao remonta o painel por cima.
+    if (emQualificacao || emFollowupLista) return;
     const tels = acharTelefones();
     const chave = tels.join(',');
     if (!forcar && chave === ultimoTelefone) return; // mesma tela, ja avaliada
