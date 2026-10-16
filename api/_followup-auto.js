@@ -112,7 +112,7 @@ async function montarFila() {
   if (!ativos.length) return [];
 
   const { data: orcs } = await supabaseAdmin.from('orcamentos_salvos')
-    .select('id, slug, cliente, criado_em, payload, bling_pedido_id')
+    .select('id, slug, cliente, criado_em, payload, bling_pedido_id, origem_lead')
     .order('criado_em', { ascending: false })
     .limit(600);
 
@@ -154,6 +154,10 @@ async function montarFila() {
   const vistos = new Set();
   for (const o of (orcs || [])) {
     if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
+    // Lead da central (FSS) NÃO recebe follow-up por WhatsApp: a proposta foi
+    // só pelo chat do FSS, e cobrar no WhatsApp expõe o cliente (ele nunca falou
+    // com a BRAVE por lá). O follow-up do FSS é feito à mão, pelo próprio FSS.
+    if (String(o.origem_lead || '').toUpperCase() === 'FSS') continue;
     if (!o.payload?.telefoneCliente) continue;
     const telNorm = o.payload.telefoneCliente.replace(/\D/g, '');
     const tel8 = telNorm.slice(-8);

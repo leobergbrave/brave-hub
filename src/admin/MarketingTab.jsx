@@ -68,6 +68,9 @@ export default function MarketingTab({ onBadgeUpdate }) {
 
       for (const o of (orcs || [])) {
         if ((o.payload?.status || 'Pendente') !== 'Pendente') continue;
+        // Lead FSS não entra no follow-up por WhatsApp (proposta foi só pelo FSS).
+        // Mesma regra do robô em api/_followup-auto.js:montarFila.
+        if (String(o.origem_lead || '').toUpperCase() === 'FSS') continue;
         if (!o.payload?.telefoneCliente) continue;
         const tel8 = String(o.payload.telefoneCliente).replace(/\D/g, '').slice(-8);
         if (compraramTel.has(tel8) || compraramNome.has(norm(o.cliente).replace(/\s*\(copia\)\s*$/, ''))) continue;
