@@ -116,6 +116,7 @@ export default function ProdutosTab() {
   const [blingStep, setBlingStep] = useState('idle'); // idle | preview | importing | done | error
   const [blingPreview, setBlingPreview] = useState(null);
   const [blingResult, setBlingResult] = useState(null);
+  const [blingProgress, setBlingProgress] = useState(null); // {pagina, processados} durante o loop de lotes
   const [blingLoading, setBlingLoading] = useState(false);
 
   // ── Recuperação de fotos ──────────────────────────────────────────────────
@@ -318,26 +319,43 @@ export default function ProdutosTab() {
   async function handleBlingImport() {
     setBlingLoading(true);
     setBlingStep('importing');
+    setBlingProgress({ pagina: 1, processados: 0 });
+    // Import em lotes: cada chamada processa UMA página (100 produtos) no Bling,
+    // e aqui seguimos página a página até `done`. Antes era uma chamada só pra
+    // ~900 produtos — estourava o timeout e a importação ficava pela metade.
+    const acc = { criados: 0, atualizados: 0, semFoto: 0, erros: 0, processados: 0 };
     try {
-      const res = await fetch('/api/bling?acao=importar_bling', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'produtos', mode: 'import', apenasAtivos: true }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setBlingResult(data);
-        setBlingStep('done');
-        load(); // recarrega lista de produtos
-      } else {
-        setBlingStep('error');
-        setBlingResult({ mensagem: data.error || 'Erro durante importação' });
+      let pagina = 1, done = false, guard = 0;
+      while (!done && guard++ < 100) {
+        const res = await fetch('/api/bling?acao=importar_bling', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'produtos', mode: 'import', apenasAtivos: true, pagina }),
+        });
+        if (!res.ok) throw new Error(`Falha no lote (página ${pagina}): HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || `Erro no lote (página ${pagina})`);
+
+        acc.criados += data.criados || 0;
+        acc.atualizados += data.atualizados || 0;
+        acc.semFoto += data.semFoto || 0;
+        acc.erros += data.erros || 0;
+        acc.processados += data.processados || 0;
+        setBlingProgress({ pagina, processados: acc.processados });
+
+        done = data.done;
+        pagina = data.proximaPagina || pagina + 1;
       }
+      setBlingResult({ ...acc });
+      setBlingStep('done');
+      load(); // recarrega lista de produtos
     } catch (e) {
+      // Mostra o que já entrou antes de falhar — não parece que perdeu tudo.
+      setBlingResult({ mensagem: `${e.message}. Já importados: ${acc.criados} criados, ${acc.atualizados} atualizados. Clique em "Tentar novamente" para continuar.` });
       setBlingStep('error');
-      setBlingResult({ mensagem: e.message });
     } finally {
       setBlingLoading(false);
+      setBlingProgress(null);
     }
   }
 
@@ -483,7 +501,12 @@ export default function ProdutosTab() {
                 <div className="text-center py-8 space-y-3">
                   <Loader2 className="w-12 h-12 text-orange-400 animate-spin mx-auto" />
                   <p className="text-white font-bold">Importando produtos...</p>
-                  <p className="text-zinc-500 text-xs">Buscando detalhes e fotos de cada produto no Bling.<br />Isso pode levar alguns minutos.</p>
+                  {blingProgress ? (
+                    <p className="text-orange-300 text-xs font-semibold">
+                      Lote {blingProgress.pagina} · {blingProgress.processados} produtos processados
+                    </p>
+                  ) : null}
+                  <p className="text-zinc-500 text-xs">Buscando detalhes e fotos de cada produto no Bling.<br />Importa em lotes — pode levar alguns minutos, não feche esta janela.</p>
                 </div>
               )}
 

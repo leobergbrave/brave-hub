@@ -58,6 +58,18 @@ async function blingGet(path, token) {
   });
 }
 
+/* O Bling limita ~3 req/s e o robo de PDF divide a cota — 429 e comum. Sem
+   retry, uma pagina que bate no limite some em silencio (produto nao importado,
+   detalhe perdido). Espera e tenta de novo antes de desistir. */
+async function blingGet429(path, token, tentativas = 4) {
+  for (let i = 1; i <= tentativas; i++) {
+    const r = await blingGet(path, token);
+    if (r.status === 429) { await sleep(1200 * i); continue; }
+    return r;
+  }
+  return blingGet(path, token);
+}
+
 // ── PRODUCTS IMPORT SPECIFIC HELPERS ──────────────────────────────────────────
 
 async function fetchProdutosLista(token, maxPaginas = 20, apenasAtivos = true) {
@@ -80,8 +92,8 @@ async function fetchProdutosLista(token, maxPaginas = 20, apenasAtivos = true) {
 async function fetchProdutoDetalhe(produtoId, token) {
   if (!produtoId) return null;
   try {
-    await sleep(250);
-    const res = await blingGet(`/produtos/${produtoId}`, token);
+    await sleep(200);
+    const res = await blingGet429(`/produtos/${produtoId}`, token);
     if (!res.ok) return null;
     const json = await res.json();
     return json.data || null;
@@ -666,16 +678,26 @@ export default async function handler(req, res) {
       });
     }
 
+    /* Import EM LOTES, uma pagina da listagem (100 produtos) por chamada. Buscar
+       o detalhe de cada produto (foto/peso/categoria) e lento: ~900 produtos
+       numa so requisicao estouravam o timeout da Vercel ("An error occurred",
+       nao-JSON) e a importacao morria no meio — faltavam produtos. Agora o
+       frontend chama pagina a pagina ate `done`, cada lote bem abaixo do limite. */
     if (mode === 'import') {
-      const lista = await fetchProdutosLista(token, 20, apenasAtivos);
+      const pagina = Math.max(1, Number(req.body?.pagina) || 1);
+      const situacaoParam = apenasAtivos ? '&situacao=A' : '';
+      await sleep(300);
+      const resLista = await blingGet429(`/produtos?pagina=${pagina}&limite=100${situacaoParam}`, token);
+      if (!resLista.ok) {
+        return res.status(200).json({ ok: false, error: `Bling recusou a página ${pagina} (HTTP ${resLista.status}).`, pagina });
+      }
+      const lista = (await resLista.json()).data || [];
       const produtosComCodigo = lista.filter(p => p.codigo);
 
       const { data: catsCache = [] } = await supabaseAdmin.from('categorias').select('nome');
       const { data: subsCache = [] } = await supabaseAdmin.from('subcategorias').select('nome');
-      log('importar-produtos', 'info', 'Cache de categorias carregado', { cats: catsCache.length, subs: subsCache.length });
 
       let criados = 0, atualizados = 0, erros = 0, semFoto = 0;
-
       for (const item of produtosComCodigo) {
         const detalhe = await fetchProdutoDetalhe(item.id, token);
         const produto = detalhe || item;
@@ -705,10 +727,13 @@ export default async function handler(req, res) {
         else erros++;
       }
 
-      log('importar-produtos', 'info', 'Import concluído', { criados, atualizados, erros, semFoto });
+      const done = lista.length < 100; // pagina incompleta = ultima
+      log('importar-produtos', 'info', 'Lote concluído', { pagina, processados: produtosComCodigo.length, criados, atualizados, erros, semFoto, done });
       return res.status(200).json({
         ok: true,
-        totalBling: lista.length,
+        pagina,
+        done,
+        proximaPagina: done ? null : pagina + 1,
         processados: produtosComCodigo.length,
         criados,
         atualizados,
