@@ -13,11 +13,19 @@ export default function BuscaProduto({ produtos, onEscolher, placeholder = 'Busc
   const [aberto, setAberto] = useState(false);
   const toqueY = useRef(null);
 
-  const termo = busca.trim().toLowerCase();
+  /* Busca por PALAVRAS, não por substring contígua: "skierg c" tem que achar
+     "SkiErg Brave c/ Plataforma" (antes falhava, porque "brave " fica no meio e
+     o includes exigia os caracteres grudados). Divide o que foi digitado em
+     pedaços e exige que CADA um apareça em qualquer posição do nome ou do SKU.
+     Sem acento, para "remo" achar "Rémo" e afins. */
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const tokens = norm(busca).split(/\s+/).filter(Boolean);
   const filtrados = produtos
-    .filter((p) => !termo
-      || p.nome.toLowerCase().includes(termo)
-      || (p.codigo_sku && p.codigo_sku.toLowerCase().includes(termo)))
+    .filter((p) => {
+      if (!tokens.length) return true;
+      const alvo = `${norm(p.nome)} ${norm(p.codigo_sku)}`;
+      return tokens.every((t) => alvo.includes(t));
+    })
     .slice(0, 50);
 
   const escolher = (p) => {

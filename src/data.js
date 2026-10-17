@@ -11,13 +11,24 @@ export function formatWeight(kg) {
 
 // ─── Buscar Produtos do Supabase ───
 export async function fetchProdutos() {
-  const { data, error } = await supabase
-    .from('produtos')
-    .select('id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem')
-    .order('nome');
-
-  if (error) throw error;
-  return data || [];
+  // O PostgREST corta em 1000 linhas por resposta. Com o catálogo acima de 1000
+  // (passou disso no import de out/2026), sem paginar os produtos do fim da
+  // ordem alfabética (S, T, U...) sumiam do seletor — ex.: "SkiErg Brave c/
+  // Plataforma". Buscamos em páginas de 1000 até vir uma página incompleta.
+  const cols = 'id, codigo_sku, nome, preco, preco_avista, preco_prazo, peso_kg, url_imagem';
+  const PAG = 1000;
+  let todos = [];
+  for (let de = 0; ; de += PAG) {
+    const { data, error } = await supabase
+      .from('produtos')
+      .select(cols)
+      .order('nome')
+      .range(de, de + PAG - 1);
+    if (error) throw error;
+    todos = todos.concat(data || []);
+    if (!data || data.length < PAG) break;
+  }
+  return todos;
 }
 
 // ─── Buscar Regras de Frete do Supabase ───

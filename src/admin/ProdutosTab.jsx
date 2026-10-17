@@ -126,12 +126,20 @@ export default function ProdutosTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [prodRes, catRes, subRes] = await Promise.all([
-      supabase.from('produtos').select('*').order('nome'),
+    // Pagina os produtos: o PostgREST corta em 1000 e o catálogo já passou disso
+    // (1222), senão os produtos do fim da ordem (S, T, U...) não apareciam.
+    const PAG = 1000;
+    let produtosTodos = [];
+    for (let de = 0; ; de += PAG) {
+      const { data } = await supabase.from('produtos').select('*').order('nome').range(de, de + PAG - 1);
+      produtosTodos = produtosTodos.concat(data || []);
+      if (!data || data.length < PAG) break;
+    }
+    const [catRes, subRes] = await Promise.all([
       supabase.from('categorias').select('nome').order('nome'),
       supabase.from('subcategorias').select('nome').order('nome')
     ]);
-    setProdutos(prodRes.data || []);
+    setProdutos(produtosTodos);
     setCategorias(catRes.data?.map(c => c.nome) || []);
     setSubcategorias(subRes.data?.map(s => s.nome) || []);
     setLoading(false);
