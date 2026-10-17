@@ -366,21 +366,27 @@ export default function ProdutosTab() {
     setBlingResult(null);
   }
 
-  async function handleRecuperarFotos() {
+  async function handleRecuperarFotos(reChecarSemFoto = false) {
     setRecuperandoFotos(true);
     setFotosProgress({ atualizados: 0, restantes: '...' });
     setFotosErro('');
     let totalAtualizados = 0;
-    const MAX = 30; // no máximo 30 chamadas (300 produtos)
+    const MAX = 80; // lotes de 12 → até ~960 produtos
+    const chamar = (mode) => fetch('/api/bling?acao=importar_bling', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'produtos', mode }),
+    }).then((r) => r.json());
     try {
+      // Re-hospeda baixando do Bling e subindo pro Storage (URL permanente).
+      // Opcional: primeiro re-checa os marcados "sem foto" (volta pra fila).
+      if (reChecarSemFoto) await chamar('resetar-sem-foto');
       for (let i = 0; i < MAX; i++) {
-        const { data, error } = await supabase.functions.invoke('sync-bling-images');
-        if (error) throw new Error(error.message);
-        if (!data?.success) throw new Error(data?.error || 'Erro desconhecido na Edge Function');
+        const data = await chamar('importar-fotos');
+        if (!data?.ok) throw new Error(data?.error || 'Erro ao recuperar fotos');
         totalAtualizados += data.atualizados || 0;
         setFotosProgress({ atualizados: totalAtualizados, restantes: data.restantes ?? 0 });
-        if ((data.restantes ?? 0) === 0) break;
-        await new Promise(r => setTimeout(r, 800));
+        if (data.done) break;
+        await new Promise(r => setTimeout(r, 400));
       }
       load(); // recarrega lista com novas fotos
     } catch (e) {
@@ -399,11 +405,16 @@ export default function ProdutosTab() {
             className="flex items-center gap-2 text-xs font-semibold text-orange-400 bg-orange-500/10 px-4 py-2 rounded-xl hover:bg-orange-500/20 transition-all cursor-pointer">
             <Download className="w-4 h-4" /> Importar do Bling
           </button>
-          <button onClick={handleRecuperarFotos} disabled={recuperandoFotos}
+          <button onClick={() => handleRecuperarFotos(false)} disabled={recuperandoFotos}
             className="flex items-center gap-2 text-xs font-semibold text-blue-400 bg-blue-500/10 px-4 py-2 rounded-xl hover:bg-blue-500/20 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
             {recuperandoFotos
               ? <><Loader2 className="w-4 h-4 animate-spin" /> {fotosProgress?.atualizados ?? 0} fotos... ({fotosProgress?.restantes ?? '?'} restantes)</>
               : <><ImagePlus className="w-4 h-4" /> Recuperar Fotos</>}
+          </button>
+          <button onClick={() => handleRecuperarFotos(true)} disabled={recuperandoFotos}
+            title="Re-checa no Bling os produtos marcados como 'sem foto' (podem ter ganhado foto)"
+            className="flex items-center gap-2 text-xs font-semibold text-sky-400/80 bg-sky-500/10 px-3 py-2 rounded-xl hover:bg-sky-500/20 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+            <RefreshCw className="w-4 h-4" /> Re-checar sem foto
           </button>
           {fotosProgress && !recuperandoFotos && (
             <span className="text-[11px] text-green-400 bg-green-500/10 border border-green-500/20 px-2.5 py-1.5 rounded-lg">

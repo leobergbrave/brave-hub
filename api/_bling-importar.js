@@ -100,7 +100,21 @@ async function fetchProdutoDetalhe(produtoId, token) {
   } catch (_) { return null; }
 }
 
+/* Imagem no detalhe v3 vive em midia.imagens: externas[] (URLs permanentes que
+   o usuario colou) ou internas[] (upload no S3 do Bling — link ASSINADO que
+   EXPIRA em dias). Preferimos as externas; a interna serve para BAIXAR agora e
+   re-hospedar (nunca para guardar crua). imagemURL/imagens[] sao fallback de
+   formatos antigos. */
 function extrairImagemUrl(produto) {
+  const mi = produto?.midia?.imagens;
+  if (mi) {
+    if (Array.isArray(mi.externas) && mi.externas[0]?.link) return mi.externas[0].link;
+    if (Array.isArray(mi.imagensURL) && mi.imagensURL[0]) {
+      const u = mi.imagensURL[0];
+      return typeof u === 'string' ? u : (u?.link || null);
+    }
+    if (Array.isArray(mi.internas) && mi.internas[0]?.link) return mi.internas[0].link;
+  }
   if (Array.isArray(produto.imagens) && produto.imagens.length > 0) {
     const principal = produto.imagens.find(i => i.principal) || produto.imagens[0];
     if (principal?.link) return principal.link;
@@ -405,6 +419,76 @@ export default async function handler(req, res) {
         novos: novos.length, inseridos, semPreco: linhas.filter(l => !(l.preco > 0)).length,
         erros: errosIns,
       });
+    }
+
+    /* Re-hospeda as fotos: baixa a imagem do Bling (midia.imagens) e sobe para o
+       Storage produtos_media, guardando a URL PÚBLICA (permanente) — o link do
+       Bling é assinado e expira. Mesmo efeito da edge sync-bling-images, mas aqui
+       (Vercel) eu consigo deployar. Em lotes pequenos (download+upload é lento).
+       Processa só url_imagem nula/vazia; sem foto no Bling vira SEM_FOTO_BLING
+       (estado terminal, não volta pra fila). Re-checar os SEM_FOTO_BLING: rode
+       antes o mode 'resetar-sem-foto'. */
+    if (mode === 'importar-fotos') {
+      const LOTE = 12;
+      const { data: alvo } = await supabaseAdmin.from('produtos')
+        .select('id, bling_id, codigo_sku, nome')
+        .not('bling_id', 'is', null)
+        .or('url_imagem.is.null,url_imagem.eq.')
+        .limit(LOTE);
+
+      if (!alvo || !alvo.length) {
+        return res.status(200).json({ ok: true, atualizados: 0, semFoto: 0, restantes: 0, done: true });
+      }
+
+      let atualizados = 0, semFoto = 0, falhas = 0;
+      for (const p of alvo) {
+        const det = await fetchProdutoDetalhe(p.bling_id, token);
+        const url = det ? extrairImagemUrl(det) : null;
+        if (!url) {
+          await supabaseAdmin.from('produtos').update({ url_imagem: 'SEM_FOTO_BLING' }).eq('id', p.id);
+          semFoto++;
+          continue;
+        }
+        try {
+          const imgRes = await fetch(url);
+          if (!imgRes.ok) { falhas++; continue; } // falha de rede: NÃO marca, tenta de novo depois
+          const ct = imgRes.headers.get('content-type') || 'image/jpeg';
+          const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
+          const buf = new Uint8Array(await imgRes.arrayBuffer());
+          const sku = (p.codigo_sku || '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          const fileName = `bling_${sku || p.bling_id}_${Date.now()}.${ext}`;
+          const { error: upErr } = await supabaseAdmin.storage.from('produtos_media')
+            .upload(fileName, buf, { contentType: ct, upsert: true });
+          if (upErr) { falhas++; continue; }
+          const { data: pub } = supabaseAdmin.storage.from('produtos_media').getPublicUrl(fileName);
+          await supabaseAdmin.from('produtos').update({ url_imagem: pub.publicUrl }).eq('id', p.id);
+          atualizados++;
+        } catch (_) { falhas++; }
+      }
+
+      const { count: restantes } = await supabaseAdmin.from('produtos')
+        .select('id', { count: 'exact', head: true })
+        .not('bling_id', 'is', null)
+        .or('url_imagem.is.null,url_imagem.eq.');
+
+      return res.status(200).json({
+        ok: true, atualizados, semFoto, falhas,
+        restantes: restantes || 0,
+        // done quando não há mais nulos OU o lote só teve falhas de rede (evita loop)
+        done: (restantes || 0) === 0 || (atualizados === 0 && semFoto === 0 && falhas > 0),
+      });
+    }
+
+    /* Volta os SEM_FOTO_BLING para "sem foto" (null), para o importar-fotos
+       re-checar. Serve quando a marcação foi falsa (produto ganhou foto no Bling
+       depois, ou erro transitório na marcação). */
+    if (mode === 'resetar-sem-foto') {
+      const { data, error } = await supabaseAdmin.from('produtos')
+        .update({ url_imagem: null })
+        .eq('url_imagem', 'SEM_FOTO_BLING')
+        .select('id');
+      if (error) return res.status(500).json({ ok: false, error: error.message });
+      return res.status(200).json({ ok: true, resetados: (data || []).length });
     }
 
     // Inspeção pontual: como o Bling devolve UM produto específico (por SKU)?
