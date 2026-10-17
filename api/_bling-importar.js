@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { log } from './_log.js';
 
 const supabaseAdmin = createClient(
@@ -123,6 +125,58 @@ function extrairImagemUrl(produto) {
   if (produto.imagemURL) return produto.imagemURL;
   if (produto.imagem) return produto.imagem;
   return null;
+}
+
+/* Download de imagem com guarda de SSRF: o link pode vir de midia.imagens.
+   externas[], que é digitado pelo usuário no Bling — poderia apontar para um IP
+   interno (metadata do cloud, serviços internos) ou devolver algo que não é
+   imagem. Exige https, recusa host que é/resolve para faixa privada/loopback/
+   link-local, revalida cada redirect, e só aceita content-type de imagem. */
+const CT_IMG = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+function ipPrivado(ip) {
+  if (net.isIP(ip) === 4) {
+    const o = ip.split('.').map(Number);
+    return o[0] === 0 || o[0] === 10 || o[0] === 127
+      || (o[0] === 169 && o[1] === 254)
+      || (o[0] === 172 && o[1] >= 16 && o[1] <= 31)
+      || (o[0] === 192 && o[1] === 168);
+  }
+  const l = String(ip).toLowerCase();
+  return l === '::1' || l === '::' || l.startsWith('fe80') || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('::ffff:');
+}
+
+async function hostSeguro(hostname) {
+  if (net.isIP(hostname)) return !ipPrivado(hostname);
+  try {
+    const enderecos = await dns.lookup(hostname, { all: true });
+    return enderecos.length > 0 && enderecos.every((e) => !ipPrivado(e.address));
+  } catch { return false; }
+}
+
+async function baixarImagemSegura(urlStr) {
+  let url = urlStr;
+  for (let hop = 0; hop < 4; hop++) {
+    let u;
+    try { u = new URL(url); } catch { return null; }
+    if (u.protocol !== 'https:') return null;
+    if (!(await hostSeguro(u.hostname))) return null;
+    const resp = await fetch(url, { redirect: 'manual' });
+    if (resp.status >= 300 && resp.status < 400) {
+      const loc = resp.headers.get('location');
+      if (!loc) return null;
+      url = new URL(loc, url).toString();
+      continue;   // revalida o próximo hop
+    }
+    if (!resp.ok) return null;
+    const ct = (resp.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    const ext = CT_IMG[ct];
+    if (!ext) return null;                       // só imagem
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    if (buf.length < 100) return null;           // vazio/placeholder
+    return { buf, ct, ext };
+  }
+  return null;   // redirect demais
 }
 
 function mapearCategoria(nomeCategoriaBlng, catsCache, subsCache) {
@@ -450,15 +504,12 @@ export default async function handler(req, res) {
           continue;
         }
         try {
-          const imgRes = await fetch(url);
-          if (!imgRes.ok) { falhas++; continue; } // falha de rede: NÃO marca, tenta de novo depois
-          const ct = imgRes.headers.get('content-type') || 'image/jpeg';
-          const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
-          const buf = new Uint8Array(await imgRes.arrayBuffer());
+          const img = await baixarImagemSegura(url);
+          if (!img) { falhas++; continue; } // rejeitada (não-imagem/host inseguro) ou falha de rede
           const sku = (p.codigo_sku || '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-          const fileName = `bling_${sku || p.bling_id}_${Date.now()}.${ext}`;
+          const fileName = `bling_${sku || p.bling_id}_${Date.now()}.${img.ext}`;
           const { error: upErr } = await supabaseAdmin.storage.from('produtos_media')
-            .upload(fileName, buf, { contentType: ct, upsert: true });
+            .upload(fileName, img.buf, { contentType: img.ct, upsert: true });
           if (upErr) { falhas++; continue; }
           const { data: pub } = supabaseAdmin.storage.from('produtos_media').getPublicUrl(fileName);
           await supabaseAdmin.from('produtos').update({ url_imagem: pub.publicUrl }).eq('id', p.id);
