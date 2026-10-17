@@ -684,10 +684,14 @@ export default async function handler(req, res) {
        nao-JSON) e a importacao morria no meio — faltavam produtos. Agora o
        frontend chama pagina a pagina ate `done`, cada lote bem abaixo do limite. */
     if (mode === 'import') {
+      // Lote pequeno de proposito: cada chamada busca o detalhe (foto/peso/
+      // categoria) de ate LOTE produtos (~0,45s cada). 100 levava ~46s, perto
+      // do limite; 40 fica em ~18s, com folga sobrando.
+      const LOTE = 40;
       const pagina = Math.max(1, Number(req.body?.pagina) || 1);
       const situacaoParam = apenasAtivos ? '&situacao=A' : '';
       await sleep(300);
-      const resLista = await blingGet429(`/produtos?pagina=${pagina}&limite=100${situacaoParam}`, token);
+      const resLista = await blingGet429(`/produtos?pagina=${pagina}&limite=${LOTE}${situacaoParam}`, token);
       if (!resLista.ok) {
         return res.status(200).json({ ok: false, error: `Bling recusou a página ${pagina} (HTTP ${resLista.status}).`, pagina });
       }
@@ -727,7 +731,7 @@ export default async function handler(req, res) {
         else erros++;
       }
 
-      const done = lista.length < 100; // pagina incompleta = ultima
+      const done = lista.length < LOTE; // pagina incompleta = ultima
       log('importar-produtos', 'info', 'Lote concluído', { pagina, processados: produtosComCodigo.length, criados, atualizados, erros, semFoto, done });
       return res.status(200).json({
         ok: true,
