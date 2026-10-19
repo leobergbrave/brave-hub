@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.26
+// @version      3.27
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -30,7 +30,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.26'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.27'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -580,7 +580,12 @@
       const h = document.createElement('div');
       h.textContent = item.cliente || '(sem nome)';
       h.style.cssText = 'font:700 11px system-ui;color:#e2e8f0';
-      const data = item.criadoEm ? new Date(item.criadoEm).toLocaleDateString('pt-BR') : '';
+      const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '');
+      const dCriado = fmtData(item.criadoEm);
+      const dAtiv = fmtData(item.atividadeEm);
+      // Dia diferente = foi editado/regerado depois (criado_em guarda a data
+      // original). Mesmo dia é o intervalo normal entre criar e gerar propostas.
+      const data = (dAtiv && dAtiv !== dCriado) ? `criado ${dCriado} · ✏️ editado ${dAtiv}` : dCriado;
       const env = item.enviadoEm ? `✅ enviado ${new Date(item.enviadoEm).toLocaleDateString('pt-BR')}` : '🆕 não enviado';
       const sub = document.createElement('div');
       sub.textContent = `${data} · ${env}${item.pdfs?.length ? (' · ' + item.pdfs.join('+')) : ''}`;
