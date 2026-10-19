@@ -3,7 +3,7 @@ import enviarPedido from './_bling-pedido.js';
 import sincronizarContato from './_bling-contato.js';
 import pedidosAtendidos from './_bling-pedidos-atendidos.js';
 import { importar as importarModelos, gerarOrcamento, gerarProposta } from './_bling-modelos.js';
-import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, propostasPendentes, sessaoBling, enviarMensagemCliente, criarSlotPdf, finalizarPdf } from './_proposta-pdf.js';
+import { uploadPdf, baixarPdf, enviarPdfCliente, propostaPorTelefone, ultimosOrcamentos, propostasPendentes, sessaoBling, enviarMensagemCliente, criarSlotPdf, finalizarPdf } from './_proposta-pdf.js';
 import { vendasPeriodo, sincronizarVendas } from './_bling-vendas.js';
 import { produtosFss, enviarProdutoCliente } from './_fss-produtos.js';
 import { criarPrefill, lerPrefill } from './_cadastro-prefill.js';
@@ -59,6 +59,7 @@ export default async function handler(req, res) {
     case 'proposta_pdf':        return baixarPdf(req, res);
     case 'enviar_pdf_cliente':  return enviarPdfCliente(req, res);
     case 'proposta_por_telefone': return propostaPorTelefone(req, res);
+    case 'ultimos_orcamentos':   return ultimosOrcamentos(req, res);
     case 'propostas_pendentes': return propostasPendentes(req, res);
     case 'sessao_bling':        return sessaoBling(req, res);
     case 'vendas_periodo':      return vendasPeriodo(req, res);

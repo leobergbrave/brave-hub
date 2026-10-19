@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.24
+// @version      3.25
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -30,7 +30,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.24'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.25'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -457,6 +457,7 @@
      enviado (grava no HUB, respeitando cooldown/dedup). */
   let _fupCache = { em: 0, itens: [] };
   let emFollowupLista = false;   // trava o remonte automatico de verificar() com a lista aberta
+  let emListaOrcamentos = false; // idem, com a lista de ultimos orcamentos aberta
   async function followupsFss(forcar) {
     if (!forcar && Date.now() - _fupCache.em < 60000) return _fupCache.itens;
     try {
@@ -543,6 +544,73 @@
       '',
       blocos.join('\n\n'),
     ].join('\n');
+  }
+
+  /* Últimos orçamentos criados — ver e enviar pelo WhatsApp, sem precisar abrir
+     o contato. O envio usa o número do próprio orçamento (servidor). */
+  async function montarListaOrcamentos() {
+    emListaOrcamentos = true;
+    const p = status('⏳ Buscando últimos orçamentos...');
+    let itens = [];
+    try {
+      const r = await hubFetch(`${HUB}/api/bling?acao=ultimos_orcamentos&limite=10`);
+      const j = await r.json();
+      if (j.ok) itens = j.itens || [];
+    } catch (_) { /* mostra vazio */ }
+    p.innerHTML = '';
+    const t = document.createElement('div');
+    t.textContent = `📄 Últimos orçamentos (${itens.length})`;
+    t.style.cssText = 'font:700 12px system-ui;color:#e2e8f0';
+    p.appendChild(t);
+    p.appendChild(botao('← Voltar', '#334155', () => { emListaOrcamentos = false; verificar(true); }));
+    const lista = document.createElement('div');
+    lista.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:380px;overflow:auto;margin-top:4px';
+    p.appendChild(lista);
+    if (!itens.length) {
+      const vazio = document.createElement('div');
+      vazio.textContent = 'Nenhum orçamento encontrado.';
+      vazio.style.cssText = 'font-size:11px;color:#94a3b8';
+      lista.appendChild(vazio);
+      return;
+    }
+    for (const item of itens) {
+      const card = document.createElement('div');
+      card.style.cssText = 'border:1px solid #334155;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px';
+      const h = document.createElement('div');
+      h.textContent = item.cliente || '(sem nome)';
+      h.style.cssText = 'font:700 11px system-ui;color:#e2e8f0';
+      const data = item.criadoEm ? new Date(item.criadoEm).toLocaleDateString('pt-BR') : '';
+      const env = item.enviadoEm ? `✅ enviado ${new Date(item.enviadoEm).toLocaleDateString('pt-BR')}` : '🆕 não enviado';
+      const sub = document.createElement('div');
+      sub.textContent = `${data} · ${env}${item.pdfs?.length ? (' · ' + item.pdfs.join('+')) : ''}`;
+      sub.style.cssText = 'font-size:10px;color:#94a3b8';
+      card.appendChild(h);
+      card.appendChild(sub);
+      if (item.arquivos && item.arquivos.length) {
+        card.appendChild(botao('📲 Enviar pelo WhatsApp', '#166534', async () => {
+          if (!window.confirm(`Enviar a proposta de ${item.cliente} no WhatsApp do cliente agora?`)) return;
+          h.textContent = `${item.cliente} · enviando...`;
+          try {
+            const r = await hubFetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slug: item.slug }),
+            });
+            const j = await r.json();
+            h.textContent = j.ok ? `${item.cliente} · enviado ✅` : `${item.cliente} · ${j.error || 'falhou'} ❌`;
+          } catch (e) { h.textContent = `${item.cliente} · falha de rede ❌`; }
+        }));
+        card.appendChild(botao('💬 Copiar resumo', '#1e40af', () => {
+          const ok = copiar(item.mensagem || '');
+          h.textContent = ok ? `${item.cliente} · resumo copiado ✅` : `${item.cliente} · falhou ❌`;
+        }));
+      } else {
+        const aviso = document.createElement('div');
+        aviso.textContent = '⏳ PDF ainda sendo gerado — tente em instantes';
+        aviso.style.cssText = 'font-size:10px;color:#fbbf24';
+        card.appendChild(aviso);
+      }
+      lista.appendChild(card);
+    }
   }
 
   /* Lista completa dos follow-ups FSS pendentes (visao geral). */
@@ -1319,6 +1387,8 @@
     followupsFss().then((itens) => {
       if (bFup.isConnected) bFup.textContent = `📋 Follow-ups FSS pendentes (${itens.length})`;
     });
+    // Últimos orçamentos criados (ver + enviar).
+    painelEl.appendChild(botao('📄 Últimos orçamentos', '#0f766e', montarListaOrcamentos));
     const linha = document.createElement('div');
     linha.textContent = 'Mensagens prontas';
     linha.style.cssText = 'font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px';
@@ -1413,8 +1483,8 @@
   }
 
   async function verificar(forcar) {
-    // Qualificacao ou lista de follow-up aberta: nao remonta o painel por cima.
-    if (emQualificacao || emFollowupLista) return;
+    // Qualificacao ou alguma lista (follow-up / orcamentos) aberta: nao remonta.
+    if (emQualificacao || emFollowupLista || emListaOrcamentos) return;
     const tels = acharTelefones();
     const chave = tels.join(',');
     if (!forcar && chave === ultimoTelefone) return; // mesma tela, ja avaliada

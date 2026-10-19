@@ -715,6 +715,34 @@ export async function enviarPdfCliente(req, res) {
   return res.status(200).json(await despacharPdfs(orc));
 }
 
+/* GET /api/bling?acao=ultimos_orcamentos&limite=10
+   Os últimos N orçamentos criados, no mesmo formato do proposta_por_telefone —
+   para o painel do FSS listar e enviar sem precisar abrir o contato. Inclui o
+   telefone (o envio pelo WhatsApp usa o número do próprio orçamento). */
+export async function ultimosOrcamentos(req, res) {
+  const limite = Math.min(Math.max(Number(req.query?.limite) || 10, 1), 20);
+  const { data: linhas } = await supabaseAdmin
+    .from('orcamentos_salvos')
+    .select(COLS)
+    .order('criado_em', { ascending: false })
+    .limit(limite);
+
+  const itens = (linhas || []).map((o) => ({
+    slug: o.slug,
+    cliente: o.cliente,
+    telefone: String(o.payload?.telefoneCliente || '').replace(/\D/g, ''),
+    criadoEm: o.criado_em,
+    enviadoEm: o.proposta_pdf_enviado_em || null,
+    pdfs: TIPOS.filter((t) => o[t.pdfCol]).map((t) => t.tipo),
+    arquivos: TIPOS.filter((t) => o[t.pdfCol])
+      .map((t) => ({ ...linkPdf(o, t), mensagem: mensagemDoTipo(o, t.tipo) })),
+    mensagem: montarResumo(o, !!(o.bling_avista_pdf && o.bling_prazo_pdf)),
+  }));
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(200).json({ ok: true, total: itens.length, itens });
+}
+
 /* GET /api/bling?acao=proposta_por_telefone&telefone=...
    Usado pelo botão injetado na tela do contato no FSS: diz se aquele contato
    tem proposta com PDF pronto para enviar. */
