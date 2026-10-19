@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.25
+// @version      3.26
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -30,7 +30,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.25'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.26'; // aparece no painel — confirma qual versao esta instalada
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -546,8 +546,9 @@
     ].join('\n');
   }
 
-  /* Últimos orçamentos criados — ver e enviar pelo WhatsApp, sem precisar abrir
-     o contato. O envio usa o número do próprio orçamento (servidor). */
+  /* Últimos orçamentos criados — ver e ENVIAR PELO FSS (anexa os PDFs no chat
+     aberto, igual à proposta do contato). No WhatsApp Web, onde não há FSS,
+     cai no envio pelo servidor. */
   async function montarListaOrcamentos() {
     emListaOrcamentos = true;
     const p = status('⏳ Buscando últimos orçamentos...');
@@ -587,19 +588,33 @@
       card.appendChild(h);
       card.appendChild(sub);
       if (item.arquivos && item.arquivos.length) {
-        card.appendChild(botao('📲 Enviar pelo WhatsApp', '#166534', async () => {
-          if (!window.confirm(`Enviar a proposta de ${item.cliente} no WhatsApp do cliente agora?`)) return;
-          h.textContent = `${item.cliente} · enviando...`;
-          try {
-            const r = await hubFetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slug: item.slug }),
-            });
-            const j = await r.json();
-            h.textContent = j.ok ? `${item.cliente} · enviado ✅` : `${item.cliente} · ${j.error || 'falhou'} ❌`;
-          } catch (e) { h.textContent = `${item.cliente} · falha de rede ❌`; }
-        }));
-        card.appendChild(botao('💬 Copiar resumo', '#1e40af', () => {
+        if (!WA) {
+          // Anexa os PDFs no chat ABERTO do FSS (igual à proposta do contato).
+          // Libera a trava: depois do anexo o painel volta ao fluxo normal.
+          for (const arq of item.arquivos) {
+            const rot = { avista: '💰 Anexar À VISTA', prazo: '💳 Anexar A PRAZO' }[arq.tipo] || '📎 Anexar proposta';
+            card.appendChild(botao(rot, '#0e7490', () => { emListaOrcamentos = false; anexarUm(arq); }));
+          }
+          card.appendChild(botao('✍️ Escrever resumo no chat', '#1e40af', () => {
+            const ok = escreverMensagem(item.mensagem || '');
+            h.textContent = ok ? `${item.cliente} · resumo escrito ✅` : `${item.cliente} · não achei o campo ❌`;
+          }));
+        } else {
+          // No WhatsApp Web não há anexo do FSS: cai no envio pelo servidor.
+          card.appendChild(botao('📲 Enviar pelo WhatsApp', '#166534', async () => {
+            if (!window.confirm(`Enviar a proposta de ${item.cliente} no WhatsApp do cliente agora?`)) return;
+            h.textContent = `${item.cliente} · enviando...`;
+            try {
+              const r = await hubFetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: item.slug }),
+              });
+              const j = await r.json();
+              h.textContent = j.ok ? `${item.cliente} · enviado ✅` : `${item.cliente} · ${j.error || 'falhou'} ❌`;
+            } catch (e) { h.textContent = `${item.cliente} · falha de rede ❌`; }
+          }));
+        }
+        card.appendChild(botao('💬 Copiar resumo', '#334155', () => {
           const ok = copiar(item.mensagem || '');
           h.textContent = ok ? `${item.cliente} · resumo copiado ✅` : `${item.cliente} · falhou ❌`;
         }));
@@ -682,11 +697,11 @@
       entregarAoChat(file);
       if (arquivo.mensagem) escreverMensagem(arquivo.mensagem);
       const p = status(`✅ ${rotuloDe(arquivo)} anexada com a mensagem — revise e envie.`, '#4ade80');
-      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', montarMenu));
+      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', voltar));
     } catch (e) {
       const p = status(`❌ ${e.message}`, '#fca5a5');
       p.appendChild(botao('Tentar de novo', '#0e7490', () => anexarUm(arquivo)));
-      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', montarMenu));
+      p.appendChild(botao('↩︎ Voltar ao painel', '#334155', voltar));
     }
   }
 
