@@ -721,17 +721,31 @@ export async function enviarPdfCliente(req, res) {
    telefone (o envio pelo WhatsApp usa o número do próprio orçamento). */
 export async function ultimosOrcamentos(req, res) {
   const limite = Math.min(Math.max(Number(req.query?.limite) || 10, 1), 20);
-  const { data: linhas } = await supabaseAdmin
-    .from('orcamentos_salvos')
-    .select(COLS)
-    .order('criado_em', { ascending: false })
-    .limit(limite);
+
+  /* "Últimos" = atividade mais recente, não só criação: editar uma proposta
+     antiga gera uma linha com criado_em no PASSADO (o editor preserva a data
+     original), mas propostas_em marca quando as propostas foram (re)geradas —
+     o momento da edição. Ordenar só por criado_em escondia a proposta editada.
+     Buscamos as duas janelas (por criação e por geração de propostas), juntamos
+     e ordenamos pelo maior dos dois. */
+  const [criadas, geradas] = await Promise.all([
+    supabaseAdmin.from('orcamentos_salvos').select(COLS)
+      .order('criado_em', { ascending: false }).limit(40),
+    supabaseAdmin.from('orcamentos_salvos').select(COLS)
+      .not('propostas_em', 'is', null)
+      .order('propostas_em', { ascending: false }).limit(40),
+  ]);
+  const porId = new Map();
+  for (const o of [...(criadas.data || []), ...(geradas.data || [])]) porId.set(o.id, o);
+  const recencia = (o) => Math.max(Date.parse(o.propostas_em) || 0, Date.parse(o.criado_em) || 0);
+  const linhas = [...porId.values()].sort((a, b) => recencia(b) - recencia(a)).slice(0, limite);
 
   const itens = (linhas || []).map((o) => ({
     slug: o.slug,
     cliente: o.cliente,
     telefone: String(o.payload?.telefoneCliente || '').replace(/\D/g, ''),
     criadoEm: o.criado_em,
+    atividadeEm: new Date(recencia(o)).toISOString(),
     enviadoEm: o.proposta_pdf_enviado_em || null,
     pdfs: TIPOS.filter((t) => o[t.pdfCol]).map((t) => t.tipo),
     arquivos: TIPOS.filter((t) => o[t.pdfCol])
