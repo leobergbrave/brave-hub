@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.27
+// @version      3.28
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -971,18 +971,21 @@
       texto: () => {
         const nome = acharPrimeiroNome();
         ultimoNomeAchado = nome; // o status conta se achou — visibilidade sem DevTools
-        /* Abre espaco para a APRESENTACAO em vez de pedir a lista de
-           equipamentos: perguntar "quais equipamentos" ja empurra a conversa
-           para um orcamento grande, e orcamento de 10+ itens fecha 8,4% contra
-           26,4% do de 1 item. Quem qualifica o escopo agora e o botao 🎯. */
+        /* Nao pedir a lista de equipamentos aqui: perguntar "quais equipamentos"
+           ja empurra a conversa para um orcamento grande, e orcamento de 10+ itens
+           fecha 8,4% contra 26,4% do de 1 item. Quem qualifica o escopo agora e o
+           botao 🎯. */
         /* Handoff IA -> humano (2026-10-10): o lead vem de um atendimento feito
            por IA, entao a abertura deixa explicito que agora quem assume e o Leo,
            pessoalmente, de forma personalizada. "Pessoalmente/de perto/sob medida"
-           eleva o valor percebido antes de qualificar; o "ja conhece a BRAVE?" no
-           fim segue abrindo espaco pra apresentacao. */
+           eleva o valor percebido antes de qualificar.
+           Oferta de ligacao (2026-10-21): o lead ja gastou energia respondendo a IA
+           e muitas vezes chega esgotado de perguntas. Em vez de mais uma pergunta,
+           a abertura oferece a ligacao como atalho pra resolver tudo de uma vez,
+           deixando a escolha com ele (ligar ou seguir so por mensagem). */
         return nome
-          ? `Fala ${nome}! 👊 Aqui é o Léo Berg, da BRAVE. A partir de agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Pra começar: você já conhece a BRAVE?`
-          : 'Opa, tudo bem? 👊 Aqui é o Léo Berg, da BRAVE. Agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Pra começar: você já conhece a BRAVE?';
+          ? `Fala ${nome}! 👊 Aqui é o Léo Berg, da BRAVE. A partir de agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Posso te ligar pra entender sua necessidade ou prefere continuar só por mensagem mesmo, parceiro?`
+          : 'Opa, tudo bem? 👊 Aqui é o Léo Berg, da BRAVE. Agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Posso te ligar pra entender sua necessidade ou prefere continuar só por mensagem mesmo, parceiro?';
       },
     },
     {
