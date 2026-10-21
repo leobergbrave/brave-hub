@@ -21,10 +21,19 @@ const { pngParaJpeg, precisaConverter } = await import('../api/_fss-produtos.js'
 const caminho = process.argv[2];
 assert.ok(caminho && fs.existsSync(caminho), 'passe o caminho de um PNG RGBA real');
 
-// 1) Só PNG é convertido — vídeo, JPEG, áudio e PDF já chegam e não podem mudar.
-assert.equal(precisaConverter('https://h/x/bling_kb12_1.png'), true);
-assert.equal(precisaConverter('https://h/x/bling_kb12_1.PNG?token=abc'), true);
-for (const u of ['https://h/a.jpg', 'https://h/a.jpeg', 'https://h/v.mp4', 'https://h/s.mp3', 'https://h/p.pdf']) {
+// 1) Convertemos toda imagem que o WhatsApp não entrega (PNG) ou o BotConversa
+//    recusa (jfif, webp, avif, bmp, tiff, heic). jpg/jpeg/gif/mp4/mp3/pdf já
+//    chegam e não podem mudar.
+for (const u of [
+  'https://h/x/bling_kb12_1.png',
+  'https://h/x/bling_kb12_1.PNG?token=abc',
+  'https://h/x/1780944029381-2yp0l8.jfif', // o caso real do Alvo Híbrido
+  'https://h/a.webp', 'https://h/a.avif', 'https://h/a.bmp',
+  'https://h/a.tiff', 'https://h/a.tif', 'https://h/a.heic',
+]) {
+  assert.equal(precisaConverter(u), true, `deveria converter ${u}`);
+}
+for (const u of ['https://h/a.jpg', 'https://h/a.jpeg', 'https://h/a.gif', 'https://h/v.mp4', 'https://h/s.mp3', 'https://h/p.pdf']) {
   assert.equal(precisaConverter(u), false, `não deveria converter ${u}`);
 }
 

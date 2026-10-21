@@ -1072,9 +1072,23 @@ export async function produtosFss(req, res) {
 
    Vale só para o envio pela BotConversa (WhatsApp Web). No FSS o painel anexa
    o arquivo direto na tela e isto não foi testado lá — não mexer sem teste.
-   Travado por scripts/teste-midia-entregavel.mjs. */
+   Travado por scripts/teste-midia-entregavel.mjs.
+
+   21/10/2026: além do PNG, outros formatos que o BotConversa recusa direto
+   (HTTP 400 "unsupported file format") passavam batido e abortavam o envio
+   antes do texto — o Alvo Híbrido tinha uma foto .jfif (JPEG, mas a extensão
+   que o WhatsApp não reconhece). Agora o conversor abrange toda imagem que o
+   sharp lê e o WhatsApp não entrega; só jpg/jpeg/gif/mp4/mp3/pdf passam direto. */
+
+/* Passam direto (BotConversa aceita e o WhatsApp entrega): jpg, jpeg, gif, mp4,
+   mp3, pdf. O PNG o BotConversa aceita mas o WhatsApp não entrega, por isso ele
+   NÃO está aqui — entra na lista de converter abaixo.
+   Imagens que o sharp lê e convertemos para JPEG antes de enviar (o PNG do caso
+   original e os formatos que o BotConversa recusa: jfif, webp, avif…). */
+const CONVERTER_PARA_JPEG = new Set(['png', 'jfif', 'jpe', 'webp', 'avif', 'bmp', 'tiff', 'tif', 'heic', 'heif']);
+const extensaoDe = (url) => (String(url || '').split('?')[0].split('#')[0].split('.').pop() || '').toLowerCase();
 export function precisaConverter(url) {
-  return /\.png$/i.test(String(url || '').split('?')[0]);
+  return CONVERTER_PARA_JPEG.has(extensaoDe(url));
 }
 
 export async function pngParaJpeg(buffer) {
@@ -1095,7 +1109,9 @@ async function midiaEntregavel(url) {
   if (!precisaConverter(url)) return url;
   try {
     const base = `${process.env.VITE_SUPABASE_URL}/storage/v1/object/public/produtos_media`;
-    const nome = String(url).split('?')[0].split('/').pop().replace(/\.png$/i, '.jpg');
+    // Troca a extensão de origem por .jpg: o conteúdo é JPEG, e o BotConversa
+    // valida pela extensão (um cache em whatsapp-jpg/...jfif seria recusado igual).
+    const nome = String(url).split('?')[0].split('/').pop().replace(/\.[^.]+$/, '.jpg');
     const caminho = `whatsapp-jpg/${nome}`;
     const publica = `${base}/${caminho}`;
 
