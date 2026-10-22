@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.28
+// @version      3.29
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -979,14 +979,24 @@
            por IA, entao a abertura deixa explicito que agora quem assume e o Leo,
            pessoalmente, de forma personalizada. "Pessoalmente/de perto/sob medida"
            eleva o valor percebido antes de qualificar.
-           Oferta de ligacao (2026-10-21): o lead ja gastou energia respondendo a IA
-           e muitas vezes chega esgotado de perguntas. Em vez de mais uma pergunta,
-           a abertura oferece a ligacao como atalho pra resolver tudo de uma vez,
-           deixando a escolha com ele (ligar ou seguir so por mensagem). */
+           Em duas partes (2026-10-22): a abertura termina no handoff ("pro seu
+           caso"), e a oferta de ligacao virou a mensagem separada 'convite_ligar'
+           (botao proprio, logo abaixo). O painel so ESCREVE no campo e o consultor
+           envia; duas mensagens = dois botoes. Mandar a saudacao e, em seguida, o
+           convite em balao proprio deixa o convite mais leve e visivel do que uma
+           abertura longa. */
         return nome
-          ? `Fala ${nome}! 👊 Aqui é o Léo Berg, da BRAVE. A partir de agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Posso te ligar pra entender sua necessidade ou prefere continuar só por mensagem mesmo, parceiro?`
-          : 'Opa, tudo bem? 👊 Aqui é o Léo Berg, da BRAVE. Agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso. Posso te ligar pra entender sua necessidade ou prefere continuar só por mensagem mesmo, parceiro?';
+          ? `Fala ${nome}! 👊 Aqui é o Léo Berg, da BRAVE. A partir de agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso.`
+          : 'Opa, tudo bem? 👊 Aqui é o Léo Berg, da BRAVE. Agora quem assume seu atendimento sou eu, pessoalmente — vou te ajudar de perto pra montar a melhor solução pro seu caso.';
       },
+    },
+    {
+      /* Parte 2 da abertura: enviada como mensagem separada, logo apos a
+         saudacao. Oferece a ligacao como atalho — o lead chega esgotado de
+         responder a IA, entao convidamos em vez de perguntar, deixando a escolha
+         com ele (ligar ou seguir so por mensagem). */
+      id: 'convite_ligar', titulo: '📞 Convite p/ ligar',
+      texto: 'Posso te ligar pra entender sua necessidade ou prefere continuar só por mensagem mesmo, parceiro?',
     },
     {
       id: 'cadastro', titulo: '📋 Pedir cadastro',
@@ -1444,6 +1454,7 @@
     vaga.style.cssText = 'display:contents';
 
     if (porId.has('abertura')) painelEl.appendChild(criarBotao(porId.get('abertura')));
+    if (porId.has('convite_ligar')) painelEl.appendChild(criarBotao(porId.get('convite_ligar')));
     painelEl.appendChild(vaga);
     painelEl.appendChild(botao('🎯 Qualificar cliente', '#7c3aed', montarQualificacao));
     painelEl.appendChild(botao('🎬 Produtos (vídeo + texto)', '#0e7490', montarProdutos));
@@ -1451,8 +1462,9 @@
     if (porId.has('cadastro')) painelEl.appendChild(criarBotao(porId.get('cadastro')));
 
     // Qualquer mensagem local nova entra no fim, sem precisar mexer aqui.
+    // abertura, convite_ligar e cadastro ja foram posicionados acima.
     for (const m of MENSAGENS_RAPIDAS) {
-      if (m.id !== 'abertura' && m.id !== 'cadastro') painelEl.appendChild(criarBotao(m));
+      if (!['abertura', 'convite_ligar', 'cadastro'].includes(m.id)) painelEl.appendChild(criarBotao(m));
     }
 
     extrasDoServidor().then((extras) => {
