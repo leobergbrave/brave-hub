@@ -5,6 +5,24 @@
 // pro Léo quando o cliente adiciona produto na vitrine.
 import { createClient } from '@supabase/supabase-js';
 import { wahaConfigurado, wahaSendText } from './_waha.js';
+import { verificarAdmin } from './_auth.js';
+
+const HUB_ORIGEM = 'https://brave-hub-two.vercel.app';
+
+// Limpa texto que vem do cliente antes de virar mensagem de WhatsApp: tira URLs
+// (ninguém injeta link), tira caracteres de controle (mantém \n) e corta no tamanho.
+function limparTexto(s, max = 400) {
+  return String(s || '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ')
+    .slice(0, max)
+    .trim();
+}
+// Só mantém o link se for do próprio HUB (senão, risco de link malicioso no alerta).
+function linkSeguro(url) {
+  const s = String(url || '').trim();
+  return s.startsWith(HUB_ORIGEM) ? s : '';
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,18 +34,24 @@ export default async function handler(req, res) {
   // LÉO (não o cliente) pelo webhook do vigia. Fundido aqui pra não criar mais
   // uma função serverless (limite de funções do plano da Vercel).
   if (req.body?.acao === 'orcamento-adicionado') {
-    const { slug, cliente, produto, valor, link, telefone_cliente } = req.body || {};
-    if (!produto) return res.status(400).json({ ok: false, error: 'produto obrigatório' });
+    // Alerta pro LÉO (vitrine pública do cliente, sem login). O texto chega no
+    // WhatsApp dele, então limpamos tudo que vem na requisição: cliente/produto
+    // sem URL e cortados, slug só com [\w-], e o link só se for do HUB.
+    const { produto, valor, telefone_cliente } = req.body || {};
+    const prod = limparTexto(produto, 120).replace(/\n/g, ' ');
+    if (!prod) return res.status(400).json({ ok: false, error: 'produto obrigatório' });
+    const cli = (limparTexto(req.body?.cliente, 80).replace(/\n/g, ' ')) || 'Cliente';
+    const slugLimpo = String(req.body?.slug || '').replace(/[^\w-]/g, '').slice(0, 40);
+    const link = linkSeguro(req.body?.link);
     const telLeo = process.env.ALERTA_TELEFONE || '5548996459791';
     const valorTxt = Number(valor) > 0
       ? ` (${Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
       : '';
-    // Formata o telefone do cliente para exibição amigável
     const telClienteRaw = String(telefone_cliente || '').replace(/\D/g, '');
     const telClienteTxt = telClienteRaw.length >= 10
       ? `\n📱 WhatsApp: +${telClienteRaw}`
       : '\n📱 WhatsApp: não informado';
-    const alerta = `🛒🔥 ${cliente || 'Cliente'} ADICIONOU "${produto}"${valorTxt} ao próprio orçamento (${slug || ''})!${telClienteTxt}\nSinal de compra, chama agora: ${link || ''}`;
+    const alerta = `🛒🔥 ${cli} ADICIONOU "${prod}"${valorTxt} ao próprio orçamento (${slugLimpo})!${telClienteTxt}\nSinal de compra, chama agora: ${link}`;
     try {
       if (wahaConfigurado()) await wahaSendText(telLeo, alerta);
     } catch (e) {
@@ -35,6 +59,12 @@ export default async function handler(req, res) {
     }
     return res.status(200).json({ ok: true });
   }
+
+  // Daqui pra baixo = 1ª mensagem da Entrada Rápida: manda WhatsApp pro CLIENTE
+  // (número arbitrário) no número ao vivo. Exige ADMIN LOGADO (endpoint aberto +
+  // repo público — sem isso, vira relay de spam).
+  const admin = await verificarAdmin(req);
+  if (!admin) return res.status(401).json({ ok: false, error: 'Precisa estar logado no admin pra disparar a mensagem.' });
 
   const { telefone, nome, origem, equipamentos } = req.body || {};
   const tel = String(telefone || '').replace(/\D/g, '');
@@ -47,10 +77,11 @@ export default async function handler(req, res) {
      AQUI (antes vivia no fluxo visual da BotConversa). Só o caso SEM orçamento
      (Entrada Rápida) manda esta mensagem; quando há orçamento, os PDFs vão pelo
      fluxo de proposta (despacharPdfs). Trata pelo PRIMEIRO nome, sem termo de
-     gênero. equipamentos sai um por linha (como o cliente escreveu). */
+     gênero. equipamentos sai um por linha (como o cliente escreveu), limpo de
+     URLs e cortado no tamanho. */
   if (!wahaConfigurado()) return res.status(500).json({ ok: false, error: 'WAHA não configurado na Vercel.' });
-  const primeiroNome = String(nome || 'Cliente').trim().split(/\s+/)[0] || 'Cliente';
-  const equip = (Array.isArray(equipamentos) ? equipamentos.join('\n') : String(equipamentos || '')).trim();
+  const primeiroNome = (limparTexto(nome, 60).replace(/\n/g, ' ').trim().split(/\s+/)[0]) || 'Cliente';
+  const equip = limparTexto(Array.isArray(equipamentos) ? equipamentos.join('\n') : equipamentos, 800);
   const mensagem = `Oi ${primeiroNome}, tudo bem? 👊\nAqui é o Léo, da BRAVE. Recebi seu contato.\n\nVi aqui o que você tá buscando:\n${equip}\n\ncerto?`;
 
   try {

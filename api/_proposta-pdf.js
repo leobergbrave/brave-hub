@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import { wahaConfigurado, wahaSendText, wahaSendMidia } from './_waha.js';
+import { verificarAdmin } from './_auth.js';
 
 /**
  * Helpers de PDF da proposta, roteados por /api/bling (limite de funções do Hobby):
@@ -649,6 +650,9 @@ export async function enviarMensagemCore({ telefone, mensagem, media_url, client
 
 export async function enviarMensagemCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  // Endpoint de disparo (telefone + mensagem arbitrários) — exige admin logado.
+  const admin = await verificarAdmin(req);
+  if (!admin) return res.status(401).json({ ok: false, error: 'Precisa estar logado no admin pra disparar.' });
   const r = await enviarMensagemCore(req.body || {});
   return res.status(r.ok ? 200 : 502).json(r);
 }

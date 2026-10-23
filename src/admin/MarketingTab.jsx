@@ -141,9 +141,13 @@ export default function MarketingTab({ onBadgeUpdate }) {
      webhook de automacao: o fluxo nao entregava para leads que nunca falaram
      no numero BotConversa (ex.: vindos do FSS) e falhava sem aviso. */
   const enviarViaHub = async ({ cliente, telefone, mensagem, media_url }) => {
+    const { data: { session } } = await supabase.auth.getSession();
     const r = await fetch('/api/bling?acao=enviar_mensagem_cliente', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
       body: JSON.stringify({ cliente, telefone, mensagem, media_url: media_url || '' }),
     });
     const j = await r.json().catch(() => ({}));

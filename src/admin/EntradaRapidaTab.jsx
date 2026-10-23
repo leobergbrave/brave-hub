@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Camera, Loader2, Sparkles, Send, CheckCircle2, MessageCircle, RotateCcw, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 /* Entrada Rápida — canal "Tiago": cola o print com os dados do cliente,
    a IA extrai telefone/nome/equipamentos, você confere e dispara a 1ª
@@ -46,8 +47,13 @@ export default function EntradaRapidaTab() {
     if ((dados?.telefone || '').replace(/\D/g, '').length < 10) { setErro('Confira o telefone (DDD + número).'); return; }
     setErro(''); setEnviando(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const r = await fetch('/api/lead-contato', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+        },
         body: JSON.stringify({
           telefone: dados.telefone,
           nome: dados.nome || 'Cliente Brave',
