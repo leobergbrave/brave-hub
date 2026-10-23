@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.30
+// @version      3.31
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -33,7 +33,7 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.30'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.31'; // aparece no painel — confirma qual versao esta instalada
 
   /* Token do HUB (x-hub-token) para as acoes PRIVILEGIADAS (envio direto ao
      cliente). NAO fica no codigo — o repo e publico. Vive no Tampermonkey
@@ -626,7 +626,7 @@
             h.textContent = `${item.cliente} · enviando...`;
             try {
               const r = await hubFetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-token': hubToken() },
                 body: JSON.stringify({ slug: item.slug }),
               });
               const j = await r.json();
@@ -848,7 +848,7 @@
     status('⏳ Enviando pelo WhatsApp...');
     try {
       const r = await hubFetch(`${HUB}/api/bling?acao=enviar_pdf_cliente`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-token': hubToken() },
         body: JSON.stringify({ slug: dados.slug }),
       });
       const j = await r.json();

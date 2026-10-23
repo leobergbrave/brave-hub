@@ -44,16 +44,28 @@ const extDe = (url) => (String(url || '').split('?')[0].split('#')[0].split('.')
 function mimeDe(ext) {
   if (EXT_VIDEO.has(ext)) return `video/${ext === '3gp' ? '3gpp' : ext}`;
   if (EXT_IMG.has(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'mp3') return 'audio/mpeg';
   return 'application/octet-stream';
 }
 
+// Nome do arquivo que o cliente vê: o ultimo segmento da URL (ex: proposta-avista.pdf),
+// senao arquivo.<ext>. O WhatsApp mostra o PDF pelo nome, entao isso importa.
+function nomeArquivo(url, ext) {
+  try {
+    const seg = decodeURIComponent(String(url).split('?')[0].split('#')[0].split('/').pop() || '');
+    if (seg && /\.[a-z0-9]{1,5}$/i.test(seg)) return seg;
+  } catch (_) { /* segue pro fallback */ }
+  return `arquivo.${ext || 'bin'}`;
+}
+
 // Manda uma mídia por URL pública. Foto -> sendImage; vídeo -> sendVideo (e cai pra
-// sendFile se a imagem WEBJS "lite" recusar com 422 "use waha:chrome"); resto -> sendFile.
+// sendFile se a imagem WEBJS "lite" recusar com 422 "use waha:chrome"); PDF/resto -> sendFile.
 export async function wahaSendMidia(tel, url, caption = '') {
   const ext = extDe(url);
   const payload = {
     chatId: chatId(tel),
-    file: { url, mimetype: mimeDe(ext), filename: `produto.${ext || 'bin'}` },
+    file: { url, mimetype: mimeDe(ext), filename: nomeArquivo(url, ext) },
     caption,
   };
   if (EXT_IMG.has(ext)) return wahaPost('/api/sendImage', payload);

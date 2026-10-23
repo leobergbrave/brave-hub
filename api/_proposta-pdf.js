@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
+import { wahaConfigurado, wahaSendText, wahaSendMidia } from './_waha.js';
 
 /**
  * Helpers de PDF da proposta, roteados por /api/bling (limite de funções do Hobby):
@@ -504,9 +505,8 @@ export async function bcFetch(path, method, body, apiKey) {
 /* Faz o envio de fato. Usado pelo botão do HUB e pelo disparo automático que
    roda quando o último PDF de um orçamento FSS fica pronto. */
 async function despacharPdfs(orc, automatico = false) {
-  const apiKey = process.env.BOTCONVERSA_API_KEY;
-  if (!apiKey) {
-    return { ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel. Pegue em Configurações da companhia → Integrações → chave "Webhook Integration".' };
+  if (!wahaConfigurado()) {
+    return { ok: false, error: 'WAHA não configurado na Vercel (precisa de WAHA_BASE_URL + WAHA_API_KEY).' };
   }
 
   const disponiveis = TIPOS.filter(t => orc[t.pdfCol]);
@@ -530,50 +530,15 @@ async function despacharPdfs(orc, automatico = false) {
      servidor ser consultado. Endereço novo a cada envio elimina isso. */
   const arquivos = disponiveis.map((t) => linkPdf(orc, t));
 
-  /* Contato no BotConversa.
-     Um contato inexistente e o sintoma tipico de telefone digitado errado: nos
-     canais automaticos (FSS, WhatsApp, Venda Direta) o cliente JA conversou com
-     o consultor, entao ele existe. Criar um contato novo nesse caso mandava a
-     proposta para um numero que nao atende — aconteceu com um digito trocado, e
-     o sistema reportou sucesso porque o envio foi aceito.
-     No envio automatico paramos e avisamos; no envio manual (o consultor
-     conferiu o numero) seguimos criando. */
-  let subscriberId = null;
-  const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
-  if (busca.ok) subscriberId = busca.json?.id ?? null;
-
-  /* Contato inexistente em canal de WhatsApp BLOQUEAVA o envio automatico
-     (protecao contra digito trocado, apos incidente real). Em 2026-09-02 o Leo
-     pediu para retirar a trava: agora criamos o contato e enviamos sempre, e o
-     alerta vira AVISO — "contato criado agora, confira o numero" — para o
-     digito errado continuar visivel sem segurar a proposta. */
-  if (!subscriberId && automatico) {
-    alertarConsultor(orc, tel,
-      `ℹ️ A proposta de ${orc.cliente || 'cliente'} FOI enviada para ${tel}, mas esse número não existia no WhatsApp da BRAVE — o contato foi criado agora. Se o número estiver errado, corrija o cadastro e reenvie.`)
-      .catch(() => { /* aviso e melhor-esforco */ });
-  }
-
-  if (!subscriberId) {
-    const partes = String(orc.cliente || 'Cliente').trim().split(/\s+/);
-    const criado = await bcFetch('/subscriber/', 'POST', {
-      phone: `+${tel}`,
-      first_name: partes[0] || 'Cliente',
-      last_name: partes.slice(1).join(' ') || 'BRAVE',
-    }, apiKey);
-    subscriberId = criado.json?.id ?? null;
-    if (!subscriberId) {
-      return { ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` };
-    }
-  }
-
-  const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
+  /* Envio pelo WAHA (mesma sessao/numero do agente). Sem "subscriber": manda
+     direto pro {tel}@c.us. Se o numero nao existir no WhatsApp, o send falha (a
+     logica abaixo trata como "nao entregou" e avisa o consultor no automatico —
+     mesma protecao de digito trocado, so que agora sem criar contato fantasma). */
 
   /* Só o lead da central (FSS) recebe apresentação: para ele esta é a primeira
-     mensagem no WhatsApp do consultor, e o texto vem do fluxo do BotConversa
-     que fazia esse papel (fluxo desligado por mandar o LINK do orçamento).
-     Nos demais canais — WhatsApp BRAVE e Venda Direta — a conversa já está em
-     andamento, e reapresentar-se soaria automatizado: ali vão só as propostas e
-     o fechamento com os valores. */
+     mensagem no WhatsApp do consultor. Nos demais canais — WhatsApp BRAVE e
+     Venda Direta — a conversa já está em andamento, e reapresentar-se soaria
+     automatizado: ali vão só as propostas e o fechamento com os valores. */
   const primeiroNome = String(orc.cliente || 'Cliente').trim().split(/\s+/)[0].toUpperCase();
   const daCentral = String(orc.origem_lead || '').toUpperCase() === 'FSS';
   const consultor = orc.consultor || 'Léo Berg';
@@ -584,9 +549,15 @@ async function despacharPdfs(orc, automatico = false) {
   ] : [];
 
   for (const texto of aberturas) {
-    const r = await enviar({ type: 'text', value: texto });
+    const r = await wahaSendText(tel, texto);
     if (!r.ok) {
-      return { ok: false, error: `BotConversa recusou o envio (HTTP ${r.status}): ${r.texto.slice(0, 250)}` };
+      // Falha logo na abertura = numero provavelmente invalido (digito trocado).
+      if (automatico) {
+        alertarConsultor(orc, tel,
+          `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: não consegui mandar no WhatsApp ${tel} (${String(r.texto).slice(0, 120)}). Confira o número no cadastro e gere o orçamento de novo.`)
+          .catch(() => { /* aviso e melhor-esforco */ });
+      }
+      return { ok: false, error: `WAHA recusou o envio (HTTP ${r.status}): ${String(r.texto).slice(0, 250)}` };
     }
     await sleep(700);
   }
@@ -594,7 +565,7 @@ async function despacharPdfs(orc, automatico = false) {
   const enviados = [];
   const falhas = [];
   for (const a of arquivos) {
-    const r = await enviar({ type: 'file', value: a.url });
+    const r = await wahaSendMidia(tel, a.url);
     (r.ok ? enviados : falhas).push(a.tipo);
     await sleep(600);
   }
@@ -607,13 +578,18 @@ async function despacharPdfs(orc, automatico = false) {
        comercial é problema sério, e cálculo não erra onde interpretação erra. */
     const temDuas = enviados.includes('avista') && enviados.includes('prazo');
     await sleep(700);
-    await enviar({ type: 'text', value: montarResumo(orc, temDuas) });
+    await wahaSendText(tel, montarResumo(orc, temDuas));
     await supabaseAdmin.from('orcamentos_salvos')
       .update({ proposta_pdf_enviado_em: new Date().toISOString() })
       .eq('id', orc.id);
+  } else if (automatico && arquivos.length > 0) {
+    // Nenhum PDF entrou = numero provavelmente invalido.
+    alertarConsultor(orc, tel,
+      `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: não consegui entregar os arquivos no WhatsApp ${tel} (provável número errado). Confira o cadastro e gere o orçamento de novo.`)
+      .catch(() => { /* aviso e melhor-esforco */ });
   }
 
-  console.log('[proposta-pdf] envio BotConversa:', { slug: orc.slug, tel, enviados, falhas });
+  console.log('[proposta-pdf] envio WAHA:', { slug: orc.slug, tel, enviados, falhas });
   return {
     ok: falhas.length === 0,
     enviados,
@@ -681,27 +657,20 @@ export async function enviarMensagemCliente(req, res) {
    Sem isso a falha e silenciosa: o orcamento fica marcado como nao enviado e
    ninguem percebe ate o cliente cobrar. Usa o mesmo webhook do vigia de leads. */
 async function alertarConsultor(orc, tel, alertaCustom) {
-  const url = process.env.BOTCONVERSA_WEBHOOK
-    || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
   const telConsultor = process.env.ALERTA_TELEFONE || '5548996459791';
+  const msg = alertaCustom
+    || `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: o telefone ${tel} não recebeu no WhatsApp da BRAVE (provável dígito errado). Confira o número no cadastro e gere o orçamento de novo.`;
   try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        telefone: telConsultor,
-        nome: orc.cliente || 'Cliente',
-        titulo: alertaCustom ? 'Aviso de envio' : 'Proposta NAO enviada',
-        qtd_pendentes: 1,
-        link: '',
-        alerta: alertaCustom || `⚠️ A proposta de ${orc.cliente || 'cliente'} NÃO foi enviada: o telefone ${tel} não existe no WhatsApp da BRAVE (provável dígito errado). Confira o número no cadastro e gere o orçamento de novo.`,
-      }),
-    });
+    if (wahaConfigurado()) await wahaSendText(telConsultor, msg);
   } catch (_) { /* o aviso e melhor-esforco; nao pode derrubar o fluxo */ }
 }
 
 export async function enviarPdfCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  // Dispara envio de WhatsApp — exige o x-hub-token (repo publico, mesma trava do envio de produto).
+  const tokenEsperado = process.env.HUB_PDF_TOKEN;
+  if (!tokenEsperado) return res.status(500).json({ ok: false, error: 'HUB_PDF_TOKEN não configurado na Vercel.' });
+  if (req.headers['x-hub-token'] !== tokenEsperado) return res.status(401).json({ ok: false, error: 'Token inválido.' });
   const { slug } = req.body || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });
 
