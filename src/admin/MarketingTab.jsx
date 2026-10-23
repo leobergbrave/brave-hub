@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { ensureAdminToken, clearAdminToken } from '../lib/adminToken';
 import { Loader2, Save, MessageCircle, AlertTriangle, PlayCircle, Image as ImageIcon, Send, Smartphone, Ban, Sparkles, Tag, ExternalLink, Clock, X } from 'lucide-react';
 
 export default function MarketingTab({ onBadgeUpdate }) {
@@ -141,17 +142,14 @@ export default function MarketingTab({ onBadgeUpdate }) {
      webhook de automacao: o fluxo nao entregava para leads que nunca falaram
      no numero BotConversa (ex.: vindos do FSS) e falhava sem aviso. */
   const enviarViaHub = async ({ cliente, telefone, mensagem, media_url }) => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const token = ensureAdminToken();
     const r = await fetch('/api/bling?acao=enviar_mensagem_cliente', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || ''}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
       body: JSON.stringify({ cliente, telefone, mensagem, media_url: media_url || '' }),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    if (!r.ok || !j.ok) { if (r.status === 401) clearAdminToken(); throw new Error(j.error || `HTTP ${r.status}`); }
   };
 
   const handleDisparar = async () => {

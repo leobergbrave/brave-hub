@@ -73,8 +73,7 @@ export default async function handler(req, res) {
   // Daqui pra baixo = 1ª mensagem da Entrada Rápida: manda WhatsApp pro CLIENTE
   // (número arbitrário) no número ao vivo. Exige ADMIN LOGADO (endpoint aberto +
   // repo público — sem isso, vira relay de spam).
-  const admin = await verificarAdmin(req);
-  if (!admin) return res.status(401).json({ ok: false, error: 'Precisa estar logado no admin pra disparar a mensagem.' });
+  if (!verificarAdmin(req)) return res.status(401).json({ ok: false, error: 'Token do admin inválido ou ausente.' });
 
   const { telefone, nome, origem, equipamentos } = req.body || {};
   const tel = String(telefone || '').replace(/\D/g, '');

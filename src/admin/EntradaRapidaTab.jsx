@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Camera, Loader2, Sparkles, Send, CheckCircle2, MessageCircle, RotateCcw, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { ensureAdminToken, clearAdminToken } from '../lib/adminToken';
 
 /* Entrada Rápida — canal "Tiago": cola o print com os dados do cliente,
    a IA extrai telefone/nome/equipamentos, você confere e dispara a 1ª
@@ -47,13 +47,10 @@ export default function EntradaRapidaTab() {
     if ((dados?.telefone || '').replace(/\D/g, '').length < 10) { setErro('Confira o telefone (DDD + número).'); return; }
     setErro(''); setEnviando(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const token = ensureAdminToken();
       const r = await fetch('/api/lead-contato', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token || ''}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': token },
         body: JSON.stringify({
           telefone: dados.telefone,
           nome: dados.nome || 'Cliente Brave',
@@ -63,7 +60,11 @@ export default function EntradaRapidaTab() {
         }),
       });
       const j = await r.json();
-      if (!j.ok) { setErro(j.error || 'O disparo falhou.'); return; }
+      if (!j.ok) {
+        if (r.status === 401) clearAdminToken();  // token errado: pede de novo no próximo uso
+        setErro(j.error || 'O disparo falhou.');
+        return;
+      }
       setSucesso(true);
     } catch { setErro('Falha de conexão.'); }
     finally { setEnviando(false); }

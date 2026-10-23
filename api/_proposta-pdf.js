@@ -650,9 +650,8 @@ export async function enviarMensagemCore({ telefone, mensagem, media_url, client
 
 export async function enviarMensagemCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
-  // Endpoint de disparo (telefone + mensagem arbitrários) — exige admin logado.
-  const admin = await verificarAdmin(req);
-  if (!admin) return res.status(401).json({ ok: false, error: 'Precisa estar logado no admin pra disparar.' });
+  // Endpoint de disparo (telefone + mensagem arbitrários) — exige token do admin.
+  if (!verificarAdmin(req)) return res.status(401).json({ ok: false, error: 'Token do admin inválido ou ausente.' });
   const r = await enviarMensagemCore(req.body || {});
   return res.status(r.ok ? 200 : 502).json(r);
 }
