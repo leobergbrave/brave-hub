@@ -1,8 +1,10 @@
-// api/lead-contato.js — dispara a 1ª mensagem de WhatsApp pro CLIENTE via BotConversa
-// (número do Léo). Usado pelos canais: FSS (auto ao salvar orçamento) e Entrada
-// Rápida (prints do Tiago). O conteúdo da mensagem é mapeado no fluxo do BotConversa;
-// aqui só entregamos os campos: telefone, nome, origem, titulo, link, equipamentos.
+// api/lead-contato.js — dispara a 1ª mensagem de WhatsApp pro CLIENTE pelo WAHA
+// (número do Léo, mesma sessão do agente). Usado pela Entrada Rápida (prints do
+// Tiago). O TEXTO da mensagem mora AQUI agora (antes vivia no fluxo visual da
+// BotConversa). Também manda, por outra rota (acao=orcamento-adicionado), o alerta
+// pro Léo quando o cliente adiciona produto na vitrine.
 import { createClient } from '@supabase/supabase-js';
+import { wahaConfigurado, wahaSendText } from './_waha.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,8 +18,6 @@ export default async function handler(req, res) {
   if (req.body?.acao === 'orcamento-adicionado') {
     const { slug, cliente, produto, valor, link, telefone_cliente } = req.body || {};
     if (!produto) return res.status(400).json({ ok: false, error: 'produto obrigatório' });
-    const urlVigia = process.env.BOTCONVERSA_WEBHOOK
-      || 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/BKf6LUAsGAKO/';
     const telLeo = process.env.ALERTA_TELEFONE || '5548996459791';
     const valorTxt = Number(valor) > 0
       ? ` (${Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
@@ -27,66 +27,37 @@ export default async function handler(req, res) {
     const telClienteTxt = telClienteRaw.length >= 10
       ? `\n📱 WhatsApp: +${telClienteRaw}`
       : '\n📱 WhatsApp: não informado';
+    const alerta = `🛒🔥 ${cliente || 'Cliente'} ADICIONOU "${produto}"${valorTxt} ao próprio orçamento (${slug || ''})!${telClienteTxt}\nSinal de compra, chama agora: ${link || ''}`;
     try {
-      await fetch(urlVigia, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telefone: telLeo,
-          nome: cliente || 'Cliente',
-          titulo: 'Cliente adicionou produto',
-          qtd_pendentes: 1,
-          link: link || '',
-          alerta: `🛒🔥 ${cliente || 'Cliente'} ADICIONOU "${produto}"${valorTxt} ao próprio orçamento (${slug || ''})!${telClienteTxt}\nSinal de compra — chama agora: ${link || ''}`,
-        }),
-      });
+      if (wahaConfigurado()) await wahaSendText(telLeo, alerta);
     } catch (e) {
       return res.status(200).json({ ok: false, error: e.message });
     }
     return res.status(200).json({ ok: true });
   }
 
-  const { telefone, nome, origem, titulo, link, equipamentos } = req.body || {};
+  const { telefone, nome, origem, equipamentos } = req.body || {};
   const tel = String(telefone || '').replace(/\D/g, '');
   if (tel.length < 10) return res.status(400).json({ ok: false, error: 'Telefone inválido (mínimo DDD + número)' });
   const telefoneFull = tel.startsWith('55') ? tel : '55' + tel;
 
   const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  // Automações de CONTATO no BotConversa (distintas do vigia, que avisa o Léo).
-  // Roteamento por origem + presença de link:
-  //   COM link (orçamento pronto): FSS → fluxo FSS; TIAGO → fluxo próprio (ou o
-  //   do FSS enquanto não existir automação dedicada).
-  //   SEM link (Entrada Rápida — orçamento vem depois): fluxo de {equipamentos}.
-  const org = String(origem || '').toUpperCase();
-  const temLink = !!(link && String(link).trim());
-  const W_FSS_LINK   = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/EPSbPfdggLNq/';
-  const W_TIAGO_LINK = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/3tZyKf8phu7S/';
-  const W_SEM_LINK   = 'https://new-backend.botconversa.com.br/api/v1/webhooks-automation/catch/178259/CWJj5OpdIMpd/';
-  let webhook = !temLink ? W_SEM_LINK : (org === 'TIAGO' ? W_TIAGO_LINK : W_FSS_LINK);
-  try {
-    const { data: cfg } = await supabase.from('prospeccao_config').select('*').eq('id', 1).maybeSingle();
-    if (temLink && org === 'TIAGO' && cfg?.webhook_contato_tiago) webhook = cfg.webhook_contato_tiago;
-    else if (temLink && cfg?.webhook_contato_fss) webhook = cfg.webhook_contato_fss;
-    else if (!temLink && cfg?.webhook_contato) webhook = cfg.webhook_contato;
-  } catch { /* colunas podem não existir */ }
+  /* 1ª mensagem no WhatsApp do cliente, pelo WAHA (número do Léo). O texto mora
+     AQUI (antes vivia no fluxo visual da BotConversa). Só o caso SEM orçamento
+     (Entrada Rápida) manda esta mensagem; quando há orçamento, os PDFs vão pelo
+     fluxo de proposta (despacharPdfs). Trata pelo PRIMEIRO nome, sem termo de
+     gênero. equipamentos sai um por linha (como o cliente escreveu). */
+  if (!wahaConfigurado()) return res.status(500).json({ ok: false, error: 'WAHA não configurado na Vercel.' });
+  const primeiroNome = String(nome || 'Cliente').trim().split(/\s+/)[0] || 'Cliente';
+  const equip = (Array.isArray(equipamentos) ? equipamentos.join('\n') : String(equipamentos || '')).trim();
+  const mensagem = `Oi ${primeiroNome}, tudo bem? 👊\nAqui é o Léo, da BRAVE. Recebi seu contato.\n\nVi aqui o que você tá buscando:\n${equip}\n\ncerto?`;
 
   try {
-    const r = await fetch(webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        telefone: telefoneFull,
-        nome: nome || 'Cliente',
-        origem: origem || '',
-        titulo: titulo || '',
-        link: link || '',
-        equipamentos: Array.isArray(equipamentos) ? equipamentos.join(', ') : (equipamentos || ''),
-      }),
-    });
-    if (!r.ok) return res.status(200).json({ ok: false, error: `BotConversa respondeu ${r.status}` });
+    const r = await wahaSendText(telefoneFull, mensagem);
+    if (!r.ok) return res.status(200).json({ ok: false, error: `WAHA recusou o envio (HTTP ${r.status}): ${String(r.texto).slice(0, 200)}` });
   } catch (e) {
-    return res.status(200).json({ ok: false, error: 'Falha ao chamar BotConversa: ' + e.message });
+    return res.status(200).json({ ok: false, error: 'Falha ao enviar pelo WAHA: ' + e.message });
   }
 
   // registra o lead no funil (não trava a resposta se falhar)

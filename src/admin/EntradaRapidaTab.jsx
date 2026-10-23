@@ -3,7 +3,7 @@ import { Camera, Loader2, Sparkles, Send, CheckCircle2, MessageCircle, RotateCcw
 
 /* Entrada Rápida — canal "Tiago": cola o print com os dados do cliente,
    a IA extrai telefone/nome/equipamentos, você confere e dispara a 1ª
-   mensagem no WhatsApp do cliente (via BotConversa, do número do Léo).
+   mensagem no WhatsApp do cliente (via WAHA, do número do Léo).
    Mobile-first: dá pra fazer tudo do celular em menos de 1 minuto. */
 
 export default function EntradaRapidaTab() {
