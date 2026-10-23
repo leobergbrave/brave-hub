@@ -6,7 +6,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { loadCatalog } from './_ergo-fetch.js';
-import { bcFetch, telefoneWhatsappBR } from './_proposta-pdf.js';
+import { telefoneWhatsappBR } from './_proposta-pdf.js';
+import { wahaConfigurado, wahaSendText, wahaSendMidia } from './_waha.js';
 
 /* Chave Pix da BRAVE (e-mail). Fica numa constante so porque aparece em DUAS
    mensagens — os dados de pagamento e a mensagem so com a chave — e as duas
@@ -1138,8 +1139,9 @@ async function midiaEntregavel(url) {
 export async function enviarProdutoCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
   try {
-    const apiKey = process.env.BOTCONVERSA_API_KEY;
-    if (!apiKey) return res.status(500).json({ ok: false, error: 'BOTCONVERSA_API_KEY não configurada na Vercel.' });
+    if (!wahaConfigurado()) {
+      return res.status(500).json({ ok: false, error: 'WAHA não configurado na Vercel (precisa de WAHA_BASE_URL + WAHA_API_KEY).' });
+    }
 
     const { telefone, id } = req.body || {};
     const tel = telefoneWhatsappBR(telefone);
@@ -1148,41 +1150,25 @@ export async function enviarProdutoCliente(req, res) {
     const item = (await montarItens()).find((i) => i.id === id);
     if (!item) return res.status(404).json({ ok: false, error: `Produto "${id}" não encontrado.` });
 
-    /* Envio manual: o consultor conferiu o numero na tela, entao criamos o
-       contato se nao existir — mesmo criterio do envio manual de proposta. */
-    let subscriberId = null;
-    const busca = await bcFetch(`/subscriber/get_by_phone/+${tel}/`, 'GET', null, apiKey);
-    if (busca.ok) subscriberId = busca.json?.id ?? null;
-    if (!subscriberId) {
-      const criado = await bcFetch('/subscriber/', 'POST', {
-        phone: `+${tel}`, first_name: 'Cliente', last_name: 'BRAVE',
-      }, apiKey);
-      subscriberId = criado.json?.id ?? null;
-      if (!subscriberId) {
-        return res.status(502).json({ ok: false, error: `Falha ao criar contato no BotConversa: ${criado.texto.slice(0, 200)}` });
-      }
-  }
-
-    const enviar = (body) => bcFetch(`/subscriber/${subscriberId}/send_message/`, 'POST', body, apiKey);
-
     /* Midia primeiro, texto por ultimo — o texto (com precos) fica visivel na
-       conversa. Midia e o video; nao havendo, a foto do produto. */
+       conversa. Midia e o video; nao havendo, a foto do produto. Envio pelo WAHA
+       (mesma sessao/numero do agente). O WhatsApp nao entrega PNG, entao a imagem
+       vira JPEG antes de sair (midiaEntregavel); video sai como arquivo enquanto a
+       imagem do WAHA for a WEBJS "lite". */
     for (const original of item.midias || []) {
-      // PNG não chega pelo WhatsApp mesmo com a BotConversa aceitando: vira
-      // JPEG antes de sair (diagnóstico e testes em midiaEntregavel).
       const midia = await midiaEntregavel(original);
-      const rv = await enviar({ type: 'file', value: midia });
+      const rv = await wahaSendMidia(tel, midia);
       if (!rv.ok) {
-        return res.status(502).json({ ok: false, error: `BotConversa recusou a mídia (HTTP ${rv.status}): ${rv.texto.slice(0, 250)}` });
+        return res.status(502).json({ ok: false, error: `WAHA recusou a mídia (HTTP ${rv.status}): ${String(rv.texto).slice(0, 250)}` });
       }
       await new Promise((r) => setTimeout(r, 700));
     }
-    const rt = await enviar({ type: 'text', value: item.texto });
+    const rt = await wahaSendText(tel, item.texto);
     if (!rt.ok) {
-      return res.status(502).json({ ok: false, error: `A mídia foi, mas o texto falhou (HTTP ${rt.status}): ${rt.texto.slice(0, 250)}` });
+      return res.status(502).json({ ok: false, error: `A mídia foi, mas o texto falhou (HTTP ${rt.status}): ${String(rt.texto).slice(0, 250)}` });
     }
 
-    console.log('[fss-produtos] envio BotConversa:', { id, tel, midias: (item.midias || []).length });
+    console.log('[fss-produtos] envio WAHA:', { id, tel, midias: (item.midias || []).length });
     return res.status(200).json({ ok: true, id, midias: (item.midias || []).length });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
