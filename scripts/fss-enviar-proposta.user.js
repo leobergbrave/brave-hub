@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.31
+// @version      3.32
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
@@ -33,19 +33,26 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.31'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.32'; // aparece no painel — confirma qual versao esta instalada
 
   /* Token do HUB (x-hub-token) para as acoes PRIVILEGIADAS (envio direto ao
      cliente). NAO fica no codigo — o repo e publico. Vive no Tampermonkey
      (GM_setValue), definido uma vez pelo menu do script "Configurar token do
      HUB". Sem token, o envio de produto volta 401 e nao manda nada. */
   const hubToken = () => { try { return GM_getValue('HUB_TOKEN', '') || ''; } catch (_) { return ''; } };
+  /* Configura o token (x-hub-token = HUB_PDF_TOKEN da Vercel). Chamado pelo menu
+     do Tampermonkey E por um botão no painel (o menu some ao trocar de tela, o
+     botão não). Retorna true se ficou um token salvo. */
+  function configurarToken() {
+    const v = prompt('Cole o token do HUB (é o HUB_PDF_TOKEN da Vercel — NÃO é a chave do WAHA):', hubToken());
+    if (v === null) return !!hubToken();
+    try { GM_setValue('HUB_TOKEN', v.trim()); } catch (_) { /* sem GM_setValue */ }
+    alert(v.trim() ? 'Token salvo ✅' : 'Token apagado.');
+    return !!v.trim();
+  }
   try {
-    GM_registerMenuCommand('🔑 Configurar token do HUB', () => {
-      const v = prompt('Cole o token do HUB (x-hub-token = HUB_PDF_TOKEN da Vercel):', hubToken());
-      if (v !== null) { GM_setValue('HUB_TOKEN', v.trim()); alert(v.trim() ? 'Token salvo ✅' : 'Token apagado.'); }
-    });
-  } catch (_) { /* ambiente sem GM_registerMenuCommand: definir HUB_TOKEN via GM_setValue manual */ }
+    GM_registerMenuCommand('🔑 Configurar token do HUB', configurarToken);
+  } catch (_) { /* ambiente sem GM_registerMenuCommand: usar o botão no painel */ }
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -798,6 +805,9 @@
         const j = await r.json();
         const s = status(j.ok ? `✅ ${item.titulo} enviado — chega na conversa em instantes.` : `❌ ${j.error}`,
           j.ok ? '#4ade80' : '#fca5a5');
+        if (!j.ok && /token/i.test(j.error || '')) {
+          s.appendChild(botao('🔑 Configurar token', '#7c3aed', () => { if (configurarToken()) enviarProdutoWA(item); }));
+        }
         s.appendChild(botao('🎬 Outros produtos', '#334155', montarProdutos));
         s.appendChild(botao('↩︎ Voltar ao painel', '#334155', voltar));
       } catch (e) {
