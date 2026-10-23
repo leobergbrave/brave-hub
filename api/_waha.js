@@ -15,10 +15,26 @@ export function wahaConfigurado() {
   return !!(BASE && API_KEY);
 }
 
-// Telefone -> chatId do WAHA. Se já vier um chatId (@c.us/@g.us/@lid), passa direto.
-function chatId(tel) {
+// Resolve o telefone no chatId que o WhatsApp REALMENTE usa (via check-exists).
+// Evita o "No LID for user" de mandar pra {numero}@c.us cru num contato frio:
+// o WEBJS do WAHA nem sempre resolve o LID sozinho. Se já vier um chatId
+// (@c.us/@g.us/@lid), passa direto. Retorna null se o número não tem WhatsApp.
+async function resolverChatId(tel) {
   const s = String(tel || '').trim();
-  return s.includes('@') ? s : `${s.replace(/\D/g, '')}@c.us`;
+  if (s.includes('@')) return s;
+  const digits = s.replace(/\D/g, '');
+  if (!digits) return null;
+  try {
+    const r = await fetch(`${BASE}/api/contacts/check-exists?phone=${digits}&session=${encodeURIComponent(SESSION)}`, {
+      headers: { 'X-Api-Key': API_KEY },
+    });
+    if (r.ok) {
+      const j = await r.json().catch(() => null);
+      if (j && j.numberExists === false) return null;   // não tem WhatsApp
+      if (j && j.chatId) return j.chatId;                // chatId canônico do WAHA
+    }
+  } catch (_) { /* cai no fallback */ }
+  return `${digits}@c.us`;
 }
 
 async function wahaPost(path, payload) {
@@ -33,8 +49,10 @@ async function wahaPost(path, payload) {
   return { ok: r.ok, status: r.status, json, texto };
 }
 
-export function wahaSendText(tel, texto) {
-  return wahaPost('/api/sendText', { chatId: chatId(tel), text: texto });
+export async function wahaSendText(tel, texto) {
+  const cid = await resolverChatId(tel);
+  if (!cid) return { ok: false, status: 0, json: null, texto: 'número não está no WhatsApp' };
+  return wahaPost('/api/sendText', { chatId: cid, text: texto });
 }
 
 const EXT_VIDEO = new Set(['mp4', 'mov', 'webm', 'm4v', '3gp']);
@@ -62,9 +80,11 @@ function nomeArquivo(url, ext) {
 // Manda uma mídia por URL pública. Foto -> sendImage; vídeo -> sendVideo (e cai pra
 // sendFile se a imagem WEBJS "lite" recusar com 422 "use waha:chrome"); PDF/resto -> sendFile.
 export async function wahaSendMidia(tel, url, caption = '') {
+  const cid = await resolverChatId(tel);
+  if (!cid) return { ok: false, status: 0, json: null, texto: 'número não está no WhatsApp' };
   const ext = extDe(url);
   const payload = {
-    chatId: chatId(tel),
+    chatId: cid,
     file: { url, mimetype: mimeDe(ext), filename: nomeArquivo(url, ext) },
     caption,
   };
