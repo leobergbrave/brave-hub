@@ -1139,6 +1139,14 @@ async function midiaEntregavel(url) {
 export async function enviarProdutoCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
   try {
+    /* Este endpoint manda WhatsApp do numero comercial pra um telefone QUALQUER
+       do body — sem senha, qualquer um que leia o repo publico poderia abusar
+       (spam/ban). Exige o x-hub-token (mesmo HUB_PDF_TOKEN dos outros envios).
+       Guardado se o env nao estiver setado, pra nao cair no bypass undefined===undefined. */
+    const tokenEsperado = process.env.HUB_PDF_TOKEN;
+    if (!tokenEsperado) return res.status(500).json({ ok: false, error: 'HUB_PDF_TOKEN não configurado na Vercel.' });
+    if (req.headers['x-hub-token'] !== tokenEsperado) return res.status(401).json({ ok: false, error: 'Token inválido.' });
+
     if (!wahaConfigurado()) {
       return res.status(500).json({ ok: false, error: 'WAHA não configurado na Vercel (precisa de WAHA_BASE_URL + WAHA_API_KEY).' });
     }

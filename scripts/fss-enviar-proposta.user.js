@@ -1,13 +1,16 @@
 // ==UserScript==
 // @name         Brave HUB — Proposta no FSS
 // @namespace    bravefitness.com.br
-// @version      3.29
+// @version      3.30
 // @description  Painel BRAVE no FSS e no WhatsApp Web: propostas, vídeos de produtos com texto pronto, mensagens rápidas, qualificação do cliente e cadastro pré-preenchido.
 // @match        https://app.fullsalessystem.com/v2/location/*
 // @match        https://web.whatsapp.com/*
 // @run-at       document-idle
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setClipboard
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @connect      brave-hub-two.vercel.app
 // @connect      jisbvqrnnujqgbsfondy.supabase.co
 // ==/UserScript==
@@ -30,7 +33,19 @@
   'use strict';
 
   const HUB = 'https://brave-hub-two.vercel.app';
-  const VERSAO = '3.27'; // aparece no painel — confirma qual versao esta instalada
+  const VERSAO = '3.30'; // aparece no painel — confirma qual versao esta instalada
+
+  /* Token do HUB (x-hub-token) para as acoes PRIVILEGIADAS (envio direto ao
+     cliente). NAO fica no codigo — o repo e publico. Vive no Tampermonkey
+     (GM_setValue), definido uma vez pelo menu do script "Configurar token do
+     HUB". Sem token, o envio de produto volta 401 e nao manda nada. */
+  const hubToken = () => { try { return GM_getValue('HUB_TOKEN', '') || ''; } catch (_) { return ''; } };
+  try {
+    GM_registerMenuCommand('🔑 Configurar token do HUB', () => {
+      const v = prompt('Cole o token do HUB (x-hub-token = HUB_PDF_TOKEN da Vercel):', hubToken());
+      if (v !== null) { GM_setValue('HUB_TOKEN', v.trim()); alert(v.trim() ? 'Token salvo ✅' : 'Token apagado.'); }
+    });
+  } catch (_) { /* ambiente sem GM_registerMenuCommand: definir HUB_TOKEN via GM_setValue manual */ }
   const ID = 'brave-hub-proposta';
   let ultimoTelefone = null;
   let dados = null;
@@ -777,7 +792,7 @@
       status(`⏳ Enviando ${item.titulo}...`);
       try {
         const r = await hubFetch(`${HUB}/api/bling?acao=enviar_produto_cliente`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-token': hubToken() },
           body: JSON.stringify({ telefone: tel, id: item.id }),
         });
         const j = await r.json();
