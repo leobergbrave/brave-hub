@@ -671,9 +671,10 @@ async function alertarConsultor(orc, tel, alertaCustom) {
 
 export async function enviarPdfCliente(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
-  // Dispara envio de WhatsApp — exige o x-hub-token (repo publico, mesma trava do envio de produto).
-  const tokenEsperado = process.env.HUB_PDF_TOKEN;
-  if (!tokenEsperado) return res.status(500).json({ ok: false, error: 'HUB_PDF_TOKEN não configurado na Vercel.' });
+  // Dispara envio de WhatsApp — exige o x-hub-token = HUB_PANEL_TOKEN (token
+  // dedicado do painel, separado do HUB_PDF_TOKEN; repo publico).
+  const tokenEsperado = process.env.HUB_PANEL_TOKEN;
+  if (!tokenEsperado) return res.status(500).json({ ok: false, error: 'HUB_PANEL_TOKEN não configurado na Vercel.' });
   if (req.headers['x-hub-token'] !== tokenEsperado) return res.status(401).json({ ok: false, error: 'Token inválido.' });
   const { slug } = req.body || {};
   if (!slug) return res.status(400).json({ ok: false, error: 'slug é obrigatório.' });

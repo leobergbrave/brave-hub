@@ -1141,10 +1141,10 @@ export async function enviarProdutoCliente(req, res) {
   try {
     /* Este endpoint manda WhatsApp do numero comercial pra um telefone QUALQUER
        do body — sem senha, qualquer um que leia o repo publico poderia abusar
-       (spam/ban). Exige o x-hub-token (mesmo HUB_PDF_TOKEN dos outros envios).
-       Guardado se o env nao estiver setado, pra nao cair no bypass undefined===undefined. */
-    const tokenEsperado = process.env.HUB_PDF_TOKEN;
-    if (!tokenEsperado) return res.status(500).json({ ok: false, error: 'HUB_PDF_TOKEN não configurado na Vercel.' });
+       (spam/ban). Exige o x-hub-token = HUB_PANEL_TOKEN (token dedicado do painel,
+       separado do HUB_PDF_TOKEN). Guardado se o env nao estiver setado. */
+    const tokenEsperado = process.env.HUB_PANEL_TOKEN;
+    if (!tokenEsperado) return res.status(500).json({ ok: false, error: 'HUB_PANEL_TOKEN não configurado na Vercel.' });
     if (req.headers['x-hub-token'] !== tokenEsperado) return res.status(401).json({ ok: false, error: 'Token inválido.' });
 
     if (!wahaConfigurado()) {
