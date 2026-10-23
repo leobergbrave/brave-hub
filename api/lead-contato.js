@@ -7,21 +7,31 @@ import { createClient } from '@supabase/supabase-js';
 import { wahaConfigurado, wahaSendText } from './_waha.js';
 import { verificarAdmin } from './_auth.js';
 
-const HUB_ORIGEM = 'https://brave-hub-two.vercel.app';
-
 // Limpa texto que vem do cliente antes de virar mensagem de WhatsApp: tira URLs
-// (ninguém injeta link), tira caracteres de controle (mantém \n) e corta no tamanho.
+// (http/https e www.), tira caracteres de controle (mantém \n) e corta no tamanho.
 function limparTexto(s, max = 400) {
   return String(s || '')
     .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\bwww\.\S+/gi, '')
     .replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ')
     .slice(0, max)
     .trim();
 }
-// Só mantém o link se for do próprio HUB (senão, risco de link malicioso no alerta).
+// Para texto que vai no alerta pro DONO (vitrine pública, não-autenticada): além
+// de limpar, quebra os pontos (. -> ․) pra nenhum domínio "nu" (ex.: evil.com)
+// virar link clicável no WhatsApp do Léo.
+function limparParaDono(s, max = 120) {
+  return limparTexto(s, max).replace(/\n/g, ' ').replace(/\./g, '․');
+}
+// Só mantém o link se for EXATAMENTE do host do HUB (https, sem user:pass).
 function linkSeguro(url) {
-  const s = String(url || '').trim();
-  return s.startsWith(HUB_ORIGEM) ? s : '';
+  try {
+    const u = new URL(String(url || '').trim());
+    if (u.protocol === 'https:' && u.host === 'brave-hub-two.vercel.app' && !u.username && !u.password) {
+      return u.origin + u.pathname + u.search;
+    }
+  } catch (_) { /* url inválida */ }
+  return '';
 }
 
 export default async function handler(req, res) {
@@ -38,9 +48,9 @@ export default async function handler(req, res) {
     // WhatsApp dele, então limpamos tudo que vem na requisição: cliente/produto
     // sem URL e cortados, slug só com [\w-], e o link só se for do HUB.
     const { produto, valor, telefone_cliente } = req.body || {};
-    const prod = limparTexto(produto, 120).replace(/\n/g, ' ');
+    const prod = limparParaDono(produto, 120);
     if (!prod) return res.status(400).json({ ok: false, error: 'produto obrigatório' });
-    const cli = (limparTexto(req.body?.cliente, 80).replace(/\n/g, ' ')) || 'Cliente';
+    const cli = limparParaDono(req.body?.cliente, 80) || 'Cliente';
     const slugLimpo = String(req.body?.slug || '').replace(/[^\w-]/g, '').slice(0, 40);
     const link = linkSeguro(req.body?.link);
     const telLeo = process.env.ALERTA_TELEFONE || '5548996459791';

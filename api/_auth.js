@@ -23,6 +23,12 @@ function emailsPermitidos() {
 
 export async function verificarAdmin(req) {
   try {
+    // FAIL CLOSED: sem allowlist configurada, ninguém passa. Isso evita que uma
+    // conta Supabase qualquer (ex.: signup público) vire "admin". Defina
+    // ADMIN_EMAILS na Vercel = o(s) e-mail(s) de login do admin, separados por vírgula.
+    const permitidos = emailsPermitidos();
+    if (permitidos.length === 0) return null;
+
     const h = req.headers['authorization'] || req.headers['Authorization'] || '';
     const token = String(h).replace(/^Bearer\s+/i, '').trim();
     // Sem token, ou token = a própria anon key (front não logado manda ela no fallback): barra.
@@ -33,11 +39,8 @@ export async function verificarAdmin(req) {
     const { data, error } = await supa.auth.getUser(token);
     if (error || !data?.user) return null;
 
-    const permitidos = emailsPermitidos();
-    if (permitidos.length > 0) {
-      const email = String(data.user.email || '').toLowerCase();
-      if (!permitidos.includes(email)) return null;
-    }
+    const email = String(data.user.email || '').toLowerCase();
+    if (!permitidos.includes(email)) return null;
     return data.user;
   } catch (_) {
     return null;
